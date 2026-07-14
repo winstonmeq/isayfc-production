@@ -26,6 +26,7 @@ export interface IOutletMenuItem extends Document {
   name: string;
   category: string; // e.g. "Chicken", "Drinks", "Rice", "Meals"
   price: number;
+  imageUrl?: string; // optional photo, e.g. "/uploads/menu/<uuid>.jpg"
   sortOrder: number;
   isAvailable: boolean;
   components: IOutletMenuComponent[];
@@ -73,6 +74,11 @@ const OutletMenuItemSchema = new Schema<IOutletMenuItem>(
       type: Number,
       required: true,
       min: 0,
+    },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: "",
     },
     sortOrder: {
       type: Number,

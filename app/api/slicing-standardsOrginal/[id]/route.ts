@@ -2,12 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
-import { requireApiAuth } from "@/lib/require-auth";
+import { requirePermission } from "@/lib/require-permission";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import ProductModel from "@/models/Product";
 import SlicingStandardModel from "@/models/SlicingStandard";
 
-function serializeStandard(item: any) {
+type StringableId = { toString: () => string };
+
+type PopulatedProduct = {
+  _id?: StringableId;
+  name?: string;
+  toString?: () => string;
+};
+
+type SlicingStandardRecord = {
+  _id: StringableId;
+  wholeChickenId?: PopulatedProduct;
+  productId?: PopulatedProduct;
+  standardPacking?: number;
+  standardSlice?: number;
+  chickenSizeType?: string;
+};
+
+function serializeStandard(item: SlicingStandardRecord) {
   return {
     _id: item._id.toString(),
     wholeChickenId:
@@ -25,7 +42,7 @@ export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { response } = await requireApiAuth();
+  const { response } = await requirePermission("standard-packing.manage");
   if (response) return response;
 
   const { id } = await context.params;
@@ -99,7 +116,7 @@ export async function PATCH(
   )
     .populate("wholeChickenId", "name")
     .populate("productId", "name")
-    .lean();
+    .lean<SlicingStandardRecord | null>();
 
   if (!updated) {
     return NextResponse.json(
@@ -119,7 +136,7 @@ export async function DELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { response } = await requireApiAuth();
+  const { response } = await requirePermission("standard-packing.manage");
   if (response) return response;
 
   const { id } = await context.params;

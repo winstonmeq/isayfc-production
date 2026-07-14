@@ -3,6 +3,8 @@ import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type SaleSource = "CHICKEN" | "BODEGA" | "MIXED";
 export type SaleStatus = "UNPAID" | "PARTIAL" | "PAID" | "VOIDED";
+export type SaleChannel = "WEB" | "MOBILE";
+export type PaymentMethod = "CASH" | "GCASH" | "CREDIT";
 
 export interface ISale extends Document {
   _id: Types.ObjectId;
@@ -10,6 +12,17 @@ export interface ISale extends Document {
   customerId?: Types.ObjectId;
   saleDate: Date;
   source: SaleSource;
+  // Outlet / shift / channel are now first-class fields (previously these were
+  // only encoded in `remarks` as "OUTLET:<id> SHIFT:<id>"). Old rows have them
+  // unset; readers fall back to the remarks tag for backward compatibility.
+  outletId?: Types.ObjectId;
+  shiftId?: Types.ObjectId;
+  channel: SaleChannel;
+  paymentMethod: PaymentMethod;
+  // Client-supplied dedupe key for mobile sales. A cashier's app generates one
+  // per cart-confirm and resends it on retry, so a timed-out-then-retried
+  // request can't create a duplicate sale. Sparse: web sales omit it.
+  idempotencyKey?: string;
   totalAmount: number;
   paidAmount: number;
   balance: number;
@@ -47,6 +60,36 @@ const SaleSchema = new Schema<ISale>(
       type: String,
       enum: ["CHICKEN", "BODEGA", "MIXED"],
       required: true,
+    },
+
+    outletId: {
+      type: Schema.Types.ObjectId,
+      ref: "Outlet",
+      required: false,
+    },
+
+    shiftId: {
+      type: Schema.Types.ObjectId,
+      ref: "CashShift",
+      required: false,
+    },
+
+    channel: {
+      type: String,
+      enum: ["WEB", "MOBILE"],
+      default: "WEB",
+    },
+
+    paymentMethod: {
+      type: String,
+      enum: ["CASH", "GCASH", "CREDIT"],
+      default: "CASH",
+    },
+
+    idempotencyKey: {
+      type: String,
+      required: false,
+      trim: true,
     },
 
     totalAmount: {
@@ -106,12 +149,27 @@ const SaleSchema = new Schema<ISale>(
   }
 );
 
-SaleSchema.index({ receiptNumber: 1 });
+// receiptNumber must be globally unique — it's the duplicate guard the sale
+// creation paths rely on when retrying generated numbers.
+SaleSchema.index({ receiptNumber: 1 }, { unique: true });
 SaleSchema.index({ customerId: 1 });
 SaleSchema.index({ saleDate: -1 });
 SaleSchema.index({ source: 1 });
 SaleSchema.index({ status: 1 });
 SaleSchema.index({ isVoided: 1 });
+// Shift / outlet reporting (cash-close, outlet-summary) query by these.
+SaleSchema.index({ shiftId: 1 });
+SaleSchema.index({ outletId: 1, saleDate: -1 });
+// Idempotency: at most one sale per (outlet, key). Partial so only sales that
+// carry a key are constrained — web sales (no key) are unaffected. This is the
+// hard guard against duplicate sales from a retried mobile request.
+SaleSchema.index(
+  { outletId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: "string" } },
+  }
+);
 
 const SaleModel: Model<ISale> =
   mongoose.models.Sale || mongoose.model<ISale>("Sale", SaleSchema);

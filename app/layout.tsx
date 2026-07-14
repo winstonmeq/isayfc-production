@@ -5,8 +5,16 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ISAY Fried Chicken System",
+  title: {
+    default: "ISAY Fried Chicken System",
+    template: "%s | ISAY Fried Chicken System",
+  },
   description: "Inventory, sales, delivery, and bodega management system.",
+  applicationName: "ISAY Fried Chicken System",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function RootLayout({

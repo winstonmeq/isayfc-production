@@ -70,6 +70,13 @@ const CashShiftSchema = new Schema<ICashShift>(
 CashShiftSchema.index({ cashierId: 1, status: 1 });
 CashShiftSchema.index({ outletId: 1, status: 1 });
 CashShiftSchema.index({ openedAt: -1 });
+// Enforce at most one OPEN shift per cashier at the database level, so a
+// double-tap on "Open" can't create two concurrent open shifts (the route's
+// read-then-create check alone is racy).
+CashShiftSchema.index(
+  { cashierId: 1 },
+  { unique: true, partialFilterExpression: { status: "OPEN" } }
+);
 
 const CashShiftModel: Model<ICashShift> =
   mongoose.models.CashShift ||

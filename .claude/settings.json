@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/winst/StudioProjects/letson_cashier/**)",
+      "Read(//c/Users/winst/StudioProjects/letson_cashier/lib/**)",
+      "PowerShell(npm run typecheck 2>&1)",
+      "Read(//c/Users/winst/StudioProjects/letson_cashier/lib/models/**)",
+      "Read(//c/Users/winst/StudioProjects/letson_cashier/android/app/src/main/**)"
+    ]
+  }
+}

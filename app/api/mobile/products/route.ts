@@ -1,10 +1,14 @@
-// app/api/mobile/products/route.ts
+﻿// app/api/mobile/products/route.ts
 //
 // Returns the sellable MENU for the cashier's outlet, grouped by category.
 // These are retail items (Fried Chicken C10, Coke Sakto, Rice...), each with
 // an optional mapping to raw outlet-inventory stock.
 
 import { NextRequest, NextResponse } from "next/server";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import crypto from "node:crypto";
+import type { Types } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requireMobileAuth } from "@/lib/mobile-auth";
@@ -12,6 +16,215 @@ import OutletMenuItemModel from "@/models/OutletMenuItem";
 import OutletInventoryModel from "@/models/OutletInventory";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs"; // needs the Node fs APIs for image saving
+
+type ObjectIdLike = Types.ObjectId;
+
+type OutletInventoryStockRow = {
+  productSource?: "BODEGA" | "GROCERY";
+  productId?: ObjectIdLike;
+  stockQty?: number;
+};
+
+type OutletMenuComponentRow = {
+  productSource?: "BODEGA" | "GROCERY";
+  productId?: ObjectIdLike;
+  productName?: string;
+  qtyPerSale?: number;
+};
+
+type OutletMenuRow = {
+  _id: ObjectIdLike;
+  name?: string;
+  category?: string;
+  price?: number;
+  imageUrl?: string;
+  isAvailable?: boolean;
+  components?: OutletMenuComponentRow[];
+};
+
+type SerializedMenuItem = {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  imageUrl: string;
+  isAvailable: boolean;
+  makeable: number | null;
+  components: Array<{
+    productSource?: "BODEGA" | "GROCERY";
+    productId: string;
+    productName: string;
+    qtyPerSale: number;
+  }>;
+};
+
+/**
+ * Saves an uploaded menu photo to public/uploads/menu and returns its public
+ * URL. Mirrors the payment-receipt upload: type allowlist + 5MB cap, random
+ * filename. Returns "" when no file was provided.
+ */
+async function saveMenuImage(file: File | null): Promise<string> {
+  if (!file || file.size === 0) return "";
+
+  const allowed: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  const extension = allowed[file.type];
+  if (!extension) {
+    throw new Error("Menu image must be JPG, PNG, or WEBP.");
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("Menu image must not exceed 5MB.");
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const filename = `${crypto.randomUUID()}.${extension}`;
+  const uploadDir = path.join(process.cwd(), "public", "uploads", "menu");
+  await mkdir(uploadDir, { recursive: true });
+  await writeFile(path.join(uploadDir, filename), buffer);
+
+  return `/uploads/menu/${filename}`;
+}
+
+/**`r`n * Quick-add a simple sellable item from the mobile POS: name + price +`r`n * category + optional photo. If the name matches an active outlet-inventory`r`n * row, it is linked as a one-unit component so selling it deducts stock. Recipe`r`n * items with multiple ingredients are still set up on the web admin.`r`n *`r`n * Accepts multipart/form-data (so an image can be attached) and also plain
+ * JSON (no image), for backward compatibility.
+ */
+export async function POST(req: NextRequest) {
+  const { user, response } = await requireMobileAuth(req, "sales.manage");
+  if (response) return response;
+
+  if (!user.outlet) {
+    return NextResponse.json(
+      { success: false, message: "Your account is not assigned to an outlet." },
+      { status: 400 }
+    );
+  }
+
+  await dbConnect();
+
+  let name = "";
+  let category = "Others";
+  let price = NaN;
+  let imageFile: File | null = null;
+
+  const contentType = req.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const form = await req.formData();
+    name = String(form.get("name") || "").trim();
+    category = String(form.get("category") || "").trim() || "Others";
+    price = Number(form.get("price"));
+    const f = form.get("image");
+    imageFile = f instanceof File ? f : null;
+  } else {
+    let body: { name?: string; category?: string; price?: number };
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Invalid request body." },
+        { status: 400 }
+      );
+    }
+    name = String(body?.name || "").trim();
+    category = String(body?.category || "").trim() || "Others";
+    price = Number(body?.price);
+  }
+
+  if (!name) {
+    return NextResponse.json(
+      { success: false, message: "Item name is required." },
+      { status: 400 }
+    );
+  }
+  if (!Number.isFinite(price) || price < 0) {
+    return NextResponse.json(
+      { success: false, message: "A valid price is required." },
+      { status: 400 }
+    );
+  }
+
+  // Avoid an accidental duplicate of an item that already exists at this outlet.
+  const existing = await OutletMenuItemModel.findOne({
+    outletId: user.outlet.id,
+    name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+    isActive: true,
+  })
+    .select("_id")
+    .lean();
+  if (existing) {
+    return NextResponse.json(
+      { success: false, message: `"${name}" is already on the menu.` },
+      { status: 409 }
+    );
+  }
+
+  let imageUrl = "";
+  try {
+    imageUrl = await saveMenuImage(imageFile);
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Could not save the image.";
+    return NextResponse.json(
+      { success: false, message },
+      { status: 400 }
+    );
+  }
+
+  const linkedInventory = await OutletInventoryModel.findOne({
+    outletId: user.outlet.id,
+    productName: name.toUpperCase(),
+    isActive: true,
+  })
+    .select("productSource productId productName")
+    .lean<{
+      productSource?: "BODEGA" | "GROCERY";
+      productId?: Types.ObjectId;
+      productName?: string;
+    }>();
+
+  const components = linkedInventory?.productId
+    ? [
+        {
+          productSource: linkedInventory.productSource || "BODEGA",
+          productId: linkedInventory.productId,
+          productName: linkedInventory.productName || name,
+          qtyPerSale: 1,
+        },
+      ]
+    : [];
+
+  const item = await OutletMenuItemModel.create({
+    outletId: user.outlet.id,
+    name,
+    category,
+    price,
+    imageUrl,
+    sortOrder: 0,
+    isAvailable: true,
+    components,
+    createdBy: user.id,
+  });
+
+  return NextResponse.json(
+    {
+      success: true,
+      message: "Item added to menu.",
+      item: {
+        id: item._id.toString(),
+        name: item.name,
+        category: item.category,
+        price: Number(item.price || 0),
+        imageUrl: item.imageUrl || "",
+        stockLinked: components.length > 0,
+      },
+    },
+    { status: 201 }
+  );
+}
 
 export async function GET(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
@@ -34,7 +247,7 @@ export async function GET(req: NextRequest) {
     isActive: true,
   })
     .sort({ category: 1, sortOrder: 1, name: 1 })
-    .lean();
+    .lean<OutletMenuRow[]>();
 
   // Pull current raw stock for this outlet so we can show availability of
   // mapped components.
@@ -43,10 +256,10 @@ export async function GET(req: NextRequest) {
     isActive: true,
   })
     .select("productSource productId stockQty")
-    .lean();
+    .lean<OutletInventoryStockRow[]>();
 
   const stockByKey = new Map<string, number>();
-  for (const inv of inventory as any[]) {
+  for (const inv of inventory) {
     stockByKey.set(
       `${inv.productSource}:${inv.productId?.toString?.()}`,
       Number(inv.stockQty || 0)
@@ -55,7 +268,7 @@ export async function GET(req: NextRequest) {
 
   // How many of each menu item can be made from current stock (min across
   // its components). null = unlimited (no stock mapping).
-  function makeableCount(components: any[]): number | null {
+  function makeableCount(components: OutletMenuComponentRow[] = []): number | null {
     if (!components || components.length === 0) return null;
     let min = Infinity;
     for (const c of components) {
@@ -67,14 +280,15 @@ export async function GET(req: NextRequest) {
     return min === Infinity ? null : min;
   }
 
-  const serialized = (items as any[]).map((it) => ({
+  const serialized: SerializedMenuItem[] = items.map((it) => ({
     id: it._id.toString(),
     name: it.name || "",
     category: it.category || "Others",
     price: Number(it.price || 0),
+    imageUrl: it.imageUrl || "",
     isAvailable: it.isAvailable !== false,
     makeable: makeableCount(it.components), // number or null (unlimited)
-    components: (it.components || []).map((c: any) => ({
+    components: (it.components || []).map((c) => ({
       productSource: c.productSource,
       productId: c.productId?.toString?.() || "",
       productName: c.productName || "",
@@ -83,7 +297,7 @@ export async function GET(req: NextRequest) {
   }));
 
   // Group by category for the UI.
-  const byCategory: Record<string, any[]> = {};
+  const byCategory: Record<string, SerializedMenuItem[]> = {};
   for (const item of serialized) {
     (byCategory[item.category] ||= []).push(item);
   }
@@ -100,3 +314,4 @@ export async function GET(req: NextRequest) {
     items: serialized, // flat list too, for convenience
   });
 }
+

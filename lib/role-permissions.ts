@@ -13,6 +13,7 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "stock-transfers.view", label: "View Stock Transfers" },
       { key: "stock-transfers.manage", label: "Manage Stock Transfers (Main Branch)" },
       { key: "stock-transfers.confirm", label: "Confirm Incoming Deliveries (Outlet)" },
+      { key: "outlet-repack.manage", label: "Repack / Break-Bulk (Outlet)" },
       { key: "cash.manage", label: "Open / Close Cash (Cashier)" },
     ],
   },

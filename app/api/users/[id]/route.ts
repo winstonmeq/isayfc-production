@@ -225,8 +225,11 @@ async function handleDELETE(
     );
   }
 
-  user.isActive = false;
-  await user.save();
+  // Soft-delete with a targeted update, not user.save(): save() re-validates
+  // the entire document, so a single legacy user with a missing field or a
+  // lowercase `role` would make disabling them fail. We only need to flip
+  // isActive — updateOne touches that field alone and skips full validation.
+  await UserModel.updateOne({ _id: user._id }, { $set: { isActive: false } });
 
   // User role/status changed: drop cached access so it applies immediately.
   invalidateUserAccessCache(user._id.toString());

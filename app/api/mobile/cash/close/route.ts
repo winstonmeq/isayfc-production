@@ -12,6 +12,13 @@ export async function POST(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, "cash.manage");
   if (response) return response;
 
+  if (!user.outlet) {
+    return NextResponse.json(
+      { success: false, message: "Your account is not assigned to an outlet." },
+      { status: 400 }
+    );
+  }
+
   await connectDb();
 
   let body: { countedCash?: number; remarks?: string };
@@ -32,6 +39,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Match by cashier only — the same scope as the open-shift check and the
+  // partial unique index. Filtering by the cashier's CURRENT outlet would
+  // deadlock a cashier who was reassigned while holding an open shift: close
+  // would 404 (outlet mismatch) while open would 409 (shift still open). The
+  // shift document carries its own outletId for reporting.
   const shift = await CashShiftModel.findOne({
     cashierId: user.id,
     status: "OPEN",

@@ -21,6 +21,10 @@ export interface IExpense extends Document {
   type: ExpenseType;
   expenseDate: Date;
   amount: number;
+  // First-class outlet/shift links for mobile expenses (previously only in
+  // `remarks` as "OUTLET:<id> SHIFT:<id>"). Old rows fall back to the tag.
+  outletId?: Types.ObjectId;
+  shiftId?: Types.ObjectId;
   remarks?: string;
   createdBy?: Types.ObjectId;
   isActive: boolean;
@@ -76,6 +80,18 @@ const ExpenseSchema = new Schema<IExpense>(
       min: 0,
     },
 
+    outletId: {
+      type: Schema.Types.ObjectId,
+      ref: "Outlet",
+      required: false,
+    },
+
+    shiftId: {
+      type: Schema.Types.ObjectId,
+      ref: "CashShift",
+      required: false,
+    },
+
     remarks: {
       type: String,
       default: "",
@@ -102,6 +118,8 @@ ExpenseSchema.index({ expenseCategory: 1 });
 ExpenseSchema.index({ type: 1 });
 ExpenseSchema.index({ expenseDate: -1 });
 ExpenseSchema.index({ isActive: 1 });
+ExpenseSchema.index({ shiftId: 1 });
+ExpenseSchema.index({ outletId: 1, expenseDate: -1 });
 
 const ExpenseModel: Model<IExpense> =
   mongoose.models.Expense || mongoose.model<IExpense>("Expense", ExpenseSchema);

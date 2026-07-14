@@ -58,10 +58,13 @@ const OutletInventorySchema = new Schema<IOutletInventory>(
       default: "",
     },
 
+    // No `min: 0`. The mobile POS intentionally allows stock to go negative so
+    // a cashier is never blocked mid-sale by an out-of-sync count; the shortfall
+    // is surfaced as a warning and reconciled later. A `min: 0` here would make
+    // that save throw inside the sale transaction and roll back the whole sale.
     stockQty: {
       type: Number,
       default: 0,
-      min: 0,
     },
 
     unitLabel: {

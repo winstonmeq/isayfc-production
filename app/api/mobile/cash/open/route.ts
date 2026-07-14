@@ -54,15 +54,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const shift = await CashShiftModel.create({
-    outletId: user.outlet.id,
-    cashierId: user.id,
-    cashierName: user.name,
-    status: "OPEN",
-    openingFloat,
-    openedAt: new Date(),
-    openRemarks: String(body?.remarks || "").trim(),
-  });
+  let shift;
+  try {
+    shift = await CashShiftModel.create({
+      outletId: user.outlet.id,
+      cashierId: user.id,
+      cashierName: user.name,
+      status: "OPEN",
+      openingFloat,
+      openedAt: new Date(),
+      openRemarks: String(body?.remarks || "").trim(),
+    });
+  } catch (error: any) {
+    // The partial unique index on { cashierId, status: OPEN } rejects a second
+    // concurrent open — surface it as the same friendly conflict as above.
+    if (error?.code === 11000) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "You already have an open shift. Close it before opening a new one.",
+        },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 
   return NextResponse.json({
     success: true,

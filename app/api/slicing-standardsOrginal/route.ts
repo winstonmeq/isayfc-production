@@ -3,7 +3,7 @@ import type { QueryFilter } from "mongoose";
 import { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
-import { requireApiAuth } from "@/lib/require-auth";
+import { requirePermission } from "@/lib/require-permission";
 import {
   cleanNumber,
   cleanString,
@@ -15,7 +15,24 @@ import SlicingStandardModel, {
   ISlicingStandard,
 } from "@/models/SlicingStandard";
 
-function serializeStandard(item: any) {
+type StringableId = { toString: () => string };
+
+type PopulatedProduct = {
+  _id?: StringableId;
+  name?: string;
+  toString?: () => string;
+};
+
+type SlicingStandardRecord = {
+  _id: StringableId;
+  wholeChickenId?: PopulatedProduct;
+  productId?: PopulatedProduct;
+  standardPacking?: number;
+  standardSlice?: number;
+  chickenSizeType?: string;
+};
+
+function serializeStandard(item: SlicingStandardRecord) {
   return {
     _id: item._id.toString(),
     wholeChickenId:
@@ -30,7 +47,12 @@ function serializeStandard(item: any) {
 }
 
 export async function GET(req: NextRequest) {
-  const { response } = await requireApiAuth();
+  const { response } = await requirePermission([
+    "standard-packing.view",
+    "standard-packing.manage",
+    "slicing.view",
+    "slicing.manage",
+  ]);
   if (response) return response;
 
   await dbConnect();
@@ -58,7 +80,7 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .lean(),
+      .lean<SlicingStandardRecord[]>(),
 
     SlicingStandardModel.countDocuments(filter),
   ]);
@@ -76,7 +98,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { response } = await requireApiAuth();
+  const { response } = await requirePermission("standard-packing.manage");
   if (response) return response;
 
   await dbConnect();
@@ -147,7 +169,14 @@ export async function POST(req: NextRequest) {
   const populated = await SlicingStandardModel.findById(standard._id)
     .populate("wholeChickenId", "name")
     .populate("productId", "name")
-    .lean();
+    .lean<SlicingStandardRecord | null>();
+
+  if (!populated) {
+    return NextResponse.json(
+      { success: false, message: "Standard packing was created but could not be loaded." },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json(
     {

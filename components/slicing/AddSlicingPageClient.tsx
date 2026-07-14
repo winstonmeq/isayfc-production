@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   Check,
   ChevronsUpDown,
   Loader2,
@@ -66,6 +67,11 @@ type SlicingRow = {
   actualSlicedPcs: string;
 };
 
+const MIN_SLICING_YIELD_RATE = 70;
+const MAX_SLICING_YIELD_RATE = 120;
+const MAX_KILOS_PER_HEAD = 4;
+const MAX_HEADS_PER_ROW = 1000;
+
 const emptyRow: SlicingRow = {
   standardId: "",
   wholeChickenId: "",
@@ -97,6 +103,65 @@ function calculateRow(row: SlicingRow) {
 
 function formatPercent(value: number) {
   return `${numberValue(value).toFixed(2)}%`;
+}
+
+function hasRowEntry(row: SlicingRow) {
+  return Boolean(row.standardId) ||
+    numberValue(row.bags) > 0 ||
+    numberValue(row.heads) > 0 ||
+    numberValue(row.kilos) > 0 ||
+    numberValue(row.actualSlicedPcs) > 0;
+}
+
+function getRowIssues(row: SlicingRow) {
+  const issues: string[] = [];
+  const heads = numberValue(row.heads);
+  const bags = numberValue(row.bags);
+  const kilos = numberValue(row.kilos);
+  const actualSlicedPcs = numberValue(row.actualSlicedPcs);
+  const computed = calculateRow(row);
+
+  if (!row.standardId) {
+    issues.push("Select a slicing standard.");
+  }
+
+  if (heads <= 0) {
+    issues.push("Heads must be greater than zero.");
+  } else {
+    if (!Number.isInteger(heads)) {
+      issues.push("Heads must be a whole number.");
+    }
+    if (heads > MAX_HEADS_PER_ROW) {
+      issues.push(`Heads cannot exceed ${MAX_HEADS_PER_ROW.toLocaleString()} in one row.`);
+    }
+  }
+
+  if (bags > 0 && !Number.isInteger(bags)) {
+    issues.push("Bags must be a whole number.");
+  }
+
+  if (kilos > 0 && heads > 0 && kilos / heads > MAX_KILOS_PER_HEAD) {
+    issues.push(`Kilos looks too high (${(kilos / heads).toFixed(2)} kg/head).`);
+  }
+
+  if (actualSlicedPcs <= 0) {
+    issues.push("Actual sliced PCS must be greater than zero.");
+  } else if (!Number.isInteger(actualSlicedPcs)) {
+    issues.push("Actual sliced PCS must be a whole number.");
+  }
+
+  if (
+    row.standardId &&
+    computed.totalStdPcs > 0 &&
+    (computed.yieldRate < MIN_SLICING_YIELD_RATE ||
+      computed.yieldRate > MAX_SLICING_YIELD_RATE)
+  ) {
+    issues.push(
+      `Yield is ${computed.yieldRate.toFixed(2)}%. Recount before saving.`
+    );
+  }
+
+  return issues;
 }
 
 function StandardPicker({
@@ -168,7 +233,7 @@ export function AddSlicingPageClient() {
   const [isLoadingStandards, setIsLoadingStandards] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const totals = useMemo(() => {
+	  const totals = useMemo(() => {
     const computed = rows.reduce(
       (sum, row) => {
         const rowComputed = calculateRow(row);
@@ -189,7 +254,12 @@ export function AddSlicingPageClient() {
       ...computed,
       yieldRate: computed.totalStdPcs > 0 ? (computed.actualSlicedPcs / computed.totalStdPcs) * 100 : 0,
     };
-  }, [rows]);
+	  }, [rows]);
+
+	  const hasBlockingIssues = useMemo(
+	    () => rows.some((row) => hasRowEntry(row) && getRowIssues(row).length > 0),
+	    [rows]
+	  );
 
   async function loadStandards() {
     setIsLoadingStandards(true);
@@ -209,9 +279,13 @@ export function AddSlicingPageClient() {
     }
   }
 
-  useEffect(() => {
-    void loadStandards();
-  }, []);
+	  useEffect(() => {
+	    const timeoutId = window.setTimeout(() => {
+	      void loadStandards();
+	    }, 0);
+
+	    return () => window.clearTimeout(timeoutId);
+	  }, []);
 
   function updateRow(index: number, field: keyof SlicingRow, value: string) {
     setRows((current) => {
@@ -263,11 +337,19 @@ export function AddSlicingPageClient() {
       return;
     }
 
-    const validRows = rows.filter((row) => row.standardId && numberValue(row.heads) > 0 && numberValue(row.actualSlicedPcs) > 0);
-    if (validRows.length === 0) {
+    const enteredRows = rows.filter(hasRowEntry);
+    if (enteredRows.length === 0) {
       toast.error("Add at least one valid slicing row.");
       return;
     }
+
+    const invalidRow = enteredRows.find((row) => getRowIssues(row).length > 0);
+    if (invalidRow) {
+      toast.error(getRowIssues(invalidRow)[0] || "Please check the slicing rows before saving.");
+      return;
+    }
+
+    const validRows = enteredRows.filter((row) => row.standardId && numberValue(row.heads) > 0 && numberValue(row.actualSlicedPcs) > 0);
 
     setIsSaving(true);
     try {
@@ -369,10 +451,11 @@ export function AddSlicingPageClient() {
           </div>
         ) : (
           <div className="space-y-4">
-            {rows.map((row, index) => {
-              const computed = calculateRow(row);
-              return (
-                <ErpMobileCard key={index} className="bg-slate-50/60">
+	            {rows.map((row, index) => {
+	              const computed = calculateRow(row);
+	              const rowIssues = hasRowEntry(row) ? getRowIssues(row) : [];
+	              return (
+	                <ErpMobileCard key={index} className="bg-slate-50/60">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-black text-slate-950">Item #{index + 1}</div>
@@ -422,16 +505,30 @@ export function AddSlicingPageClient() {
                     </ErpField>
                   </div>
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-5">
-                    <ErpKeyValue label="Standard Slice" value={`${formatWholeNumber(row.standardSlice)} pcs/head`} />
-                    <ErpKeyValue label="Pack Size" value={`${formatWholeNumber(row.standardPacking)} pcs/pack`} />
-                    <ErpKeyValue label="Actual Packs" value={formatWholeNumber(computed.actualPacks)} />
-                    <ErpKeyValue label="Loose PCS" value={formatWholeNumber(computed.butal)} />
-                    <ErpKeyValue label="Yield" value={formatPercent(computed.yieldRate)} />
-                  </div>
-                </ErpMobileCard>
-              );
-            })}
+	                  <div className="mt-4 grid gap-3 md:grid-cols-5">
+	                    <ErpKeyValue label="Standard Slice" value={`${formatWholeNumber(row.standardSlice)} pcs/head`} />
+	                    <ErpKeyValue label="Pack Size" value={`${formatWholeNumber(row.standardPacking)} pcs/pack`} />
+	                    <ErpKeyValue label="Actual Packs" value={formatWholeNumber(computed.actualPacks)} />
+	                    <ErpKeyValue label="Loose PCS" value={formatWholeNumber(computed.butal)} />
+	                    <ErpKeyValue label="Yield" value={formatPercent(computed.yieldRate)} />
+	                  </div>
+
+	                  {rowIssues.length > 0 ? (
+	                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+	                      <div className="mb-1 flex items-center gap-2 font-bold">
+	                        <AlertTriangle className="h-4 w-4" />
+	                        Check this row before saving
+	                      </div>
+	                      <ul className="list-disc space-y-1 pl-5">
+	                        {rowIssues.map((issue) => (
+	                          <li key={issue}>{issue}</li>
+	                        ))}
+	                      </ul>
+	                    </div>
+	                  ) : null}
+	                </ErpMobileCard>
+	              );
+	            })}
           </div>
         )}
 
@@ -451,10 +548,10 @@ export function AddSlicingPageClient() {
           <Button type="button" variant="outline" onClick={() => router.push("/slicing")}>
             Cancel
           </Button>
-          <Button type="button" onClick={saveAll} disabled={isSaving}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save All
-          </Button>
+	          <Button type="button" onClick={saveAll} disabled={isSaving || hasBlockingIssues}>
+	            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+	            Save All
+	          </Button>
         </div>
       </ErpSection>
     </ErpPage>

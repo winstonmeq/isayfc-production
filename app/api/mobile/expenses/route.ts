@@ -4,11 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import connectDb from "@/lib/mongodb";
 import ExpenseModel from "@/models/Expense";
+import type { ExpenseType } from "@/models/Expense";
 import CashShiftModel from "@/models/CashShift";
 
 export const dynamic = "force-dynamic";
 
-const EXPENSE_TYPES = [
+const EXPENSE_TYPES: readonly ExpenseType[] = [
   "DELIVERY_EXPENSES",
   "CLEANING_SUPPLIES",
   "TRANSPORTATION_EXPENSES",
@@ -19,6 +20,14 @@ const EXPENSE_TYPES = [
   "INCENTIVES_AND_ALLOWANCES",
   "OTHERS",
 ];
+
+type ExpenseListRow = {
+  _id: { toString: () => string };
+  name?: string;
+  type?: string;
+  amount?: number;
+  createdAt?: Date;
+};
 
 export async function GET(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
@@ -46,10 +55,10 @@ export async function GET(req: NextRequest) {
     remarks: { $regex: `SHIFT:${shift._id.toString()}` },
   })
     .sort({ createdAt: -1 })
-    .lean();
+    .lean<ExpenseListRow[]>();
 
   let total = 0;
-  const data = (expenses as any[]).map((e) => {
+  const data = expenses.map((e) => {
     total += Number(e.amount || 0);
     return {
       id: e._id.toString(),
@@ -88,8 +97,9 @@ export async function POST(req: NextRequest) {
 
   const name = String(body?.name || "").trim();
   const amount = Number(body?.amount);
-  const type = EXPENSE_TYPES.includes(String(body?.type))
-    ? String(body?.type)
+  const requestedType = String(body?.type);
+  const type: ExpenseType = EXPENSE_TYPES.includes(requestedType as ExpenseType)
+    ? (requestedType as ExpenseType)
     : "OTHERS";
 
   if (!name) {
@@ -105,7 +115,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Tag to the open shift (if any) so cash-close can subtract it.
+  // Expenses are cash-drawer movements, so require an open shift. Otherwise the
+  // outlet can spend cash that never appears in the close-shift variance.
   const shift = await CashShiftModel.findOne({
     cashierId: user.id,
     outletId: user.outlet.id,
@@ -113,14 +124,26 @@ export async function POST(req: NextRequest) {
   })
     .select("_id")
     .lean<{ _id: { toString: () => string } }>();
-  const shiftTag = shift ? ` SHIFT:${shift._id.toString()}` : "";
 
-  const expense: any = await (ExpenseModel as any).create({
+  if (!shift) {
+    return NextResponse.json(
+      { success: false, message: "Open a cash shift before recording expenses." },
+      { status: 409 }
+    );
+  }
+
+  const shiftId = shift._id.toString();
+  const shiftTag = ` SHIFT:${shiftId}`;
+
+  const expense = await ExpenseModel.create({
     name,
     expenseCategory: "BODEGA",
     type,
     expenseDate: new Date(),
     amount,
+    // First-class fields; remarks tag kept for backward compatibility.
+    outletId: user.outlet.id,
+    shiftId,
     remarks: `MOBILE EXPENSE OUTLET:${user.outlet.id}${shiftTag}`,
     createdBy: user.id,
     isActive: true,

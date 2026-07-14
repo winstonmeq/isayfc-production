@@ -29,6 +29,26 @@ class ApiError extends Error {
   }
 }
 
+/** Thrown when a concurrent request with the same idempotencyKey already won. */
+class DuplicateSaleError extends Error {}
+
+/**
+ * True if a Mongo 11000 came from the idempotencyKey index (vs. receiptNumber).
+ * Mongo reports the offending index in `keyPattern`/`keyValue`; fall back to the
+ * error message for driver versions that don't populate them.
+ */
+function isKeyDuplicate(e: any): boolean {
+  const pattern = e?.keyPattern;
+  if (pattern && typeof pattern === "object") {
+    return Object.prototype.hasOwnProperty.call(pattern, "idempotencyKey");
+  }
+  const value = e?.keyValue;
+  if (value && typeof value === "object") {
+    return Object.prototype.hasOwnProperty.call(value, "idempotencyKey");
+  }
+  return typeof e?.message === "string" && e.message.includes("idempotencyKey");
+}
+
 type CartLine = { menuItemId?: string; qty?: number };
 
 async function nextReceiptNumber(): Promise<string> {
@@ -102,7 +122,12 @@ export async function POST(req: NextRequest) {
 
   await dbConnect();
 
-  let body: { items?: CartLine[]; cashReceived?: number; remarks?: string };
+  let body: {
+    items?: CartLine[];
+    cashReceived?: number;
+    remarks?: string;
+    idempotencyKey?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -115,14 +140,43 @@ export async function POST(req: NextRequest) {
   }
 
   const outletId = user.outlet.id;
+
+  // Idempotency: if the app already recorded this exact cart-confirm (same key)
+  // and is just retrying after a dropped response, return the existing sale
+  // instead of ringing it up twice. The unique index is the real guard; this
+  // pre-check avoids the wasted work and surfaces a clean "already recorded".
+  const idempotencyKey = String(body?.idempotencyKey || "").trim();
+  if (idempotencyKey) {
+    const existing = await SaleModel.findOne({ outletId, idempotencyKey })
+      .select("receiptNumber totalAmount totalQty")
+      .lean<{
+        _id: { toString: () => string };
+        receiptNumber?: string;
+        totalAmount?: number;
+        totalQty?: number;
+      }>();
+    if (existing) {
+      return NextResponse.json({
+        success: true,
+        message: "Sale already recorded.",
+        duplicate: true,
+        sale: {
+          id: existing._id.toString(),
+          receiptNumber: existing.receiptNumber,
+          totalAmount: Number(existing.totalAmount || 0),
+          totalQty: Number(existing.totalQty || 0),
+        },
+      });
+    }
+  }
   const mongoSession = await mongoose.startSession();
 
   try {
     let result: any = null;
 
-    // Find the cashier's currently open shift (if any) so we can tag the sale
-    // to it. Selling without an open shift is still allowed (the tag is simply
-    // omitted), but the app guides cashiers to open one first.
+    // A sale must belong to an open shift, otherwise its cash never appears in
+    // any drawer count and the cash-close variance is silently wrong. Require
+    // one up front instead of allowing an orphaned, untracked sale.
     const openShift = await CashShiftModel.findOne({
       cashierId: user.id,
       outletId,
@@ -130,7 +184,19 @@ export async function POST(req: NextRequest) {
     })
       .select("_id")
       .lean<{ _id: { toString: () => string } }>();
-    const shiftTag = openShift ? ` SHIFT:${openShift._id.toString()}` : "";
+
+    if (!openShift) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Open a cash shift before recording sales.",
+        },
+        { status: 409 }
+      );
+    }
+
+    const shiftId = openShift._id.toString();
+    const shiftTag = ` SHIFT:${shiftId}`;
 
     await mongoSession.withTransaction(async () => {
       // 1) Load the menu items in the cart (scoped to this outlet).
@@ -209,6 +275,13 @@ export async function POST(req: NextRequest) {
                 receiptNumber,
                 saleDate: new Date(),
                 source: "BODEGA",
+                // First-class fields (the remarks tag is kept for backward
+                // compatibility with rows written before these existed).
+                outletId,
+                shiftId,
+                channel: "MOBILE",
+                paymentMethod: "CASH",
+                idempotencyKey: idempotencyKey || undefined,
                 totalAmount,
                 paidAmount: totalAmount, // cash, fully paid
                 balance: 0,
@@ -223,6 +296,13 @@ export async function POST(req: NextRequest) {
           sale = created;
           break;
         } catch (e: any) {
+          // A duplicate on the idempotencyKey index means a concurrent request
+          // with the same key won the race — this is a retry, not a receipt
+          // collision. Surface it so the outer catch returns the existing sale;
+          // regenerating the receipt number here would just collide again.
+          if (e?.code === 11000 && isKeyDuplicate(e)) {
+            throw new DuplicateSaleError();
+          }
           if (e?.code === 11000 && attempt === 0) {
             receiptNumber = await nextReceiptNumber();
             continue;
@@ -304,6 +384,31 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json({ success: false, message: error.message }, { status: error.status });
+    }
+    // A concurrent request with the same key already created the sale (the
+    // transaction above rolled back). Return that winning sale, not an error.
+    if (error instanceof DuplicateSaleError && idempotencyKey) {
+      const existing = await SaleModel.findOne({ outletId, idempotencyKey })
+        .select("receiptNumber totalAmount totalQty")
+        .lean<{
+          _id: { toString: () => string };
+          receiptNumber?: string;
+          totalAmount?: number;
+          totalQty?: number;
+        }>();
+      if (existing) {
+        return NextResponse.json({
+          success: true,
+          message: "Sale already recorded.",
+          duplicate: true,
+          sale: {
+            id: existing._id.toString(),
+            receiptNumber: existing.receiptNumber,
+            totalAmount: Number(existing.totalAmount || 0),
+            totalQty: Number(existing.totalQty || 0),
+          },
+        });
+      }
     }
     console.error(error);
     return NextResponse.json({ success: false, message: "Unable to record the sale." }, { status: 500 });

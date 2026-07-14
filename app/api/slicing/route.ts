@@ -14,6 +14,11 @@ import StandardPackingModel from "@/models/StandardPacking";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const MIN_SLICING_YIELD_RATE = 0.7;
+const MAX_SLICING_YIELD_RATE = 1.2;
+const MAX_KILOS_PER_HEAD = 4;
+const MAX_HEADS_PER_ROW = 1_000;
+
 type SlicingItemInput = {
   standardId?: string;
   standardPackingId?: string;
@@ -38,6 +43,10 @@ function fail(status: number, message: string): never {
 function toNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumber(value: number, digits = 2) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(digits);
 }
 
 function buildDateFilter(dateFrom: string, dateTo: string) {
@@ -443,24 +452,64 @@ async function handlePOST(req: NextRequest) {
       );
     }
 
-    const bags = cleanNumber(item.bags);
-    const heads = cleanNumber(item.heads || item.qtyToSlice);
-    const kilos = cleanNumber(item.kilos);
-    const actualSlicedPcs = cleanNumber(item.actualSlicedPcs);
+	    const bags = cleanNumber(item.bags);
+	    const heads = cleanNumber(item.heads || item.qtyToSlice);
+	    const kilos = cleanNumber(item.kilos);
+	    const actualSlicedPcs = cleanNumber(item.actualSlicedPcs);
 
-    if (heads <= 0) {
+	    if (heads <= 0) {
       return NextResponse.json(
         { success: false, message: "Heads must be greater than zero." },
-        { status: 400 }
-      );
-    }
+	        { status: 400 }
+	      );
+	    }
 
-    if (actualSlicedPcs <= 0) {
-      return NextResponse.json(
-        { success: false, message: "Actual sliced PCS must be greater than zero." },
-        { status: 400 }
-      );
-    }
+	    if (!Number.isInteger(heads) || heads > MAX_HEADS_PER_ROW) {
+	      return NextResponse.json(
+	        {
+	          success: false,
+	          message: `Heads for ${(mainProduct as any).name} must be a whole number up to ${MAX_HEADS_PER_ROW}.`,
+	        },
+	        { status: 400 }
+	      );
+	    }
+
+	    if (actualSlicedPcs <= 0) {
+	      return NextResponse.json(
+	        { success: false, message: "Actual sliced PCS must be greater than zero." },
+	        { status: 400 }
+	      );
+	    }
+
+	    if (!Number.isInteger(actualSlicedPcs)) {
+	      return NextResponse.json(
+	        {
+	          success: false,
+	          message: `Actual sliced PCS for ${(slicedProduct as any).name} must be a whole number.`,
+	        },
+	        { status: 400 }
+	      );
+	    }
+
+	    if (bags > 0 && !Number.isInteger(bags)) {
+	      return NextResponse.json(
+	        {
+	          success: false,
+	          message: `Bags for ${(mainProduct as any).name} must be a whole number.`,
+	        },
+	        { status: 400 }
+	      );
+	    }
+
+	    if (kilos > 0 && kilos / heads > MAX_KILOS_PER_HEAD) {
+	      return NextResponse.json(
+	        {
+	          success: false,
+	          message: `${(mainProduct as any).name} has ${formatNumber(kilos / heads)} kg/head. Please check the kilos or heads entry.`,
+	        },
+	        { status: 400 }
+	      );
+	    }
 
     const availableStock = toNumber((mainProduct as any).stockQty);
     if (heads > availableStock) {
@@ -486,10 +535,24 @@ async function handlePOST(req: NextRequest) {
       );
     }
 
-    const totalStd = heads * standardSlice;
-    const actualPacks = Math.floor(actualSlicedPcs / standardPacking);
-    const butal = actualSlicedPcs % standardPacking;
-    const variance = actualSlicedPcs - totalStd;
+	    const totalStd = heads * standardSlice;
+	    const actualPacks = Math.floor(actualSlicedPcs / standardPacking);
+	    const butal = actualSlicedPcs % standardPacking;
+	    const variance = actualSlicedPcs - totalStd;
+	    const yieldRate = totalStd > 0 ? actualSlicedPcs / totalStd : 0;
+
+	    if (
+	      yieldRate < MIN_SLICING_YIELD_RATE ||
+	      yieldRate > MAX_SLICING_YIELD_RATE
+	    ) {
+	      return NextResponse.json(
+	        {
+	          success: false,
+	          message: `${(slicedProduct as any).name} yield is ${formatNumber(yieldRate * 100)}%. Expected range is ${formatNumber(MIN_SLICING_YIELD_RATE * 100, 0)}% to ${formatNumber(MAX_SLICING_YIELD_RATE * 100, 0)}%. Please recount before saving.`,
+	        },
+	        { status: 400 }
+	      );
+	    }
 
     totalHeads += heads;
     totalKilos += kilos;

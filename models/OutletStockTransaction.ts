@@ -8,7 +8,12 @@ export type OutletStockTransactionType =
   | "DELIVERY_RECEIVED"
   | "SALE"
   | "RETURN"
-  | "VOID";
+  | "VOID"
+  // Repack / break-bulk: a source item is consumed (REPACK_OUT) to produce one
+  // or more target items (REPACK_IN). The two sides share a referenceId so the
+  // conversion is auditable end-to-end.
+  | "REPACK_OUT"
+  | "REPACK_IN";
 
 export type OutletStockSource = "BODEGA" | "GROCERY";
 export type OutletStockChannel = "WEB" | "FLUTTER" | "SYSTEM";
@@ -28,6 +33,10 @@ export interface IOutletStockTransaction extends Document {
   referenceType?: string;
   referenceId?: Types.ObjectId;
   sourceChannel: OutletStockChannel;
+  // Client-supplied dedupe key for repack/stock-in retries. The partial unique
+  // index below is the real guard against a double-tap or retried request
+  // moving stock twice (same mechanism as Sale.idempotencyKey).
+  idempotencyKey?: string;
   remarks?: string;
   createdBy?: Types.ObjectId;
   createdAt: Date;
@@ -82,6 +91,8 @@ const OutletStockTransactionSchema = new Schema<IOutletStockTransaction>(
         "SALE",
         "RETURN",
         "VOID",
+        "REPACK_OUT",
+        "REPACK_IN",
       ],
       required: true,
     },
@@ -92,16 +103,19 @@ const OutletStockTransactionSchema = new Schema<IOutletStockTransaction>(
       min: 0,
     },
 
+    // No `min: 0` on the stock snapshots: OutletInventory.stockQty is allowed
+    // to go negative (a POS never blocks the counter on an out-of-sync count),
+    // and the ledger must record the TRUE before/after values or
+    // newStock - previousStock stops equalling quantity — breaking every
+    // reconciliation exactly in the negative-stock cases that need auditing.
     previousStock: {
       type: Number,
       required: true,
-      min: 0,
     },
 
     newStock: {
       type: Number,
       required: true,
-      min: 0,
     },
 
     referenceType: {
@@ -120,6 +134,11 @@ const OutletStockTransactionSchema = new Schema<IOutletStockTransaction>(
       enum: ["WEB", "FLUTTER", "SYSTEM"],
       default: "WEB",
       required: true,
+    },
+
+    idempotencyKey: {
+      type: String,
+      trim: true,
     },
 
     remarks: {
@@ -144,6 +163,16 @@ OutletStockTransactionSchema.index({ outletInventoryId: 1, transactionDate: -1 }
 OutletStockTransactionSchema.index({ productSource: 1 });
 OutletStockTransactionSchema.index({ type: 1 });
 OutletStockTransactionSchema.index({ referenceType: 1, referenceId: 1 });
+// One ledger write per (outlet, idempotencyKey): a concurrent retry of the
+// same repack/stock-in hits E11000 inside its transaction and rolls back,
+// instead of moving stock twice. Partial so rows without a key are unaffected.
+OutletStockTransactionSchema.index(
+  { outletId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $exists: true } },
+  }
+);
 
 const OutletStockTransactionModel: Model<IOutletStockTransaction> =
   mongoose.models.OutletStockTransaction ||
