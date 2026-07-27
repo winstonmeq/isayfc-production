@@ -97,6 +97,8 @@ export const ROLE_PERMISSION_GROUPS = [
   {
     group: "System",
     permissions: [
+      { key: "corrections.view", label: "View Correction Register" },
+      { key: "corrections.approve", label: "Approve Corrections" },
       { key: "users.view", label: "View Users" },
       { key: "users.manage", label: "Manage Users" },
       { key: "roles.view", label: "View Roles" },

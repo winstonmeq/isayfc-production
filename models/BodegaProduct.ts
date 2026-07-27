@@ -6,6 +6,9 @@ export interface IBodegaProduct extends Document {
   name: string;
   categoryId?: Types.ObjectId;
   stockQty: number;
+  stockBags: number;
+  stockKilos: number;
+  stockHeads: number;
   buyingPrice: number;
   sellingPrice: number;
   isActive: boolean;
@@ -28,6 +31,24 @@ const BodegaProductSchema = new Schema<IBodegaProduct>(
     },
 
     stockQty: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    stockBags: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    stockKilos: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    stockHeads: {
       type: Number,
       default: 0,
       min: 0,

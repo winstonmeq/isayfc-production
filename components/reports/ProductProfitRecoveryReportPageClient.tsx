@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { getReportPeriod, PrintReportHeader } from "./PrintReportHeader";
 
 type CategoryOption = {
   _id: string;
@@ -240,15 +241,20 @@ export function ProductProfitRecoveryReportPageClient() {
 
   return (
     <div className="space-y-5">
-      <ModuleHeader
+      <div className="no-print">
+        <ModuleHeader
+          title="Product Profit Recovery Report"
+          actions={
+            <Button type="button" variant="outline" onClick={() => window.print()}>
+              <Printer className="mr-2 h-4 w-4" />
+              Print
+            </Button>
+          }
+        />
+      </div>
+      <PrintReportHeader
         title="Product Profit Recovery Report"
-        description="Review grocery/product sales recovery, grocery expenses, gross profit, and net profit."
-        actions={
-          <Button type="button" variant="outline" onClick={() => window.print()}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-        }
+        period={getReportPeriod(dateFrom, dateTo)}
       />
 
       <Card className="rounded-2xl border-slate-200 shadow-sm print:hidden">
@@ -370,49 +376,6 @@ export function ProductProfitRecoveryReportPageClient() {
           </div>
         </CardContent>
       </Card>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Product Capital</p>
-            <p className="mt-2 text-2xl font-bold">{formatMoney(summary.totalCapital)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Gross Sales</p>
-            <p className="mt-2 text-2xl font-bold">{formatMoney(summary.totalGross)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Gross Profit</p>
-            <p className={cn("mt-2 text-2xl font-bold", profitClass(summary.grossProfit))}>
-              {formatMoney(summary.grossProfit)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Grocery Expenses</p>
-            <p className="mt-2 text-2xl font-bold text-red-600">
-              {formatMoney(summary.totalGroceryExpenses)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Net Profit</p>
-            <p className={cn("mt-2 text-2xl font-bold", profitClass(summary.netProfit))}>
-              {formatMoney(summary.netProfit)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
 
       <Card className="rounded-2xl border-slate-200 shadow-sm">
         <CardContent className="p-0">

@@ -60,6 +60,8 @@ type ProductOption = {
   source: "BODEGA" | "GROCERY";
   id: string;
   name: string;
+  standardPackingId?: string;
+  packingLabel?: string;
   stock: number;
   packSize: number;
   unitLabel: "PACK" | "PCS" | "QTY";
@@ -187,23 +189,49 @@ export function StockTransfersPageClient() {
           stockQty?: number;
           packSize?: number;
           stockDisplay?: string;
+          packingOptions?: Array<{
+            _id: string;
+            packSize: number;
+            chickenSizeType?: string;
+            wholeChickenName?: string;
+          }>;
         }>) {
           const stock = Number(p.stockQty || 0);
-          const packSize = Number(p.packSize || 0);
-          const isPack = packSize > 0;
+          const packingOptions = p.packingOptions || [];
 
-          options.push({
-            key: `BODEGA:${p._id}`,
-            source: "BODEGA",
-            id: p._id,
-            name: p.name,
-            stock,
-            packSize,
-            unitLabel: isPack ? "PACK" : "PCS",
-            stockDisplay: isPack
-              ? `${Math.floor(stock / packSize)} pack(s) + ${stock % packSize} pcs (${packSize}/pack)`
-              : `${stock} pcs`,
-          });
+          if (packingOptions.length > 0) {
+            for (const packing of packingOptions) {
+              const packSize = Number(packing.packSize || 0);
+              const packingLabel =
+                packing.chickenSizeType ||
+                packing.wholeChickenName ||
+                `${packSize} pcs`;
+
+              options.push({
+                key: `BODEGA:${p._id}:${packing._id}`,
+                source: "BODEGA",
+                id: p._id,
+                name: p.name,
+                stock,
+                standardPackingId: packing._id,
+                packingLabel,
+                packSize,
+                unitLabel: "PACK",
+                stockDisplay: `${Math.floor(stock / packSize)} pack(s) + ${stock % packSize} pcs (${packSize}/pack)`,
+              });
+            }
+          } else {
+            options.push({
+              key: `BODEGA:${p._id}`,
+              source: "BODEGA",
+              id: p._id,
+              name: p.name,
+              stock,
+              packSize: 0,
+              unitLabel: "PCS",
+              stockDisplay: `${stock} pcs`,
+            });
+          }
         }
       }
 
@@ -265,7 +293,10 @@ export function StockTransfersPageClient() {
       setFormRemarks(data.remarks || "");
       setFormItems(
         data.items.map((item) => ({
-          key: `${item.source}:${item.source === "GROCERY" ? item.productId : item.bodegaProductId}`,
+          key:
+            item.source === "GROCERY"
+              ? `GROCERY:${item.productId}`
+              : `BODEGA:${item.bodegaProductId}${item.standardPackingId ? `:${item.standardPackingId}` : ""}`,
           qty: String(item.qty),
         }))
       );
@@ -296,6 +327,10 @@ export function StockTransfersPageClient() {
           source: product?.source || "BODEGA",
           bodegaProductId: product?.source === "BODEGA" ? product.id : undefined,
           productId: product?.source === "GROCERY" ? product.id : undefined,
+          standardPackingId:
+            product?.source === "BODEGA"
+              ? product.standardPackingId
+              : undefined,
           qty: Number(item.qty),
         };
       });
@@ -806,7 +841,7 @@ export function StockTransfersPageClient() {
                               <SelectItem key={product.key} value={product.key}>
                                 {product.name}
                                 {product.unitLabel === "PACK"
-                                  ? " (pack)"
+                                  ? ` (${product.packingLabel || `${product.packSize} pcs`}/pack)`
                                   : ""}{" "}
                                 — {product.stockDisplay}
                               </SelectItem>

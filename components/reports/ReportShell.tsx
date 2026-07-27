@@ -6,6 +6,7 @@ import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getReportPeriod, PrintReportHeader } from "./PrintReportHeader";
 
 export type Preset = "today" | "week" | "month" | "custom";
 
@@ -88,7 +89,12 @@ export function ReportShell({
         }
       `}</style>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <PrintReportHeader
+        title={title}
+        period={periodLabel || getReportPeriod(from, to)}
+      />
+
+      <div className="no-print flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-black">{title}</h1>
           {subtitle ? (

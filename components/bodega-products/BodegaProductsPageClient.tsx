@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Boxes,
   Loader2,
   PackagePlus,
   Pencil,
@@ -18,7 +17,6 @@ import {
   ErpEmptyState,
   ErpField,
   ErpKeyValue,
-  ErpMetricCard,
   ErpMobileCard,
   ErpPage,
   ErpPageHeader,
@@ -148,25 +146,6 @@ export function BodegaProductsPageClient() {
   const [stockProduct, setStockProduct] = useState<BodegaProductItem | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [stockForm, setStockForm] = useState(emptyStockForm);
-
-  const summary = useMemo(() => {
-    return products.reduce(
-      (sum, product) => {
-        const stockPcs = getStockPcs(product);
-        const packSize = getPackSize(product);
-        const fullPacks = packSize > 0 ? Math.floor(stockPcs / packSize) : 0;
-        const loosePcs = packSize > 0 ? stockPcs - fullPacks * packSize : 0;
-        return {
-          products: sum.products + 1,
-          packProducts: sum.packProducts + (product.isPackProduct ? 1 : 0),
-          fullPacks: sum.fullPacks + fullPacks,
-          loosePcs: sum.loosePcs + loosePcs,
-          totalPcs: sum.totalPcs + stockPcs,
-        };
-      },
-      { products: 0, packProducts: 0, fullPacks: 0, loosePcs: 0, totalPcs: 0 }
-    );
-  }, [products]);
 
   async function loadCategories() {
     try {
@@ -368,33 +347,6 @@ export function BodegaProductsPageClient() {
           </>
         }
       />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <ErpMetricCard
-          label="Products"
-          value={formatWholeNumber(summary.products)}
-          description="Visible in current filter"
-          icon={<Boxes className="h-5 w-5" />}
-        />
-        <ErpMetricCard
-          label="Pack Products"
-          value={formatWholeNumber(summary.packProducts)}
-          description="Products with pack size standard"
-          tone="blue"
-        />
-        <ErpMetricCard
-          label="Full Packs"
-          value={formatWholeNumber(summary.fullPacks)}
-          description={`${formatWholeNumber(summary.loosePcs)} loose pcs across filtered items`}
-          tone="emerald"
-        />
-        <ErpMetricCard
-          label="Total PCS"
-          value={formatWholeNumber(summary.totalPcs)}
-          description="Raw system stock quantity"
-          tone="violet"
-        />
-      </div>
 
       <ErpToolbar>
         <ErpField label="Search Product">

@@ -43,6 +43,7 @@ const PAGE_RULES: PageRule[] = [
   { prefix: "/roles", permission: "roles.view" },
   { prefix: "/expenses-bodega", permission: "expenses-bodega.view" },
   { prefix: "/audit-logs", permission: "audit-logs.view" },
+  { prefix: "/corrections", permission: "audit-logs.view" },
   { prefix: "/stock-transfers", permission: "stock-transfers.view" },
 ];
 
@@ -142,6 +143,7 @@ export const config = {
     "/roles/:path*",
     "/expenses-bodega/:path*",
     "/audit-logs/:path*",
+    "/corrections/:path*",
     "/stock-transfers/:path*",
   ],
 };

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { AppSidebar } from "./AppSidebar";
+import { AppModuleBar } from "./AppModuleBar";
 import { AppTopbar } from "./AppTopbar";
 
 type Props = {
@@ -38,7 +39,7 @@ export function AppShell({ children }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-slate-950">
+    <div className="min-h-screen bg-[#f4f7fa] text-slate-950">
       <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:block">
         <AppSidebar collapsed={mounted ? collapsed : false} onToggle={toggleSidebar} />
       </div>
@@ -65,7 +66,7 @@ export function AppShell({ children }: Props) {
       <div
         className={cn(
           "min-h-screen transition-[padding] duration-300 ease-out",
-          mounted && collapsed ? "lg:pl-20" : "lg:pl-[280px]"
+          mounted && collapsed ? "lg:pl-[72px]" : "lg:pl-[252px]"
         )}
       >
         <AppTopbar
@@ -73,11 +74,10 @@ export function AppShell({ children }: Props) {
           onToggle={toggleSidebar}
           onMobileMenu={() => setMobileOpen(true)}
         />
+        <AppModuleBar />
 
-        <main className="mx-auto w-full max-w-[1600px] px-3 py-4 sm:px-5 lg:px-6 lg:py-6">
-          <div className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-3 shadow-sm shadow-slate-200/70 backdrop-blur sm:p-4 lg:p-5">
-            {children}
-          </div>
+        <main className="mx-auto w-full max-w-[1680px] px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
+          <div>{children}</div>
         </main>
       </div>
     </div>

@@ -9,6 +9,7 @@ export interface ICustomer extends Document {
   email?: string;
   phone?: string;
   address?: string;
+  outletId?: Types.ObjectId;
   type: CustomerType;
   isActive: boolean;
   createdBy?: Types.ObjectId;
@@ -45,6 +46,12 @@ const CustomerSchema = new Schema<ICustomer>(
       default: "",
     },
 
+    outletId: {
+      type: Schema.Types.ObjectId,
+      ref: "Outlet",
+      required: false,
+    },
+
     type: {
       type: String,
       enum: ["SALE", "DELIVERY", "BOTH"],
@@ -68,6 +75,7 @@ const CustomerSchema = new Schema<ICustomer>(
 
 CustomerSchema.index({ name: 1 });
 CustomerSchema.index({ type: 1 });
+CustomerSchema.index({ outletId: 1 }, { unique: true, sparse: true });
 CustomerSchema.index({ isActive: 1 });
 
 const CustomerModel: Model<ICustomer> =

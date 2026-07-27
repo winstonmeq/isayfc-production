@@ -6,6 +6,8 @@ export interface IStandardPacking extends Document {
   wholeChickenId: Types.ObjectId;
   productId: Types.ObjectId;
   standardPacking: number;
+  minimumKilos: number;
+  maximumKilos: number;
   standardSlice: number;
   chickenSizeType?: string;
   isActive: boolean;
@@ -30,6 +32,18 @@ const StandardPackingSchema = new Schema<IStandardPacking>(
     standardPacking: {
       type: Number,
       required: true,
+      default: 0,
+      min: 0,
+    },
+
+    minimumKilos: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    maximumKilos: {
+      type: Number,
       default: 0,
       min: 0,
     },

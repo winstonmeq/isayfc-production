@@ -7,8 +7,9 @@ import {
   escapeRegex,
   getPagination,
 } from "@/lib/crud-utils";
-import OutletModel, { IOutlet, OutletStatus } from "@/models/Outlet";
+import OutletModel, { OutletStatus } from "@/models/Outlet";
 import AuditLogModel from "@/models/AuditLog";
+import CustomerModel from "@/models/Customer";
 
 const outletStatuses: OutletStatus[] = ["ACTIVE", "INACTIVE"];
 
@@ -134,6 +135,28 @@ export async function POST(req: NextRequest) {
     status: isOutletStatus(statusInput) ? statusInput : "ACTIVE",
     createdBy: session?.user?.id,
   });
+
+  const existingCustomer = await CustomerModel.findOne({
+    name,
+    isActive: true,
+    $or: [{ outletId: { $exists: false } }, { outletId: null }],
+  });
+  if (existingCustomer) {
+    existingCustomer.outletId = outlet._id;
+    existingCustomer.address = address;
+    existingCustomer.phone = contactNumber;
+    existingCustomer.type = "SALE";
+    await existingCustomer.save();
+  } else {
+    await CustomerModel.create({
+      name,
+      address,
+      phone: contactNumber,
+      type: "SALE",
+      outletId: outlet._id,
+      createdBy: session?.user?.id,
+    });
+  }
 
   await AuditLogModel.create({
     outletId: outlet._id,

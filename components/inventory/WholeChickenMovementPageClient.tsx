@@ -24,6 +24,12 @@ type MovementRow = {
   inPcs: number;
   outQty: number;
   currentPcs: number;
+  inBags?: number;
+  inKilos?: number;
+  outBags?: number;
+  outKilos?: number;
+  currentBags?: number;
+  currentKilos?: number;
   stockInHeads?: number;
   stockOutHeads?: number;
   currentHeads?: number;
@@ -34,6 +40,12 @@ type MovementTotals = {
   inPcs: number;
   outQty: number;
   currentPcs: number;
+  inBags?: number;
+  inKilos?: number;
+  outBags?: number;
+  outKilos?: number;
+  currentBags?: number;
+  currentKilos?: number;
   stockInHeads?: number;
   stockOutHeads?: number;
   currentHeads?: number;
@@ -158,28 +170,6 @@ export function WholeChickenMovementPageClient() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Heads In</p>
-            <p className="mt-1 text-2xl font-bold">{formatNumber(totalInHeads)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Heads Out</p>
-            <p className="mt-1 text-2xl font-bold">{formatNumber(totalOutHeads)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Current Heads</p>
-            <p className="mt-1 text-2xl font-bold">{formatNumber(totalCurrentHeads)}</p>
-            <p className="text-xs text-muted-foreground">Current stock is always live balance.</p>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-4 rounded-xl border bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[2fr_1.5fr_1.5fr_auto_auto]">
         <div className="space-y-2">
           <Label>Search Product</Label>
@@ -225,9 +215,9 @@ export function WholeChickenMovementPageClient() {
                 <TableRow>
                   <TableHead className="w-14">#</TableHead>
                   <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Heads In</TableHead>
-                  <TableHead className="text-right">Heads Out</TableHead>
-                  <TableHead className="text-right">Current Heads</TableHead>
+                  <TableHead className="text-right">Stock In</TableHead>
+                  <TableHead className="text-right">Stock Out</TableHead>
+                  <TableHead className="text-right">Current Stock</TableHead>
                   <TableHead>Updated</TableHead>
                   <TableHead className="text-center">Action</TableHead>
                 </TableRow>
@@ -251,10 +241,23 @@ export function WholeChickenMovementPageClient() {
                     <TableRow key={row._id}>
                       <TableCell>{index + 1}</TableCell>
                       <TableCell className="font-medium">{row.product}</TableCell>
-                      <TableCell className="text-right">{formatNumber(rowInHeads(row))}</TableCell>
-                      <TableCell className="text-right">{formatNumber(rowOutHeads(row))}</TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {formatNumber(rowCurrentHeads(row))}
+                      <TableCell className="text-right">
+                        <div className="font-semibold">{formatNumber(rowInHeads(row))} heads</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatNumber(row.inBags, 2)} bags · {formatNumber(row.inKilos, 2)} kg
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="font-semibold">{formatNumber(rowOutHeads(row))} heads</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatNumber(row.outBags, 2)} bags · {formatNumber(row.outKilos, 2)} kg
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="font-semibold">{formatNumber(rowCurrentHeads(row))} heads</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatNumber(row.currentBags, 2)} bags · {formatNumber(row.currentKilos, 2)} kg
+                        </div>
                       </TableCell>
                       <TableCell>{formatDate(row.updated)}</TableCell>
                       <TableCell className="text-center">
@@ -272,9 +275,18 @@ export function WholeChickenMovementPageClient() {
                 {!isLoading && rows.length > 0 ? (
                   <TableRow className="bg-slate-50 font-bold">
                     <TableCell colSpan={2} className="text-right">Total</TableCell>
-                    <TableCell className="text-right">{formatNumber(totalInHeads)}</TableCell>
-                    <TableCell className="text-right">{formatNumber(totalOutHeads)}</TableCell>
-                    <TableCell className="text-right">{formatNumber(totalCurrentHeads)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatNumber(totalInHeads)} heads
+                      <div className="text-xs">{formatNumber(totals.inBags, 2)} bags · {formatNumber(totals.inKilos, 2)} kg</div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatNumber(totalOutHeads)} heads
+                      <div className="text-xs">{formatNumber(totals.outBags, 2)} bags · {formatNumber(totals.outKilos, 2)} kg</div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatNumber(totalCurrentHeads)} heads
+                      <div className="text-xs">{formatNumber(totals.currentBags, 2)} bags · {formatNumber(totals.currentKilos, 2)} kg</div>
+                    </TableCell>
                     <TableCell />
                     <TableCell />
                   </TableRow>

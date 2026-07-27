@@ -1,6 +1,7 @@
 // app/api/customers/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import type { QueryFilter } from "mongoose";
+import { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
@@ -14,6 +15,7 @@ import {
   serializeDocument,
 } from "@/lib/crud-utils";
 import CustomerModel, { CustomerType, ICustomer } from "@/models/Customer";
+import OutletModel from "@/models/Outlet";
 
 const customerTypes: CustomerType[] = ["SALE", "DELIVERY", "BOTH"];
 
@@ -50,13 +52,22 @@ export async function GET(req: NextRequest) {
   }
 
   const [items, total] = await Promise.all([
-    CustomerModel.find(filter).sort({ name: 1 }).skip(skip).limit(limit).lean(),
+    CustomerModel.find(filter)
+      .populate("outletId", "name code")
+      .sort({ name: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     CustomerModel.countDocuments(filter),
   ]);
 
   return NextResponse.json({
     success: true,
-    data: serializeDocuments(items),
+    data: items.map((item: any) => ({
+      ...serializeDocuments([item])[0],
+      outletId: item.outletId?._id?.toString?.() || "NONE",
+      outletName: item.outletId?.name || "",
+    })),
     meta: {
       page,
       limit,
@@ -80,6 +91,8 @@ async function handlePOST(req: NextRequest) {
   const phone = cleanString(body.phone);
   const address = cleanString(body.address);
   const typeInput = cleanString(body.type).toUpperCase();
+  const outletInput = cleanString(body.outletId);
+  const outletId = outletInput === "NONE" ? "" : outletInput;
 
   if (!name) {
     return NextResponse.json(
@@ -90,12 +103,29 @@ async function handlePOST(req: NextRequest) {
       { status: 400 }
     );
   }
+  if (outletId) {
+    if (!isValidObjectId(outletId)) {
+      return NextResponse.json({ success: false, message: "Invalid outlet." }, { status: 400 });
+    }
+    const outletExists = await OutletModel.exists({
+      _id: outletId,
+      isActive: true,
+      status: "ACTIVE",
+    });
+    if (!outletExists) {
+      return NextResponse.json({ success: false, message: "Linked outlet was not found or is inactive." }, { status: 400 });
+    }
+    if (await CustomerModel.exists({ outletId, isActive: true })) {
+      return NextResponse.json({ success: false, message: "This outlet is already linked to another customer." }, { status: 409 });
+    }
+  }
 
   const customer = await CustomerModel.create({
     name,
     email,
     phone,
     address,
+    outletId: outletId || undefined,
     type: isCustomerType(typeInput) ? typeInput : "SALE",
     createdBy: session?.user?.id,
   });

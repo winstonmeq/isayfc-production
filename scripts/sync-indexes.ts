@@ -34,6 +34,8 @@ async function main() {
   const { default: OutletStockTransactionModel } = await import(
     "../models/OutletStockTransaction"
   );
+  const { default: CustomerModel } = await import("../models/Customer");
+  const { default: StockTransferModel } = await import("../models/StockTransfer");
 
   await dbConnect();
 
@@ -76,6 +78,42 @@ async function main() {
     );
   }
 
+  const duplicateOutletCustomers = await CustomerModel.aggregate<{
+    _id: unknown;
+    count: number;
+  }>([
+    { $match: { outletId: { $exists: true, $ne: null } } },
+    { $group: { _id: "$outletId", count: { $sum: 1 } } },
+    { $match: { count: { $gt: 1 } } },
+  ]);
+  if (duplicateOutletCustomers.length > 0) {
+    blocked = true;
+    console.log("\nDuplicate customer-to-outlet links found:");
+    for (const duplicate of duplicateOutletCustomers) {
+      console.log(
+        `  - outletId ${duplicate._id} is linked to ${duplicate.count} customers`
+      );
+    }
+  }
+
+  const duplicateSaleTransfers = await StockTransferModel.aggregate<{
+    _id: unknown;
+    count: number;
+  }>([
+    { $match: { saleId: { $exists: true, $ne: null } } },
+    { $group: { _id: "$saleId", count: { $sum: 1 } } },
+    { $match: { count: { $gt: 1 } } },
+  ]);
+  if (duplicateSaleTransfers.length > 0) {
+    blocked = true;
+    console.log("\nDuplicate sale-to-transfer links found:");
+    for (const duplicate of duplicateSaleTransfers) {
+      console.log(
+        `  - saleId ${duplicate._id} is linked to ${duplicate.count} transfers`
+      );
+    }
+  }
+
   if (blocked) {
     console.log("\nAttempting sync anyway — conflicting indexes are still updated;");
     console.log("only the blocked unique builds will fail below.\n");
@@ -87,6 +125,8 @@ async function main() {
     ["Sale", SaleModel],
     ["CashShift", CashShiftModel],
     ["OutletStockTransaction", OutletStockTransactionModel],
+    ["Customer", CustomerModel],
+    ["StockTransfer", StockTransferModel],
   ] as const;
 
   let failures = 0;

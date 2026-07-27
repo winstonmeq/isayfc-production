@@ -4,6 +4,9 @@ const isProduction = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  outputFileTracingExcludes: {
+    "/api/uploads/*": ["./var/uploads/**/*"],
+  },
   async headers() {
     const securityHeaders = [
       {

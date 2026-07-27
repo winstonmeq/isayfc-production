@@ -10,6 +10,7 @@ export interface ISale extends Document {
   _id: Types.ObjectId;
   receiptNumber: string;
   customerId?: Types.ObjectId;
+  stockTransferId?: Types.ObjectId;
   saleDate: Date;
   source: SaleSource;
   // Outlet / shift / channel are now first-class fields (previously these were
@@ -47,6 +48,12 @@ const SaleSchema = new Schema<ISale>(
     customerId: {
       type: Schema.Types.ObjectId,
       ref: "Customer",
+      required: false,
+    },
+
+    stockTransferId: {
+      type: Schema.Types.ObjectId,
+      ref: "StockTransfer",
       required: false,
     },
 
@@ -153,6 +160,7 @@ const SaleSchema = new Schema<ISale>(
 // creation paths rely on when retrying generated numbers.
 SaleSchema.index({ receiptNumber: 1 }, { unique: true });
 SaleSchema.index({ customerId: 1 });
+SaleSchema.index({ stockTransferId: 1 }, { sparse: true });
 SaleSchema.index({ saleDate: -1 });
 SaleSchema.index({ source: 1 });
 SaleSchema.index({ status: 1 });

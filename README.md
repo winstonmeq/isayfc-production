@@ -82,4 +82,13 @@ npm run seed:admin
 
 ## Deployment notes
 
-Receipt images are currently written to `public/uploads/payments` for local/server deployments. For serverless deployment, move uploads to object storage such as Vercel Blob, S3, R2, Cloudinary, or Supabase Storage.
+Set `UPLOADS_DIR` to a persistent, writable directory outside the release
+directory. Uploaded receipts and menu images are served through
+`/api/uploads/...`. Back up this directory together with MongoDB.
+
+Use `GET /api/health` as the readiness check. It returns HTTP 200 only when
+MongoDB responds to a ping; otherwise it returns HTTP 503.
+
+The application throttles repeated login failures. A reverse proxy such as
+nginx or Caddy should also enforce request rate limits so protection survives
+application restarts and scales across multiple instances.

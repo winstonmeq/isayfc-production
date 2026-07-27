@@ -21,6 +21,7 @@ type RegisterRow = {
   source: string;
   customerName: string;
   qty: number;
+  qtyDisplay: string;
   totalAmount: number;
   paidAmount: number;
   balance: number;
@@ -30,17 +31,37 @@ type DailyRow = {
   day: string;
   count: number;
   qty: number;
+  qtyDisplay: string;
   total: number;
   paid: number;
   balance: number;
 };
-type Agg = { name: string; qty: number; total: number; count: number };
+type Agg = {
+  name: string;
+  qty: number;
+  unit: "packs" | "qty";
+  total: number;
+  count: number;
+};
+type ChickenCutsMatrix = {
+  products: string[];
+  rows: Array<{ day: string; values: Record<string, number>; total: number }>;
+  totals: Record<string, number>;
+  grandTotal: number;
+};
 type SalesReport = {
   range: { start: string; end: string };
   generatedAt: string;
   rows: RegisterRow[];
   daily: DailyRow[];
-  grand: { count: number; qty: number; total: number; paid: number; balance: number };
+  grand: {
+    count: number;
+    qty: number;
+    qtyDisplay: string;
+    total: number;
+    paid: number;
+    balance: number;
+  };
   split: {
     cashCount: number;
     cashTotal: number;
@@ -49,15 +70,17 @@ type SalesReport = {
   };
   byProduct: Agg[];
   byCategory: Agg[];
+  chickenCuts: ChickenCutsMatrix;
 };
 
-type Tab = "register" | "product" | "category";
+type Tab = "register" | "chickenCuts" | "product" | "category";
 
 export function SalesReportPageClient() {
   const [preset, setPreset] = useState<Preset>("month");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [source, setSource] = useState<"ALL" | "CHICKEN" | "BODEGA">("ALL");
+  const [source, setSource] =
+    useState<"ALL" | "CHICKEN" | "BODEGA" | "OUTLET">("ALL");
   const [data, setData] = useState<SalesReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("register");
@@ -101,7 +124,7 @@ export function SalesReportPageClient() {
   return (
     <ReportShell
       title="Sales Report"
-      subtitle="Sales register with daily subtotals, product and category summaries."
+      subtitle="Sales register with daily subtotals, chicken-cut matrix, and product summaries."
       generatedAt={data?.generatedAt}
       periodLabel={periodLabel}
       preset={preset}
@@ -113,7 +136,7 @@ export function SalesReportPageClient() {
       onApply={load}
       extraFilters={
         <div className="flex items-end gap-1 rounded-lg border border-slate-200 p-1">
-          {(["ALL", "CHICKEN", "BODEGA"] as const).map((s) => (
+          {(["ALL", "CHICKEN", "BODEGA", "OUTLET"] as const).map((s) => (
             <button
               key={s}
               onClick={() => setSource(s)}
@@ -123,7 +146,13 @@ export function SalesReportPageClient() {
                   : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {s === "ALL" ? "All" : s === "CHICKEN" ? "Chicken" : "Grocery"}
+              {s === "ALL"
+                ? "All"
+                : s === "CHICKEN"
+                  ? "Chicken"
+                  : s === "BODEGA"
+                    ? "Grocery"
+                    : "Outlet"}
             </button>
           ))}
         </div>
@@ -156,6 +185,7 @@ export function SalesReportPageClient() {
           <div className="no-print flex gap-1 border-b border-slate-200">
             {([
               ["register", "Register"],
+              ["chickenCuts", "Chicken Cuts"],
               ["product", "By Product"],
               ["category", "By Category"],
             ] as const).map(([key, label]) => (
@@ -182,9 +212,75 @@ export function SalesReportPageClient() {
           {tab === "category" && (
             <SummaryTable title="Sales by Category" rows={data.byCategory} />
           )}
+          {tab === "chickenCuts" && (
+            <ChickenCutsTable matrix={data.chickenCuts} />
+          )}
         </>
       )}
     </ReportShell>
+  );
+}
+
+function ChickenCutsTable({ matrix }: { matrix: ChickenCutsMatrix }) {
+  if (matrix.products.length === 0) {
+    return <Empty>No chicken-cut sales in this period.</Empty>;
+  }
+
+  return (
+    <div>
+      <div className="mb-3 text-center">
+        <h2 className="text-lg font-bold text-slate-900">ISAY CHICKEN</h2>
+        <p className="font-semibold text-slate-700">CHICKEN CUTS</p>
+        <p className="text-sm text-slate-500">DAILY SALES BY PRODUCT</p>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <table className="min-w-max w-full text-sm">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>
+              <th className="sticky left-0 bg-slate-50 p-2.5 text-left font-semibold">
+                Date
+              </th>
+              {matrix.products.map((product) => (
+                <th key={product} className="p-2.5 text-right font-semibold">
+                  {product}
+                </th>
+              ))}
+              <th className="p-2.5 text-right font-bold">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.rows.map((row) => (
+              <tr key={row.day} className="border-t border-slate-100">
+                <td className="sticky left-0 bg-white p-2.5 font-medium">
+                  {row.day}
+                </td>
+                {matrix.products.map((product) => (
+                  <td key={product} className="p-2.5 text-right tabular-nums">
+                    {peso(row.values[product] || 0)}
+                  </td>
+                ))}
+                <td className="p-2.5 text-right font-semibold tabular-nums">
+                  {peso(row.total)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-bold">
+            <tr>
+              <td className="sticky left-0 bg-slate-100 p-2.5">TOTAL SALES</td>
+              {matrix.products.map((product) => (
+                <td key={product} className="p-2.5 text-right tabular-nums">
+                  {peso(matrix.totals[product] || 0)}
+                </td>
+              ))}
+              <td className="p-2.5 text-right tabular-nums">
+                {peso(matrix.grandTotal)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -214,7 +310,7 @@ function RegisterTable({
             <th className="p-2.5 font-semibold">Receipt</th>
             <th className="p-2.5 font-semibold">Customer</th>
             <th className="p-2.5 font-semibold">Source</th>
-            <th className="p-2.5 text-right font-semibold">Qty</th>
+            <th className="p-2.5 text-right font-semibold">Sold Qty</th>
             <th className="p-2.5 text-right font-semibold">Total</th>
             <th className="p-2.5 text-right font-semibold">Paid</th>
             <th className="p-2.5 text-right font-semibold">Balance</th>
@@ -235,7 +331,7 @@ function RegisterTable({
             <td className="p-2.5" colSpan={4}>
               GRAND TOTAL ({grand.count})
             </td>
-            <td className="p-2.5 text-right">{qtyFmt(grand.qty)}</td>
+            <td className="p-2.5 text-right">{grand.qtyDisplay}</td>
             <td className="p-2.5 text-right">{peso(grand.total)}</td>
             <td className="p-2.5 text-right">{peso(grand.paid)}</td>
             <td className="p-2.5 text-right">{peso(grand.balance)}</td>
@@ -264,7 +360,7 @@ function DayGroup({
           <td className="p-2.5 font-medium">{r.receiptNumber}</td>
           <td className="p-2.5">{r.customerName}</td>
           <td className="p-2.5 text-slate-500">{r.source}</td>
-          <td className="p-2.5 text-right">{qtyFmt(r.qty)}</td>
+          <td className="p-2.5 text-right">{r.qtyDisplay}</td>
           <td className="p-2.5 text-right font-medium">{peso(r.totalAmount)}</td>
           <td className="p-2.5 text-right text-slate-600">{peso(r.paidAmount)}</td>
           <td
@@ -282,7 +378,7 @@ function DayGroup({
           <td className="p-2" colSpan={4}>
             Subtotal {day} ({sub.count})
           </td>
-          <td className="p-2 text-right">{qtyFmt(sub.qty)}</td>
+          <td className="p-2 text-right">{sub.qtyDisplay}</td>
           <td className="p-2 text-right">{peso(sub.total)}</td>
           <td className="p-2 text-right">{peso(sub.paid)}</td>
           <td className="p-2 text-right">{peso(sub.balance)}</td>
@@ -296,7 +392,6 @@ function DayGroup({
 function SummaryTable({ title, rows }: { title: string; rows: Agg[] }) {
   if (rows.length === 0) return <Empty>No data in this period.</Empty>;
   const total = rows.reduce((s, r) => s + r.total, 0);
-  const totalQty = rows.reduce((s, r) => s + r.qty, 0);
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200">
       <table className="w-full text-sm">
@@ -304,7 +399,7 @@ function SummaryTable({ title, rows }: { title: string; rows: Agg[] }) {
           <tr>
             <th className="p-2.5 font-semibold">{title}</th>
             <th className="p-2.5 text-right font-semibold">Lines</th>
-            <th className="p-2.5 text-right font-semibold">Qty</th>
+            <th className="p-2.5 text-right font-semibold">Sold Qty</th>
             <th className="p-2.5 text-right font-semibold">Sales</th>
             <th className="p-2.5 text-right font-semibold">% of Total</th>
           </tr>
@@ -314,7 +409,9 @@ function SummaryTable({ title, rows }: { title: string; rows: Agg[] }) {
             <tr key={r.name} className="border-t border-slate-100">
               <td className="p-2.5 font-medium">{r.name}</td>
               <td className="p-2.5 text-right text-slate-500">{r.count}</td>
-              <td className="p-2.5 text-right">{qtyFmt(r.qty)}</td>
+              <td className="p-2.5 text-right">
+                {qtyFmt(r.qty)} {r.unit}
+              </td>
               <td className="p-2.5 text-right font-medium">{peso(r.total)}</td>
               <td className="p-2.5 text-right text-slate-500">
                 {total > 0 ? ((r.total / total) * 100).toFixed(1) : "0.0"}%
@@ -326,7 +423,7 @@ function SummaryTable({ title, rows }: { title: string; rows: Agg[] }) {
           <tr>
             <td className="p-2.5">GRAND TOTAL</td>
             <td />
-            <td className="p-2.5 text-right">{qtyFmt(totalQty)}</td>
+            <td className="p-2.5 text-right text-slate-500">Mixed units</td>
             <td className="p-2.5 text-right">{peso(total)}</td>
             <td className="p-2.5 text-right">100%</td>
           </tr>

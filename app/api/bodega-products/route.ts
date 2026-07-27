@@ -14,6 +14,12 @@ import {
 import BodegaProductModel from "@/models/BodegaProduct";
 import CategoryModel from "@/models/Category";
 import StandardPackingModel from "@/models/StandardPacking";
+import {
+  formatStock,
+  fromBaseQuantity,
+  packingSnapshot,
+  toBaseUnitCost,
+} from "@/lib/inventory-units";
 
 type PopulatedCategory = {
   _id?: Types.ObjectId | string;
@@ -32,8 +38,11 @@ type LeanBodegaProduct = {
 };
 
 type LeanStandardPacking = {
+  _id?: Types.ObjectId | string;
   productId?: Types.ObjectId | string | null;
   standardPacking?: number;
+  chickenSizeType?: string;
+  wholeChickenId?: { name?: string } | Types.ObjectId | string | null;
 };
 
 function numberValue(value: unknown) {
@@ -65,47 +74,56 @@ function getCategoryName(category: LeanBodegaProduct["categoryId"]) {
 }
 
 function getPackBreakdown(quantityValue: unknown, packSizeValue: unknown) {
-  const quantity = Math.max(0, Math.trunc(numberValue(quantityValue)));
   const packSize = Math.max(0, Math.trunc(numberValue(packSizeValue)));
-
-  if (packSize <= 0) {
-    return {
-      totalPcs: quantity,
-      packs: 0,
-      loosePcs: quantity,
-    };
-  }
-
-  const packs = Math.floor(quantity / packSize);
-  const loosePcs = quantity - packs * packSize;
-
+  const packing = packingSnapshot({
+    unit: packSize > 0 ? "PACK" : "PCS",
+    baseUnit: "PCS",
+    multiplier: packSize,
+  });
+  const breakdown = fromBaseQuantity(quantityValue, packing);
   return {
-    totalPcs: quantity,
-    packs,
-    loosePcs,
+    totalPcs: breakdown.baseQty,
+    packs: breakdown.fullUnits,
+    loosePcs: breakdown.looseBaseQty,
   };
 }
 
 function formatStockDisplay(stockQty: unknown, packSize: number) {
-  const breakdown = getPackBreakdown(stockQty, packSize);
-
-  if (packSize <= 0) {
-    return `${breakdown.totalPcs.toLocaleString()} pcs total`;
-  }
-
-  return `${breakdown.packs.toLocaleString()} packs / ${breakdown.loosePcs.toLocaleString()} pcs loose - ${breakdown.totalPcs.toLocaleString()} pcs total`;
+  const packing = packingSnapshot({
+    unit: packSize > 0 ? "PACK" : "PCS",
+    baseUnit: "PCS",
+    multiplier: packSize,
+  });
+  return `${formatStock(stockQty, packing)} - ${numberValue(stockQty).toLocaleString()} pcs total`;
 }
 
-function serializeBodegaProduct(product: LeanBodegaProduct | null, packSizeValue = 0) {
+function serializeBodegaProduct(
+  product: LeanBodegaProduct | null,
+  packingOptions: Array<{
+    _id: string;
+    packSize: number;
+    chickenSizeType: string;
+    wholeChickenName: string;
+  }> = []
+) {
   if (!product) return null;
 
-  const packSize = Math.max(0, Math.trunc(numberValue(packSizeValue)));
+  const packSize = packingOptions[0]?.packSize || 0;
   const isPackProduct = packSize > 0;
   const stockBreakdown = getPackBreakdown(product.stockQty, packSize);
   const sellingPrice = numberValue(product.sellingPrice);
   const buyingPrice = numberValue(product.buyingPrice);
   const pricePerPack = isPackProduct ? sellingPrice : 0;
-  const pricePerPcs = isPackProduct && packSize > 0 ? sellingPrice / packSize : 0;
+  const pricePerPcs = isPackProduct
+    ? toBaseUnitCost(
+        sellingPrice,
+        packingSnapshot({
+          unit: "PACK",
+          baseUnit: "PCS",
+          multiplier: packSize,
+        })
+      )
+    : sellingPrice;
 
   return {
     _id: idToString(product._id),
@@ -120,6 +138,7 @@ function serializeBodegaProduct(product: LeanBodegaProduct | null, packSizeValue
     // Owner-friendly pack display fields.
     isPackProduct,
     packSize,
+    packingOptions,
     stockPcs: stockBreakdown.totalPcs,
     stockPacks: stockBreakdown.packs,
     stockLoosePcs: stockBreakdown.loosePcs,
@@ -179,30 +198,58 @@ export async function GET(req: NextRequest) {
     .filter((id): id is string => Boolean(id) && isValidObjectId(id))
     .map((id) => new Types.ObjectId(id));
 
-  const packSizeByProductId = new Map<string, number>();
+  const packingOptionsByProductId = new Map<
+    string,
+    Array<{
+      _id: string;
+      packSize: number;
+      chickenSizeType: string;
+      wholeChickenName: string;
+    }>
+  >();
 
   if (productIds.length > 0) {
     const standards = (await StandardPackingModel.find({
       isActive: true,
       productId: { $in: productIds },
     })
-      .select("productId standardPacking")
+      .populate("wholeChickenId", "name")
+      .select("productId standardPacking chickenSizeType wholeChickenId")
+      .sort({ updatedAt: -1, _id: -1 })
       .lean()) as LeanStandardPacking[];
 
     for (const standard of standards) {
       const productId = idToString(standard.productId);
       const packSize = Math.max(0, Math.trunc(numberValue(standard.standardPacking)));
 
-      if (productId && packSize > 0 && !packSizeByProductId.has(productId)) {
-        packSizeByProductId.set(productId, packSize);
-      }
+      if (!productId || packSize <= 0) continue;
+      const wholeChicken =
+        standard.wholeChickenId &&
+        typeof standard.wholeChickenId === "object" &&
+        !(standard.wholeChickenId instanceof Types.ObjectId) &&
+        "name" in standard.wholeChickenId
+          ? standard.wholeChickenId.name || ""
+          : "";
+      const options = packingOptionsByProductId.get(productId) || [];
+      options.push({
+        _id: idToString(standard._id),
+        packSize,
+        chickenSizeType: standard.chickenSizeType || "",
+        wholeChickenName: wholeChicken,
+      });
+      packingOptionsByProductId.set(productId, options);
     }
   }
 
   return NextResponse.json({
     success: true,
     data: items
-      .map((item) => serializeBodegaProduct(item, packSizeByProductId.get(idToString(item._id)) || 0))
+      .map((item) =>
+        serializeBodegaProduct(
+          item,
+          packingOptionsByProductId.get(idToString(item._id)) || []
+        )
+      )
       .filter(Boolean),
     meta: {
       page,

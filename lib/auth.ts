@@ -3,6 +3,10 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
 import dbConnect from "@/lib/mongodb";
+import {
+  loginRateLimiter,
+  loginRateLimitKey,
+} from "@/lib/login-rate-limit";
 import RoleModel from "@/models/Role";
 import UserModel from "@/models/User";
 
@@ -60,6 +64,11 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        const rateLimitKey = loginRateLimitKey(identifier);
+        if (!loginRateLimiter.check(rateLimitKey).allowed) {
+          return null;
+        }
+
         const user = await UserModel.findOne({
           isActive: true,
           $or: [{ email: identifier }, { username: identifier }],
@@ -68,6 +77,7 @@ export const authOptions: NextAuthOptions = {
           .lean();
 
         if (!user) {
+          loginRateLimiter.recordFailure(rateLimitKey);
           return null;
         }
 
@@ -77,9 +87,11 @@ export const authOptions: NextAuthOptions = {
         );
 
         if (!isPasswordValid) {
+          loginRateLimiter.recordFailure(rateLimitKey);
           return null;
         }
 
+        loginRateLimiter.clear(rateLimitKey);
         const role: any = user.roleId;
 
         return {

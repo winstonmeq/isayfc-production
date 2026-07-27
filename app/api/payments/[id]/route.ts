@@ -8,6 +8,10 @@ import { withAuditLog } from "@/lib/audit-log";
 import PaymentModel from "@/models/Payment";
 import PaymentAllocationModel from "@/models/PaymentAllocation";
 import SaleModel from "@/models/Sale";
+import {
+  correctionReason,
+  recordCorrection,
+} from "@/lib/corrections";
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -20,10 +24,10 @@ function fail(status: number, message: string): never {
 }
 
 async function handleDELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { response } = await requirePermission("payments.manage");
+  const { response, session } = await requirePermission("payments.manage");
 
   if (response) return response;
 
@@ -37,6 +41,15 @@ async function handleDELETE(
   }
 
   await dbConnect();
+
+  const body = await req.json().catch(() => ({}));
+  const reason = correctionReason(body?.reason);
+  if (reason.length < 5) {
+    return NextResponse.json(
+      { success: false, message: "A correction reason of at least 5 characters is required." },
+      { status: 400 }
+    );
+  }
 
   const mongoSession = await mongoose.startSession();
 
@@ -85,6 +98,21 @@ async function handleDELETE(
 
         await sale.save({ session: mongoSession });
       }
+
+      await recordCorrection({
+        entityType: "PAYMENT",
+        entityId: payment._id,
+        referenceNumber: payment.referenceNumber,
+        correctionType: "VOID",
+        reason,
+        transactionDate: payment.paymentDate,
+        correctedBy: session?.user?.id,
+        metadata: {
+          amount: Number(payment.amount || 0),
+          reversedAllocations: allocations.length,
+        },
+        session: mongoSession,
+      });
     });
 
     return NextResponse.json({

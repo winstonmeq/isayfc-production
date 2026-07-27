@@ -78,11 +78,13 @@ function buildDateRangeFilter(dateFrom: string, dateTo: string) {
   const dateFilter: Record<string, Date> = {};
 
   if (dateFrom) {
-    dateFilter.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
+    dateFilter.$gte = new Date(`${dateFrom}T00:00:00+08:00`);
   }
 
   if (dateTo) {
-    dateFilter.$lte = new Date(`${dateTo}T23:59:59.999Z`);
+    dateFilter.$lt = new Date(
+      new Date(`${dateTo}T00:00:00+08:00`).getTime() + 24 * 60 * 60 * 1000
+    );
   }
 
   return dateFilter;
@@ -150,8 +152,6 @@ export async function GET(req: NextRequest) {
   const customer = cleanString(searchParams.get("customer"));
   const receiptNumber = cleanString(searchParams.get("receiptNumber"));
   const search = cleanString(searchParams.get("search"));
-  const limitParam = wholeNumber(searchParams.get("limit"));
-  const limit = Math.min(Math.max(limitParam || 5000, 1), 20000);
 
   const saleFilter: Record<string, any> = {
     isVoided: false,
@@ -242,7 +242,6 @@ export async function GET(req: NextRequest) {
 
   const saleLines = await SaleLineModel.find(lineFilter)
     .sort({ createdAt: -1 })
-    .limit(limit)
     .lean();
 
   const productIds = Array.from(
@@ -271,7 +270,8 @@ export async function GET(req: NextRequest) {
 
       const product = productById.get(toId(line.productId));
       const qty = getLineQty(line);
-      const unitCost = numberValue(product?.buyingPrice);
+      const unitCost =
+        numberValue(line.unitCost) || numberValue(product?.buyingPrice);
       const unitPrice = getLinePrice(line) || numberValue(product?.unitPrice);
       const totalAmount = getLineTotal(line) || roundMoney(qty * unitPrice);
       const capital = roundMoney(qty * unitCost);

@@ -224,10 +224,17 @@ export function SalesHistoryPageClient() {
     );
 
     if (!confirmed) return;
+    const reason = window.prompt("Reason for voiding this sale:")?.trim();
+    if (!reason || reason.length < 5) {
+      toast.error("Enter a correction reason of at least 5 characters.");
+      return;
+    }
 
     try {
       const res = await fetch(`/api/sales/${viewData._id}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
       });
 
       const json = await res.json();

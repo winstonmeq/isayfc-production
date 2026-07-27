@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId, type QueryFilter } from "mongoose";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import crypto from "node:crypto";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
@@ -13,6 +10,9 @@ import {
   escapeRegex,
   getPagination,
 } from "@/lib/crud-utils";
+import { correctionReason, recordCorrection } from "@/lib/corrections";
+import { manilaDateString } from "@/lib/date-utils";
+import { saveUpload } from "@/lib/upload-storage";
 import CustomerModel from "@/models/Customer";
 import PaymentModel from "@/models/Payment";
 import PaymentAllocationModel from "@/models/PaymentAllocation";
@@ -68,15 +68,11 @@ async function saveReceiptImage(file: File) {
   }
 
   const extension = getSafeReceiptExtension(file);
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  const filename = `${crypto.randomUUID()}.${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "payments");
-
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), buffer);
-
-  return `/uploads/payments/${filename}`;
+  return saveUpload(
+    "payments",
+    new Uint8Array(await file.arrayBuffer()),
+    extension
+  );
 }
 
 export async function GET(req: NextRequest) {
@@ -163,6 +159,8 @@ async function handlePOST(req: NextRequest) {
   const amount = cleanNumber(String(formData.get("amount") || "0"));
   const referenceNumber = cleanString(String(formData.get("referenceNumber") || ""));
   const remarks = cleanString(String(formData.get("remarks") || ""));
+  const lateEntryReason = correctionReason(formData.get("correctionReason"));
+  const isLateEntry = Boolean(paymentDate && paymentDate < manilaDateString());
 
   if (!customerId || !isValidObjectId(customerId)) {
     return NextResponse.json(
@@ -174,6 +172,13 @@ async function handlePOST(req: NextRequest) {
   if (!paymentDate) {
     return NextResponse.json(
       { success: false, message: "Payment date is required." },
+      { status: 400 }
+    );
+  }
+
+  if (isLateEntry && lateEntryReason.length < 5) {
+    return NextResponse.json(
+      { success: false, message: "A reason of at least 5 characters is required for a backdated payment." },
       { status: 400 }
     );
   }
@@ -287,6 +292,20 @@ async function handlePOST(req: NextRequest) {
       payment.appliedAmount = appliedAmount;
       payment.unappliedAmount = Math.max(remainingAmount, 0);
       await payment.save({ session: mongoSession });
+
+      if (isLateEntry) {
+        await recordCorrection({
+          entityType: "PAYMENT",
+          entityId: payment._id,
+          referenceNumber,
+          correctionType: "LATE_ENTRY",
+          reason: lateEntryReason,
+          transactionDate: payment.paymentDate,
+          correctedBy: authSession?.user?.id,
+          metadata: { postedAt: new Date().toISOString() },
+          session: mongoSession,
+        });
+      }
     });
 
     const populated = await PaymentModel.findById(paymentId)

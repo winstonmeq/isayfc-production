@@ -10,7 +10,12 @@ import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import DeliveryModel from "@/models/Delivery";
 import DeliveryItemModel from "@/models/DeliveryItem";
+import StandardPackingModel from "@/models/StandardPacking";
 import SupplierModel from "@/models/Supplier";
+import {
+  correctionReason,
+  recordCorrection,
+} from "@/lib/corrections";
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -144,9 +149,33 @@ async function reverseDeliveryStock({
     // Conditional $gte guard: refuse to reverse stock that was already
     // consumed (sliced/sold), instead of silently clamping to zero and
     // corrupting the stock ledger.
+    const isWholeChicken = Boolean(
+      await StandardPackingModel.exists({
+        wholeChickenId: bodegaProductId,
+        isActive: true,
+      }).session(mongoSession)
+    );
+    const bags = isWholeChicken ? Number((item as any).bags || 0) : 0;
+    const kilos = isWholeChicken ? Number((item as any).kilos || 0) : 0;
+    const heads = isWholeChicken ? Number((item as any).pieces || 0) : 0;
+    const balanceFilter: Record<string, any> = {
+      _id: bodegaProductId,
+      stockQty: { $gte: stockQtyToReverse },
+    };
+    if (bags > 0) balanceFilter.stockBags = { $gte: bags };
+    if (kilos > 0) balanceFilter.stockKilos = { $gte: kilos };
+    if (heads > 0) balanceFilter.stockHeads = { $gte: heads };
+
     const product = await BodegaProductModel.findOneAndUpdate(
-      { _id: bodegaProductId, stockQty: { $gte: stockQtyToReverse } },
-      { $inc: { stockQty: -stockQtyToReverse } },
+      balanceFilter,
+      {
+        $inc: {
+          stockQty: -stockQtyToReverse,
+          stockBags: -bags,
+          stockKilos: -kilos,
+          stockHeads: -heads,
+        },
+      },
       { new: true, session: mongoSession }
     );
 
@@ -173,6 +202,10 @@ async function reverseDeliveryStock({
       bodegaProductId: product._id,
       type: "VOID_REVERSAL",
       quantity: stockQtyToReverse,
+      bags,
+      kilos,
+      heads,
+      pieces: isWholeChicken ? 0 : Number((item as any).pieces || 0),
       previousStock: newStock + stockQtyToReverse,
       newStock,
       remarks: `VOID DELIVERY ${deliveryCode}`,
@@ -276,6 +309,13 @@ async function handlePATCH(
   }
 
   const body = await req.json();
+  const reason = correctionReason(body.correctionReason);
+  if (reason.length < 5) {
+    return NextResponse.json(
+      { success: false, message: "A correction reason of at least 5 characters is required when editing a posted delivery." },
+      { status: 400 }
+    );
+  }
 
   const supplierId = cleanString(body.supplierId);
   const deliveryCode = cleanString(body.deliveryCode);
@@ -359,6 +399,7 @@ async function handlePATCH(
     buyingPrice: number;
     lineTotal: number;
     stockQtyToAdd: number;
+    isWholeChicken: boolean;
   };
 
   const preparedItems: PreparedDeliveryItem[] = [];
@@ -399,12 +440,23 @@ async function handlePATCH(
     const kilos = cleanNumber(item.kilos);
     const pieces = cleanNumber(item.pieces);
     const buyingPrice = cleanNumber(item.buyingPrice);
+    const isWholeChicken = Boolean(
+      await StandardPackingModel.exists({
+        wholeChickenId: product._id,
+        isActive: true,
+      })
+    );
 
-    if (bags <= 0 && kilos <= 0 && pieces <= 0) {
+    if (
+      (isWholeChicken && (bags <= 0 || kilos <= 0 || pieces <= 0)) ||
+      (!isWholeChicken && pieces <= 0)
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message: `Enter bags, kilos, or pieces for ${product.name}.`,
+          message: isWholeChicken
+            ? `Enter bags, kilos, and heads for ${product.name}.`
+            : `Enter pieces for ${product.name}.`,
         },
         { status: 400 }
       );
@@ -437,6 +489,7 @@ async function handlePATCH(
       buyingPrice,
       lineTotal,
       stockQtyToAdd,
+      isWholeChicken,
     });
   }
 
@@ -489,7 +542,12 @@ async function handlePATCH(
         const updatedProduct = await BodegaProductModel.findOneAndUpdate(
           { _id: item.bodegaProductId },
           {
-            $inc: { stockQty: item.stockQtyToAdd },
+            $inc: {
+              stockQty: item.stockQtyToAdd,
+              stockBags: item.isWholeChicken ? item.bags : 0,
+              stockKilos: item.isWholeChicken ? item.kilos : 0,
+              stockHeads: item.isWholeChicken ? item.pieces : 0,
+            },
             $set: { buyingPrice: item.buyingPrice },
           },
           { new: true, session: mongoSession }
@@ -505,6 +563,10 @@ async function handlePATCH(
           bodegaProductId: updatedProduct._id,
           type: "STOCK_IN",
           quantity: item.stockQtyToAdd,
+          bags: item.isWholeChicken ? item.bags : 0,
+          kilos: item.isWholeChicken ? item.kilos : 0,
+          heads: item.isWholeChicken ? item.pieces : 0,
+          pieces: item.isWholeChicken ? 0 : item.pieces,
           previousStock: newStock - item.stockQtyToAdd,
           newStock,
           remarks: `EDIT DELIVERY ${deliveryCode}`,
@@ -523,6 +585,21 @@ async function handlePATCH(
           session: mongoSession,
         });
       }
+
+      await recordCorrection({
+        entityType: "DELIVERY",
+        entityId: delivery._id,
+        referenceNumber: delivery.deliveryCode,
+        correctionType: "ADJUSTMENT",
+        reason,
+        transactionDate: delivery.deliveryDate,
+        correctedBy: session?.user?.id,
+        metadata: {
+          totalAmount,
+          totalItems: preparedItems.length,
+        },
+        session: mongoSession,
+      });
     });
   } catch (error) {
     if (error instanceof ApiError) {
@@ -558,7 +635,7 @@ async function handlePATCH(
 }
 
 async function handleDELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const { response, session } = await requirePermission("supplier-deliveries.manage");
@@ -578,6 +655,15 @@ async function handleDELETE(
   }
 
   await dbConnect();
+
+  const body = await req.json().catch(() => ({}));
+  const reason = correctionReason(body?.reason);
+  if (reason.length < 5) {
+    return NextResponse.json(
+      { success: false, message: "A correction reason of at least 5 characters is required." },
+      { status: 400 }
+    );
+  }
 
   const delivery = await DeliveryModel.findOne({
     _id: id,
@@ -614,6 +700,18 @@ async function handleDELETE(
         deliveryCode: claimed.deliveryCode,
         createdBy: session?.user?.id,
         mongoSession,
+      });
+
+      await recordCorrection({
+        entityType: "DELIVERY",
+        entityId: claimed._id,
+        referenceNumber: claimed.deliveryCode,
+        correctionType: "VOID",
+        reason,
+        transactionDate: claimed.deliveryDate,
+        correctedBy: session?.user?.id,
+        metadata: { totalAmount: Number(claimed.totalAmount || 0) },
+        session: mongoSession,
       });
     });
 

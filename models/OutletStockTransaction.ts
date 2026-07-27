@@ -28,6 +28,11 @@ export interface IOutletStockTransaction extends Document {
   transactionDate: Date;
   type: OutletStockTransactionType;
   quantity: number;
+  unitCost: number;
+  entryUnit: "PCS" | "PACK" | "QTY" | "KG" | "BAG";
+  entryQty: number;
+  multiplier: number;
+  baseUnit: "PCS" | "KG" | "QTY";
   previousStock: number;
   newStock: number;
   referenceType?: string;
@@ -101,6 +106,37 @@ const OutletStockTransactionSchema = new Schema<IOutletStockTransaction>(
       type: Number,
       required: true,
       min: 0,
+    },
+
+    // Cost per deducted base unit at transaction time.
+    unitCost: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    entryUnit: {
+      type: String,
+      enum: ["PCS", "PACK", "QTY", "KG", "BAG"],
+      default: "QTY",
+    },
+
+    entryQty: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    multiplier: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+
+    baseUnit: {
+      type: String,
+      enum: ["PCS", "KG", "QTY"],
+      default: "QTY",
     },
 
     // No `min: 0` on the stock snapshots: OutletInventory.stockQty is allowed

@@ -28,6 +28,7 @@ type LeanItem = {
   source?: string;
   bodegaProductId?: { toString?: () => string } | null;
   productId?: { toString?: () => string } | null;
+  standardPackingId?: { toString?: () => string } | null;
   productName?: string;
   unitLabel?: string;
   qtyPcs?: number;
@@ -49,6 +50,7 @@ function serializeItem(item: LeanItem) {
     source: item.source || "BODEGA",
     bodegaProductId: item.bodegaProductId?.toString?.() || "",
     productId: item.productId?.toString?.() || "",
+    standardPackingId: item.standardPackingId?.toString?.() || "",
     unitLabel: item.unitLabel || "PCS",
     qtyPcs: Number(item.qtyPcs || 0),
     receivedPcs: Number(item.receivedPcs || 0),
@@ -149,6 +151,7 @@ async function handlePATCH(
       source?: string;
       bodegaProductId?: string;
       productId?: string;
+      standardPackingId?: string;
       qty?: number;
     }[];
   };
@@ -171,6 +174,12 @@ async function handlePATCH(
 
     if (transfer.status !== "DRAFT") {
       transferFail(400, "Only draft transfers can be edited.");
+    }
+    if (transfer.saleId) {
+      transferFail(
+        400,
+        "This transfer was generated from a sale. Edit or void the linked sale instead."
+      );
     }
 
     const outletId = cleanString(body?.outletId);
@@ -254,8 +263,22 @@ async function handleDELETE(
   try {
     let cancelledNumber = "";
     let stockRestored = false;
+    let linkedToSale = false;
 
     await mongoSession.withTransaction(async () => {
+      const transferBeforeCancel = await StockTransferModel.findById(id)
+        .select("status saleId")
+        .session(mongoSession)
+        .lean();
+
+      if (transferBeforeCancel?.saleId && transferBeforeCancel.status === "DRAFT") {
+        transferFail(
+          400,
+          "This draft was generated from a sale. Void the linked sale to cancel both records."
+        );
+      }
+      linkedToSale = Boolean(transferBeforeCancel?.saleId);
+
       // Atomically claim: only DRAFT or IN_TRANSIT transfers can be cancelled.
       const transfer = await StockTransferModel.findOneAndUpdate(
         { _id: id, status: { $in: ["DRAFT", "IN_TRANSIT"] } },
@@ -338,9 +361,17 @@ async function handleDELETE(
             continue;
           }
 
+          const isHeadTransfer = item.unitLabel === "HEAD";
           const product = await BodegaProductModel.findOneAndUpdate(
             { _id: item.bodegaProductId },
-            { $inc: { stockQty: pcs } },
+            {
+              $inc: {
+                stockQty: pcs,
+                ...(isHeadTransfer
+                  ? { stockHeads: Number(item.qty || 0) }
+                  : {}),
+              },
+            },
             { new: true, session: mongoSession }
           );
 
@@ -357,6 +388,8 @@ async function handleDELETE(
             bodegaProductId: product._id,
             type: "VOID_REVERSAL",
             quantity: pcs,
+            heads: isHeadTransfer ? Number(item.qty || 0) : 0,
+            pieces: isHeadTransfer ? 0 : pcs,
             previousStock: newStock - pcs,
             newStock,
             remarks: `CANCEL TRANSFER ${transfer.transferNumber}`,
@@ -383,7 +416,7 @@ async function handleDELETE(
     return NextResponse.json({
       success: true,
       message: stockRestored
-        ? `Transfer ${cancelledNumber} cancelled and the dispatched stock was returned to the bodega.`
+        ? `Transfer ${cancelledNumber} cancelled and the dispatched stock was returned to the bodega.${linkedToSale ? " Void the linked sale if the order is also cancelled." : ""}`
         : `Transfer ${cancelledNumber} cancelled.`,
     });
   } catch (error) {

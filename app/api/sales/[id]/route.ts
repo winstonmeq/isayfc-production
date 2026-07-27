@@ -10,6 +10,11 @@ import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ProductModel from "@/models/Product";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
+import StockTransferModel from "@/models/StockTransfer";
+import {
+  correctionReason,
+  recordCorrection,
+} from "@/lib/corrections";
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -92,7 +97,7 @@ export async function GET(
 }
 
 async function handleDELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const { response, session } = await requirePermission("sales.manage");
@@ -109,10 +114,49 @@ async function handleDELETE(
 
   await dbConnect();
 
+  const body = await req.json().catch(() => ({}));
+  const reason = correctionReason(body?.reason);
+  if (reason.length < 5) {
+    return NextResponse.json(
+      { success: false, message: "A correction reason of at least 5 characters is required." },
+      { status: 400 }
+    );
+  }
+
   const mongoSession = await mongoose.startSession();
 
   try {
     await mongoSession.withTransaction(async () => {
+      const linkedTransfer = await StockTransferModel.findOne({ saleId: id })
+        .session(mongoSession);
+
+      if (
+        linkedTransfer &&
+        !["DRAFT", "CANCELLED"].includes(linkedTransfer.status)
+      ) {
+        fail(
+          400,
+          "Cancel the linked stock transfer before voiding this sale. Confirmed transfers cannot be voided."
+        );
+      }
+
+      if (linkedTransfer?.status === "DRAFT") {
+        const cancelled = await StockTransferModel.findOneAndUpdate(
+          { _id: linkedTransfer._id, status: "DRAFT" },
+          {
+            $set: {
+              status: "CANCELLED",
+              cancelledAt: new Date(),
+              cancelledBy: session?.user?.id,
+            },
+          },
+          { new: true, session: mongoSession }
+        );
+        if (!cancelled) {
+          fail(409, "The linked stock transfer changed. Refresh and try again.");
+        }
+      }
+
       // Atomically claim the sale so two simultaneous voids cannot both run.
       const sale = await SaleModel.findOneAndUpdate(
         { _id: id, isVoided: false, paidAmount: { $lte: 0 } },
@@ -144,14 +188,24 @@ async function handleDELETE(
       const bodegaTransactions = [];
 
       for (const line of lines) {
+        // Outlet-linked sales move stock through their transfer. A cancelled
+        // transfer has already restored stock, while a draft never deducted it.
+        if (linkedTransfer) continue;
+
         const stockToRestore = Number(line.stockPcsOut || line.qty || 0);
 
         if (stockToRestore <= 0) continue;
 
         if (line.source === "CHICKEN" && line.bodegaProductId) {
+          const isHeadSale = line.stockUnit === "HEAD";
           const product = await BodegaProductModel.findOneAndUpdate(
             { _id: line.bodegaProductId },
-            { $inc: { stockQty: stockToRestore } },
+            {
+              $inc: {
+                stockQty: stockToRestore,
+                ...(isHeadSale ? { stockHeads: Number(line.qty || 0) } : {}),
+              },
+            },
             { new: true, session: mongoSession }
           );
 
@@ -163,6 +217,8 @@ async function handleDELETE(
             bodegaProductId: product._id,
             type: "VOID_REVERSAL",
             quantity: stockToRestore,
+            heads: isHeadSale ? Number(line.qty || 0) : 0,
+            pieces: isHeadSale ? 0 : stockToRestore,
             previousStock: newStock - stockToRestore,
             newStock,
             remarks: `VOID SALE ${sale.receiptNumber}`,
@@ -209,6 +265,21 @@ async function handleDELETE(
           session: mongoSession,
         });
       }
+
+      await recordCorrection({
+        entityType: "SALE",
+        entityId: sale._id,
+        referenceNumber: sale.receiptNumber,
+        correctionType: "VOID",
+        reason,
+        transactionDate: sale.saleDate,
+        correctedBy: session?.user?.id,
+        metadata: {
+          totalAmount: Number(sale.totalAmount || 0),
+          restoredLines: lines.length,
+        },
+        session: mongoSession,
+      });
     });
 
     return NextResponse.json({

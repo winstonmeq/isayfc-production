@@ -8,6 +8,10 @@ import mongoose, { Types, isValidObjectId } from "mongoose";
 
 import { cleanString } from "@/lib/crud-utils";
 import { manilaDateString } from "@/lib/date-utils";
+import {
+  packingSnapshot,
+  toBaseQuantity,
+} from "@/lib/inventory-units";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import ProductModel from "@/models/Product";
@@ -159,9 +163,20 @@ export async function dispatchTransferInTransaction({
     }
 
     // BODEGA (pcs already accounts for packs via qtyPcs)
+    const isHeadTransfer = item.unitLabel === "HEAD";
     const product = await BodegaProductModel.findOneAndUpdate(
-      { _id: item.bodegaProductId, isActive: true, stockQty: { $gte: pcs } },
-      { $inc: { stockQty: -pcs } },
+      {
+        _id: item.bodegaProductId,
+        isActive: true,
+        stockQty: { $gte: pcs },
+        ...(isHeadTransfer ? { stockHeads: { $gte: Number(item.qty) } } : {}),
+      },
+      {
+        $inc: {
+          stockQty: -pcs,
+          ...(isHeadTransfer ? { stockHeads: -Number(item.qty) } : {}),
+        },
+      },
       { new: true, session: mongoSession }
     );
 
@@ -200,6 +215,8 @@ export async function dispatchTransferInTransaction({
       bodegaProductId: product._id,
       type: "STOCK_OUT",
       quantity: pcs,
+      heads: isHeadTransfer ? Number(item.qty) : 0,
+      pieces: isHeadTransfer ? 0 : pcs,
       previousStock: newStock + pcs,
       newStock,
       remarks: `STOCK TRANSFER ${transfer.transferNumber}`,
@@ -228,6 +245,7 @@ type TransferItemInput = {
   source?: string;
   bodegaProductId?: string;
   productId?: string;
+  standardPackingId?: string;
   qty?: number;
 };
 
@@ -257,7 +275,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
     const productKey = cleanString(
       source === "GROCERY" ? input?.productId : input?.bodegaProductId
     );
-    const qty = Math.trunc(Number(input?.qty));
+    const rawQty = Number(input?.qty);
 
     if (!isValidObjectId(productKey)) {
       transferFail(400, "Invalid product in transfer items.");
@@ -269,9 +287,10 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
     }
     seen.add(dedupeKey);
 
-    if (!Number.isFinite(qty) || qty < 1) {
+    if (!Number.isFinite(rawQty) || !Number.isInteger(rawQty) || rawQty < 1) {
       transferFail(400, "Each item quantity must be a whole number of at least 1.");
     }
+    const qty = rawQty;
 
     if (source === "GROCERY") {
       const product = await ProductModel.findOne({
@@ -331,20 +350,60 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       transferFail(404, "One of the selected products was not found.");
     }
 
-    const standard = await StandardPackingModel.findOne({
+    const standardPackingId = cleanString(input?.standardPackingId);
+    if (standardPackingId && !isValidObjectId(standardPackingId)) {
+      transferFail(400, "Invalid packing configuration in transfer items.");
+    }
+
+    const standardFilter = {
       isActive: true,
       productId: new Types.ObjectId(productKey),
-    })
+      ...(standardPackingId
+        ? { _id: new Types.ObjectId(standardPackingId) }
+        : {}),
+      standardPacking: { $gt: 0 },
+    };
+    const standards = await StandardPackingModel.find(standardFilter)
+      .sort({ updatedAt: -1, _id: -1 })
       .select("standardPacking")
-      .lean<{ standardPacking?: number }>();
+      .lean<Array<{ _id: Types.ObjectId; standardPacking?: number }>>();
+    const standard = standards[0];
+
+    if (standardPackingId && !standard) {
+      transferFail(
+        400,
+        "The selected packing configuration is no longer active for this product."
+      );
+    }
+
+    if (
+      !standardPackingId &&
+      new Set(
+        standards.map((item) =>
+          Math.max(0, Math.trunc(Number(item.standardPacking || 0)))
+        )
+      ).size > 1
+    ) {
+      transferFail(
+        400,
+        `Please select a packing configuration for ${product.name}.`
+      );
+    }
 
     const packSize = Math.max(0, Math.trunc(Number(standard?.standardPacking || 0)));
     const isPack = packSize > 0;
+    const packing = packingSnapshot({
+      packingId: standard?._id.toString(),
+      unit: isPack ? "PACK" : "PCS",
+      baseUnit: "PCS",
+      multiplier: packSize,
+    });
 
     prepared.push({
       source: "BODEGA" as const,
       bodegaProductId: product._id,
       productId: undefined,
+      standardPackingId: standard?._id,
       productName: String(product.name || ""),
       categoryName: categoryNameOf(product.categoryId),
       packSize,
@@ -353,7 +412,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       buyingPrice: Number(product.buyingPrice || 0),
       sellingPrice: Number(product.sellingPrice || 0),
       qty,
-      qtyPcs: isPack ? qty * packSize : qty,
+      qtyPcs: toBaseQuantity(qty, packing),
       receivedQty: 0,
       receivedPcs: 0,
       varianceQty: 0,

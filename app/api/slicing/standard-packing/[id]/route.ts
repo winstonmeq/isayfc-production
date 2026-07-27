@@ -21,6 +21,8 @@ function serializeStandard(item: any) {
     productName: item.productId?.name || "",
 
     standardPacking: Number(item.standardPacking || 0),
+    minimumKilos: Number(item.minimumKilos || 0),
+    maximumKilos: Number(item.maximumKilos || 0),
     standardSlice: Number(item.standardSlice || 0),
     chickenSizeType: item.chickenSizeType || "",
   };
@@ -50,6 +52,8 @@ async function handlePATCH(
   const wholeChickenId = cleanString(body.wholeChickenId);
   const productId = cleanString(body.productId);
   const standardPacking = cleanNumber(body.standardPacking);
+  const minimumKilos = cleanNumber(body.minimumKilos);
+  const maximumKilos = cleanNumber(body.maximumKilos);
   const standardSlice = cleanNumber(body.standardSlice);
   const chickenSizeType = cleanString(body.chickenSizeType);
 
@@ -81,6 +85,23 @@ async function handlePATCH(
     );
   }
 
+  if (minimumKilos < 0 || maximumKilos < 0) {
+    return NextResponse.json(
+      { success: false, message: "Kilo limits cannot be negative." },
+      { status: 400 }
+    );
+  }
+
+  if (maximumKilos > 0 && maximumKilos < minimumKilos) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Maximum kilos must be greater than or equal to minimum kilos.",
+      },
+      { status: 400 }
+    );
+  }
+
   const [wholeChicken, product] = await Promise.all([
     BodegaProductModel.findOne({ _id: wholeChickenId, isActive: true }),
     BodegaProductModel.findOne({ _id: productId, isActive: true }),
@@ -102,6 +123,8 @@ async function handlePATCH(
       wholeChickenId,
       productId,
       standardPacking,
+      minimumKilos,
+      maximumKilos,
       standardSlice,
       chickenSizeType,
     },

@@ -13,6 +13,15 @@ import { roundMoney } from "@/lib/report-utils";
 import { manilaDateString } from "@/lib/date-utils";
 import ProductModel from "@/models/Product";
 import CategoryModel from "@/models/Category";
+import BodegaProductModel from "@/models/BodegaProduct";
+import OutletInventoryModel from "@/models/OutletInventory";
+import OutletModel from "@/models/Outlet";
+import StandardPackingModel from "@/models/StandardPacking";
+import {
+  formatStock,
+  packingSnapshot,
+  toBaseUnitCost,
+} from "@/lib/inventory-units";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,11 +41,15 @@ export async function GET(req: NextRequest) {
       ? stockParam
       : null;
 
-  const products = await ProductModel.find({ isActive: true })
-    .populate("categoryId", "name")
-    .select("name categoryId buyingPrice unitPrice stockPcs lowStockAlert")
-    .sort({ name: 1 })
-    .lean<
+  void OutletModel;
+
+  const [products, bodegaProducts, outletInventory, packingStandards] =
+    await Promise.all([
+    ProductModel.find({ isActive: true })
+      .populate("categoryId", "name")
+      .select("name categoryId buyingPrice unitPrice stockPcs lowStockAlert")
+      .sort({ name: 1 })
+      .lean<
       Array<{
         _id: { toString: () => string };
         name?: string;
@@ -46,7 +59,37 @@ export async function GET(req: NextRequest) {
         stockPcs?: number;
         lowStockAlert?: number;
       }>
-    >();
+      >(),
+    BodegaProductModel.find({ isActive: true })
+      .populate("categoryId", "name")
+      .select("name categoryId buyingPrice sellingPrice stockQty")
+      .sort({ name: 1 })
+      .lean(),
+    OutletInventoryModel.find({ isActive: true })
+      .populate("outletId", "name code")
+      .select(
+        "outletId productName categoryName stockQty unitLabel packSize lowStockAlert buyingPrice sellingPrice"
+      )
+      .sort({ productName: 1 })
+      .lean(),
+    StandardPackingModel.find({
+      isActive: true,
+      standardPacking: { $gt: 0 },
+    })
+      .select("productId standardPacking")
+      .sort({ updatedAt: -1, _id: -1 })
+      .lean(),
+    ]);
+  const packSizeByProduct = new Map<string, number>();
+  for (const standard of packingStandards) {
+    const productId = standard.productId?.toString();
+    if (productId && !packSizeByProduct.has(productId)) {
+      packSizeByProduct.set(
+        productId,
+        Math.max(0, Math.trunc(Number(standard.standardPacking || 0)))
+      );
+    }
+  }
 
   type Row = {
     id: string;
@@ -60,9 +103,14 @@ export async function GET(req: NextRequest) {
     potentialMargin: number;
     lowStockAlert: number;
     stockStatus: "OUT" | "LOW" | "OK";
+    source: "GROCERY" | "BODEGA" | "OUTLET";
+    location: string;
+    unitLabel: string;
+    packSize: number;
+    stockDisplay: string;
   };
 
-  const allRows: Row[] = products.map((p) => {
+  const groceryRows: Row[] = products.map((p) => {
     const stock = Number(p.stockPcs || 0);
     const cost = Number(p.buyingPrice || 0);
     const retail = Number(p.unitPrice || 0);
@@ -83,8 +131,97 @@ export async function GET(req: NextRequest) {
       potentialMargin: roundMoney(retailValue - costValue),
       lowStockAlert: alert,
       stockStatus,
+      source: "GROCERY",
+      location: "MAIN",
+      unitLabel: "PCS",
+      packSize: 0,
+      stockDisplay: formatStock(
+        stock,
+        packingSnapshot({ unit: "PCS", baseUnit: "PCS" })
+      ),
     };
   });
+
+  const bodegaRows: Row[] = bodegaProducts.map((product: any) => {
+    const stock = Number(product.stockQty || 0);
+    const savedCost = Number(product.buyingPrice || 0);
+    const sellingPrice = Number(product.sellingPrice || 0);
+    const packSize = packSizeByProduct.get(product._id.toString()) || 0;
+    const packing = packingSnapshot({
+      unit: packSize > 0 ? "PACK" : "PCS",
+      baseUnit: "PCS",
+      multiplier: packSize,
+    });
+    const cost = toBaseUnitCost(savedCost, packing);
+    const retail = toBaseUnitCost(sellingPrice, packing);
+    const costValue = roundMoney(stock * cost);
+    const retailValue = roundMoney(stock * retail);
+    return {
+      id: product._id.toString(),
+      name: String(product.name || ""),
+      categoryName: product.categoryId?.name || "NO CATEGORY",
+      stockPcs: stock,
+      buyingPrice: cost,
+      unitPrice: retail,
+      costValue,
+      retailValue,
+      potentialMargin: roundMoney(retailValue - costValue),
+      lowStockAlert: 0,
+      stockStatus: stock <= 0 ? "OUT" : "OK",
+      source: "BODEGA",
+      location: "MAIN BODEGA",
+      unitLabel: packSize > 0 ? "PACK" : "PCS",
+      packSize,
+      stockDisplay: formatStock(stock, packing),
+    };
+  });
+
+  const outletRows: Row[] = outletInventory.map((inventory: any) => {
+    const stock = Number(inventory.stockQty || 0);
+    const packSize = Number(inventory.packSize || 0);
+    const savedCost = Number(inventory.buyingPrice || 0);
+    const savedRetail = Number(inventory.sellingPrice || 0);
+    const packing = packingSnapshot({
+      unit:
+        packSize > 0
+          ? inventory.unitLabel === "BAG"
+            ? "BAG"
+            : "PACK"
+          : inventory.unitLabel || "QTY",
+      baseUnit: inventory.unitLabel === "KG" ? "KG" : "PCS",
+      multiplier: packSize,
+    });
+    const cost = toBaseUnitCost(savedCost, packing);
+    const retail = toBaseUnitCost(savedRetail, packing);
+    const alert = Number(inventory.lowStockAlert || 0);
+    const costValue = roundMoney(stock * cost);
+    const retailValue = roundMoney(stock * retail);
+    const outletName =
+      inventory.outletId?.name || inventory.outletId?.code || "OUTLET";
+    return {
+      id: inventory._id.toString(),
+      name: `${String(inventory.productName || "")} (${outletName})`,
+      categoryName: inventory.categoryName || "NO CATEGORY",
+      stockPcs: stock,
+      buyingPrice: cost,
+      unitPrice: retail,
+      costValue,
+      retailValue,
+      potentialMargin: roundMoney(retailValue - costValue),
+      lowStockAlert: alert,
+      stockStatus:
+        stock <= 0 ? "OUT" : alert > 0 && stock <= alert ? "LOW" : "OK",
+      source: "OUTLET",
+      location: String(outletName),
+      unitLabel: packing.unit,
+      packSize: packing.multiplier > 1 ? packing.multiplier : 0,
+      stockDisplay: formatStock(stock, packing),
+    };
+  });
+
+  const allRows = [...groceryRows, ...bodegaRows, ...outletRows].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
 
   const rows = stockFilter
     ? allRows.filter((r) =>

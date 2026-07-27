@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanString, serializeDocument } from "@/lib/crud-utils";
 import CustomerModel, { CustomerType } from "@/models/Customer";
+import OutletModel from "@/models/Outlet";
 
 const customerTypes: CustomerType[] = ["SALE", "DELIVERY", "BOTH"];
 
@@ -86,6 +87,8 @@ async function handlePATCH(
   const phone = cleanString(body.phone);
   const address = cleanString(body.address);
   const typeInput = cleanString(body.type).toUpperCase();
+  const outletInput = cleanString(body.outletId);
+  const outletId = outletInput === "NONE" ? "" : outletInput;
 
   if (!name) {
     return NextResponse.json(
@@ -96,6 +99,22 @@ async function handlePATCH(
       { status: 400 }
     );
   }
+  if (outletId) {
+    if (!isValidObjectId(outletId)) {
+      return NextResponse.json({ success: false, message: "Invalid outlet." }, { status: 400 });
+    }
+    const outletExists = await OutletModel.exists({
+      _id: outletId,
+      isActive: true,
+      status: "ACTIVE",
+    });
+    if (!outletExists) {
+      return NextResponse.json({ success: false, message: "Linked outlet was not found or is inactive." }, { status: 400 });
+    }
+    if (await CustomerModel.exists({ _id: { $ne: id }, outletId, isActive: true })) {
+      return NextResponse.json({ success: false, message: "This outlet is already linked to another customer." }, { status: 409 });
+    }
+  }
 
   const updatedCustomer = await CustomerModel.findOneAndUpdate(
     {
@@ -103,11 +122,15 @@ async function handlePATCH(
       isActive: true,
     },
     {
-      name,
-      email,
-      phone,
-      address,
-      type: isCustomerType(typeInput) ? typeInput : "SALE",
+      $set: {
+        name,
+        email,
+        phone,
+        address,
+        type: isCustomerType(typeInput) ? typeInput : "SALE",
+        ...(outletId ? { outletId } : {}),
+      },
+      ...(!outletId ? { $unset: { outletId: 1 } } : {}),
     },
     {
       new: true,

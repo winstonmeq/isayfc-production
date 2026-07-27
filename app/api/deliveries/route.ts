@@ -10,10 +10,13 @@ import {
   escapeRegex,
   getPagination,
 } from "@/lib/crud-utils";
+import { correctionReason, recordCorrection } from "@/lib/corrections";
+import { manilaDateString } from "@/lib/date-utils";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import DeliveryModel from "@/models/Delivery";
 import DeliveryItemModel from "@/models/DeliveryItem";
+import StandardPackingModel from "@/models/StandardPacking";
 import SupplierModel from "@/models/Supplier";
 
 type DeliveryItemInput = {
@@ -142,6 +145,9 @@ async function handlePOST(req: NextRequest) {
   const receiptNumber = cleanString(body.receiptNumber);
   const deliveryDate = cleanString(body.deliveryDate);
   const remarks = cleanString(body.remarks);
+  const lateEntryReason = correctionReason(body.correctionReason);
+  const effectiveDeliveryDate = deliveryDate || manilaDateString();
+  const isLateEntry = effectiveDeliveryDate < manilaDateString();
   const items: DeliveryItemInput[] = Array.isArray(body.items)
     ? body.items
     : Array.isArray(body.deliveryItems)
@@ -165,6 +171,13 @@ async function handlePOST(req: NextRequest) {
   if (!receiptNumber) {
     return NextResponse.json(
       { success: false, message: "Receipt number is required." },
+      { status: 400 }
+    );
+  }
+
+  if (isLateEntry && lateEntryReason.length < 5) {
+    return NextResponse.json(
+      { success: false, message: "A reason of at least 5 characters is required for a backdated delivery." },
       { status: 400 }
     );
   }
@@ -224,10 +237,24 @@ async function handlePOST(req: NextRequest) {
     const kilos = cleanNumber(item.kilos);
     const pieces = cleanNumber(item.pieces);
     const buyingPrice = cleanNumber(item.buyingPrice);
+    const isWholeChicken = Boolean(
+      await StandardPackingModel.exists({
+        wholeChickenId: product._id,
+        isActive: true,
+      })
+    );
 
-    if (bags <= 0 && kilos <= 0 && pieces <= 0) {
+    if (
+      (isWholeChicken && (bags <= 0 || kilos <= 0 || pieces <= 0)) ||
+      (!isWholeChicken && pieces <= 0)
+    ) {
       return NextResponse.json(
-        { success: false, message: `Enter bags, kilos, or pieces for ${product.name}.` },
+        {
+          success: false,
+          message: isWholeChicken
+            ? `Enter bags, kilos, and heads for ${product.name}.`
+            : `Enter pieces for ${product.name}.`,
+        },
         { status: 400 }
       );
     }
@@ -250,6 +277,7 @@ async function handlePOST(req: NextRequest) {
       buyingPrice,
       lineTotal,
       stockQtyToAdd,
+      isWholeChicken,
     });
   }
 
@@ -269,7 +297,7 @@ async function handlePOST(req: NextRequest) {
             totalKilos,
             totalPieces,
             totalAmount,
-            deliveryDate: deliveryDate ? new Date(deliveryDate) : new Date(),
+            deliveryDate: new Date(effectiveDeliveryDate),
             remarks,
             createdBy: authSession?.user?.id,
           },
@@ -297,7 +325,12 @@ async function handlePOST(req: NextRequest) {
         const updatedProduct = await BodegaProductModel.findOneAndUpdate(
           { _id: item.bodegaProductId, isActive: true },
           {
-            $inc: { stockQty: item.stockQtyToAdd },
+            $inc: {
+              stockQty: item.stockQtyToAdd,
+              stockBags: item.isWholeChicken ? item.bags : 0,
+              stockKilos: item.isWholeChicken ? item.kilos : 0,
+              stockHeads: item.isWholeChicken ? item.pieces : 0,
+            },
             $set: { buyingPrice: item.buyingPrice },
           },
           { new: true, session: mongoSession }
@@ -314,6 +347,10 @@ async function handlePOST(req: NextRequest) {
           bodegaProductId: item.bodegaProductId,
           type: "STOCK_IN",
           quantity: item.stockQtyToAdd,
+          bags: item.isWholeChicken ? item.bags : 0,
+          kilos: item.isWholeChicken ? item.kilos : 0,
+          heads: item.isWholeChicken ? item.pieces : 0,
+          pieces: item.isWholeChicken ? 0 : item.pieces,
           previousStock,
           newStock,
           remarks: `DELIVERY ${deliveryCode}`,
@@ -329,6 +366,20 @@ async function handlePOST(req: NextRequest) {
 
       if (bodegaStockTransactions.length > 0) {
         await BodegaStockTransactionModel.insertMany(bodegaStockTransactions, {
+          session: mongoSession,
+        });
+      }
+
+      if (isLateEntry) {
+        await recordCorrection({
+          entityType: "DELIVERY",
+          entityId: delivery._id,
+          referenceNumber: deliveryCode,
+          correctionType: "LATE_ENTRY",
+          reason: lateEntryReason,
+          transactionDate: delivery.deliveryDate,
+          correctedBy: authSession?.user?.id,
+          metadata: { postedAt: new Date().toISOString() },
           session: mongoSession,
         });
       }

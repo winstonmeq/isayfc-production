@@ -20,6 +20,7 @@ import { formatPeso } from "@/lib/utils";
 type CustomerOption = {
   _id: string;
   name: string;
+  outletName?: string;
 };
 
 type ProductOption = {
@@ -142,6 +143,8 @@ export function SaleGroceryPageClient() {
 
   useEffect(() => {
     void loadInitialData();
+    // Initial page load only; later refreshes happen after a sale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function updateRow(index: number, field: keyof SaleRow, value: string) {
@@ -236,6 +239,22 @@ export function SaleGroceryPageClient() {
       }
     }
 
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const correctionReason =
+      saleDate < today
+        ? window.prompt("Reason for entering this sale late (required):")?.trim()
+        : "";
+
+    if (saleDate < today && (!correctionReason || correctionReason.length < 5)) {
+      toast.error("Enter a late-entry reason of at least 5 characters.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -249,6 +268,7 @@ export function SaleGroceryPageClient() {
           customerId,
           saleDate,
           receiptNumber,
+          correctionReason,
           items: validRows,
         }),
       });
@@ -309,6 +329,7 @@ export function SaleGroceryPageClient() {
                       {customers.map((customer) => (
                         <SelectItem key={customer._id} value={customer._id}>
                           {customer.name}
+                          {customer.outletName ? ` — Outlet: ${customer.outletName}` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>

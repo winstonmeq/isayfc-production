@@ -17,6 +17,10 @@ import { manilaDateString } from "@/lib/date-utils";
 import OutletMenuItemModel from "@/models/OutletMenuItem";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
+import {
+  packingSnapshot,
+  toBaseUnitCost,
+} from "@/lib/inventory-units";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import CashShiftModel from "@/models/CashShift";
@@ -341,7 +345,7 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        inv.stockQty = after; // allow negative to reflect reality; warned above
+        inv.stockQty = after;
         await inv.save({ session: mongoSession });
 
         await (OutletStockTransactionModel as any).create(
@@ -355,6 +359,18 @@ export async function POST(req: NextRequest) {
               transactionDate: new Date(),
               type: "SALE",
               quantity: dec.qty,
+              entryUnit: "PCS",
+              entryQty: dec.qty,
+              multiplier: 1,
+              baseUnit: "PCS",
+              unitCost: toBaseUnitCost(
+                inv.buyingPrice,
+                packingSnapshot({
+                  unit: Number(inv.packSize || 0) > 0 ? "PACK" : "QTY",
+                  baseUnit: "PCS",
+                  multiplier: inv.packSize,
+                })
+              ),
               previousStock: before,
               newStock: after,
               referenceType: "MOBILE_SALE",

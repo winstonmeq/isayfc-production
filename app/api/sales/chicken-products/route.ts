@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import BodegaProductModel from "@/models/BodegaProduct";
+import CategoryModel from "@/models/Category";
 import StandardPackingModel from "@/models/StandardPacking";
 
 function numberValue(value: unknown) {
@@ -21,62 +22,70 @@ export async function GET() {
 
   await dbConnect();
 
-  const standards = await StandardPackingModel.find({
+  const chickenCategories = await CategoryModel.find({
+    name: { $regex: /^CHICKEN$/i },
+    isActive: true,
+  }).select("_id").lean();
+
+  const products = await BodegaProductModel.find({
+    categoryId: { $in: chickenCategories.map((category) => category._id) },
     isActive: true,
   })
-    .populate({
-      path: "productId",
-      select: "name categoryId stockQty buyingPrice sellingPrice isActive",
-      populate: {
-        path: "categoryId",
-        select: "name",
-      },
-    })
-    .populate("wholeChickenId", "name")
+    .populate("categoryId", "name")
+    .sort({ name: 1 })
+    .lean();
+
+  const standards = await StandardPackingModel.find({
+    isActive: true,
+    productId: { $in: products.map((product) => product._id) },
+  })
     .sort({ createdAt: -1 })
     .lean();
 
-  // Register model for populate safety in serverless/runtime reuse.
-  void BodegaProductModel;
-
-  const map = new Map<string, any>();
-
+  const standardsByOutput = new Map<string, any>();
   for (const standard of standards) {
-    const product: any = standard.productId;
-    if (!product || product.isActive === false) continue;
-
-    const productId = product._id.toString();
-    if (map.has(productId)) continue;
-
+    const productId = standard.productId.toString();
+    if (standardsByOutput.has(productId)) continue;
     const packSize = wholeNumber(standard.standardPacking);
     if (packSize <= 0) continue;
+    standardsByOutput.set(productId, standard);
+  }
 
+  const data = products.map((product: any) => {
+    const productId = product._id.toString();
+    const standard = standardsByOutput.get(productId);
+    const packSize = standard ? wholeNumber(standard.standardPacking) : 0;
     const stockPcs = wholeNumber(product.stockQty);
-    const availablePacks = Math.floor(stockPcs / packSize);
-    const loosePcs = stockPcs - availablePacks * packSize;
-    const pricePerPack = numberValue(product.sellingPrice);
-    const pricePerPcs = packSize > 0 ? pricePerPack / packSize : 0;
+    const stockHeads = wholeNumber(product.stockHeads);
+    const saleUnit = packSize > 0 ? "PACK" : "HEAD";
+    const availablePacks = packSize > 0 ? Math.floor(stockPcs / packSize) : 0;
+    const loosePcs = packSize > 0 ? stockPcs - availablePacks * packSize : 0;
+    const availableQty = saleUnit === "PACK" ? availablePacks : Math.min(stockPcs, stockHeads);
+    const pricePerUnit = numberValue(product.sellingPrice);
 
-    map.set(productId, {
+    return {
       _id: productId,
       productId,
       bodegaProductId: productId,
-      standardId: standard._id.toString(),
+      standardId: standard?._id?.toString?.() || "",
       name: product.name,
       categoryId: product.categoryId?._id?.toString?.() || "",
       categoryName: product.categoryId?.name || "",
-      pricePerPack,
-      pricePerPcs,
+      saleUnit,
+      pricePerUnit,
+      pricePerPack: saleUnit === "PACK" ? pricePerUnit : 0,
+      pricePerPcs: packSize > 0 ? pricePerUnit / packSize : 0,
       packSize,
       stockPcs,
+      stockHeads,
+      availableQty,
       availablePacks,
       loosePcs,
-      wholeChickenName: (standard.wholeChickenId as any)?.name || "",
-    });
-  }
+    };
+  });
 
   return NextResponse.json({
     success: true,
-    data: Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)),
+    data,
   });
 }

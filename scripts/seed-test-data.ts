@@ -34,7 +34,6 @@ import ProductModel from "@/models/Product";
 import BodegaProductModel from "@/models/BodegaProduct";
 import StandardPackingModel from "@/models/StandardPacking";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
-import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ExpenseModel from "@/models/Expense";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";

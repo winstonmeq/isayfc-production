@@ -5,14 +5,26 @@ import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString, escapeRegex, getPagination } from "@/lib/crud-utils";
+import { addDays } from "@/lib/date-utils";
 import CategoryModel from "@/models/Category";
+import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ProductModel from "@/models/Product";
+import { activeMovementTransactions } from "@/lib/stock-movement-report";
 
 function roundMoney(value: number) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
-function serializeProduct(product: any) {
+type ProductMovement = {
+  stockInPcs: number;
+  stockOutPcs: number;
+  stockInBags: number;
+  stockOutBags: number;
+  stockInKilos: number;
+  stockOutKilos: number;
+};
+
+function serializeProduct(product: any, movement?: ProductMovement) {
   const stockPcs = Number(product.stockPcs || 0);
   const stockBags = Number(product.stockBags || 0);
   const stockKilos = Number(product.stockKilos || 0);
@@ -31,6 +43,12 @@ function serializeProduct(product: any) {
     stockPcs,
     stockBags,
     stockKilos,
+    stockInPcs: movement?.stockInPcs || 0,
+    stockOutPcs: movement?.stockOutPcs || 0,
+    stockInBags: movement?.stockInBags || 0,
+    stockOutBags: movement?.stockOutBags || 0,
+    stockInKilos: movement?.stockInKilos || 0,
+    stockOutKilos: movement?.stockOutKilos || 0,
     lowStockAlert,
     isLowStock,
     estimatedCostValue: roundMoney(stockPcs * buyingPrice),
@@ -51,6 +69,8 @@ export async function GET(req: NextRequest) {
   const search = cleanString(searchParams.get("search"));
   const categoryId = cleanString(searchParams.get("categoryId"));
   const stockStatus = cleanString(searchParams.get("stockStatus"));
+  const dateFrom = cleanString(searchParams.get("dateFrom"));
+  const dateTo = cleanString(searchParams.get("dateTo"));
 
   const filter: Record<string, unknown> = { isActive: true };
 
@@ -75,6 +95,20 @@ export async function GET(req: NextRequest) {
 
   if (stockStatus === "OUT") {
     filter.stockPcs = { $lte: 0 };
+  }
+
+  const movementDateFilter: Record<string, Date> = {};
+  if (dateFrom || dateTo) {
+    if (dateFrom) {
+      const start = new Date(`${dateFrom}T00:00:00+08:00`);
+      if (!Number.isNaN(start.getTime())) movementDateFilter.$gte = start;
+    }
+    if (dateTo) {
+      const end = new Date(`${dateTo}T00:00:00+08:00`);
+      if (!Number.isNaN(end.getTime())) {
+        movementDateFilter.$lt = addDays(end, 1);
+      }
+    }
   }
 
   const [items, total, summaryRows] = await Promise.all([
@@ -144,9 +178,77 @@ export async function GET(req: NextRequest) {
     lowStockCount: 0,
   };
 
+  const productIds = (items as any[]).map((item) => item._id);
+  const transactionFilter: Record<string, unknown> = {
+    productId: { $in: productIds },
+  };
+
+  const transactions =
+    productIds.length > 0
+      ? await InventoryTransactionModel.find(transactionFilter)
+          .sort({ createdAt: 1 })
+          .lean()
+      : [];
+  const movementByProduct = new Map<string, ProductMovement>();
+
+  for (const transaction of activeMovementTransactions(transactions as any[])) {
+    const transactionDate = new Date(transaction.createdAt).getTime();
+    if (
+      movementDateFilter.$gte &&
+      transactionDate < movementDateFilter.$gte.getTime()
+    ) {
+      continue;
+    }
+    if (
+      movementDateFilter.$lt &&
+      transactionDate >= movementDateFilter.$lt.getTime()
+    ) {
+      continue;
+    }
+
+    const productId = String(transaction.productId || "");
+    if (!productId) continue;
+
+    const movement = movementByProduct.get(productId) || {
+      stockInPcs: 0,
+      stockOutPcs: 0,
+      stockInBags: 0,
+      stockOutBags: 0,
+      stockInKilos: 0,
+      stockOutKilos: 0,
+    };
+    const previousStock = Number(transaction.previousStock || 0);
+    const newStock = Number(transaction.newStock || 0);
+    const quantity =
+      Number(transaction.quantity || 0) ||
+      Math.abs(newStock - previousStock);
+    const direction =
+      newStock > previousStock ? "IN" : newStock < previousStock ? "OUT" : "";
+    const unit = String(transaction.unit || "").toUpperCase();
+    const field =
+      direction === "IN"
+        ? unit === "BAGS"
+          ? "stockInBags"
+          : unit === "KILOS"
+            ? "stockInKilos"
+            : "stockInPcs"
+        : direction === "OUT"
+          ? unit === "BAGS"
+            ? "stockOutBags"
+            : unit === "KILOS"
+              ? "stockOutKilos"
+              : "stockOutPcs"
+          : null;
+
+    if (field) movement[field] += quantity;
+    movementByProduct.set(productId, movement);
+  }
+
   return NextResponse.json({
     success: true,
-    data: items.map((item) => serializeProduct(item)),
+    data: items.map((item: any) =>
+      serializeProduct(item, movementByProduct.get(String(item._id)))
+    ),
     summary: {
       totalProducts: Number(summary.totalProducts || 0),
       totalPcs: Number(summary.totalPcs || 0),

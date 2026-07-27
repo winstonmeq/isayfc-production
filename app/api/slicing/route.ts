@@ -5,6 +5,7 @@ import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString, getPagination } from "@/lib/crud-utils";
+import { getSlicingKiloIssue } from "@/lib/slicing-validation";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import SlicingBatchModel from "@/models/SlicingBatch";
@@ -49,6 +50,10 @@ function formatNumber(value: number, digits = 2) {
   return Number.isInteger(value) ? String(value) : value.toFixed(digits);
 }
 
+function roundMoney(value: number) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
 function buildDateFilter(dateFrom: string, dateTo: string) {
   const filter: Record<string, any> = {};
 
@@ -91,6 +96,8 @@ function serializeSlicingItem(item: any) {
     actualSlicedPcs: item.actualSlicedPcs || 0,
     standardSlice: item.standardSlice || 0,
     standardPacking: item.standardPacking || 0,
+    minimumKilos: item.minimumKilos || 0,
+    maximumKilos: item.maximumKilos || 0,
     totalStdPcs: item.totalStdPcs || 0,
     actualPacks: item.actualPacks || 0,
     butal: item.butal || 0,
@@ -455,6 +462,7 @@ async function handlePOST(req: NextRequest) {
 	    const bags = cleanNumber(item.bags);
 	    const heads = cleanNumber(item.heads || item.qtyToSlice);
 	    const kilos = cleanNumber(item.kilos);
+	    const kilosPerBag = bags > 0 ? kilos / bags : kilos;
 	    const actualSlicedPcs = cleanNumber(item.actualSlicedPcs);
 
 	    if (heads <= 0) {
@@ -524,6 +532,8 @@ async function handlePOST(req: NextRequest) {
 
     const standardSlice = toNumber((standard as any).standardSlice);
     const standardPacking = toNumber((standard as any).standardPacking);
+    const minimumKilos = toNumber((standard as any).minimumKilos);
+    const maximumKilos = toNumber((standard as any).maximumKilos);
 
     if (standardSlice <= 0 || standardPacking <= 0) {
       return NextResponse.json(
@@ -535,11 +545,58 @@ async function handlePOST(req: NextRequest) {
       );
     }
 
+    const kiloIssue = getSlicingKiloIssue({
+      bags,
+      kilosPerBag,
+      minimumKilosPerBag: minimumKilos,
+      maximumKilosPerBag: maximumKilos,
+    });
+
+    if ((minimumKilos > 0 || maximumKilos > 0) && bags <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Bags for ${(mainProduct as any).name} must be greater than zero for a kg/bag standard.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    if (kiloIssue?.kind === "below-minimum") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `${(mainProduct as any).name} requires at least ${formatNumber(minimumKilos)} kg per bag (${bags} bags; minimum total ${formatNumber(kiloIssue.minimumTotalKilos)} kg).`,
+        },
+        { status: 400 }
+      );
+    }
+
+    if (kiloIssue?.kind === "above-maximum") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `${(mainProduct as any).name} allows up to ${formatNumber(maximumKilos)} kg per bag (${bags} bags; maximum total ${formatNumber(kiloIssue.maximumTotalKilos)} kg).`,
+        },
+        { status: 400 }
+      );
+    }
+
 	    const totalStd = heads * standardSlice;
 	    const actualPacks = Math.floor(actualSlicedPcs / standardPacking);
 	    const butal = actualSlicedPcs % standardPacking;
 	    const variance = actualSlicedPcs - totalStd;
 	    const yieldRate = totalStd > 0 ? actualSlicedPcs / totalStd : 0;
+      const inputUnitCost = toNumber((mainProduct as any).buyingPrice);
+      const outputUnitPrice = toNumber((slicedProduct as any).sellingPrice);
+      const inputCost = roundMoney(
+        (kilos > 0 ? kilos : heads) * inputUnitCost
+      );
+      const outputValue = roundMoney(
+        actualPacks * outputUnitPrice +
+          butal * (standardPacking > 0 ? outputUnitPrice / standardPacking : 0)
+      );
+      const recoveryProfit = roundMoney(outputValue - inputCost);
 
 	    if (
 	      yieldRate < MIN_SLICING_YIELD_RATE ||
@@ -571,6 +628,8 @@ async function handlePOST(req: NextRequest) {
       bags,
       heads,
       kilos,
+      minimumKilos,
+      maximumKilos,
       standardSlice,
       standardPacking,
       totalStdPcs: totalStd,
@@ -578,6 +637,13 @@ async function handlePOST(req: NextRequest) {
       actualPacks,
       butal,
       variance,
+      inputUnitCost,
+      outputUnitPrice,
+      inputCost,
+      outputValue,
+      recoveryProfit,
+      recoveryRate: inputCost > 0 ? outputValue / inputCost : 0,
+      yieldRate,
     });
   }
 
@@ -617,8 +683,18 @@ async function handlePOST(req: NextRequest) {
             _id: item.mainProductId,
             isActive: true,
             stockQty: { $gte: item.heads },
+            stockBags: { $gte: item.bags },
+            stockKilos: { $gte: item.kilos },
+            stockHeads: { $gte: item.heads },
           },
-          { $inc: { stockQty: -item.heads } },
+          {
+            $inc: {
+              stockQty: -item.heads,
+              stockBags: -item.bags,
+              stockKilos: -item.kilos,
+              stockHeads: -item.heads,
+            },
+          },
           { new: true, session: mongoSession }
         );
 
@@ -665,6 +741,13 @@ async function handlePOST(req: NextRequest) {
           actualPacks: item.actualPacks,
           butal: item.butal,
           variance: item.variance,
+          inputUnitCost: item.inputUnitCost,
+          outputUnitPrice: item.outputUnitPrice,
+          inputCost: item.inputCost,
+          outputValue: item.outputValue,
+          recoveryProfit: item.recoveryProfit,
+          recoveryRate: item.recoveryRate,
+          yieldRate: item.yieldRate,
         });
 
         stockTransactions.push(
@@ -672,6 +755,10 @@ async function handlePOST(req: NextRequest) {
             bodegaProductId: item.mainProductId,
             type: "STOCK_OUT",
             quantity: item.heads,
+            bags: item.bags,
+            kilos: item.kilos,
+            heads: item.heads,
+            pieces: 0,
             previousStock: mainPreviousStock,
             newStock: mainNewStock,
             remarks: `SLICING OUT ${batch._id.toString()}`,
@@ -683,6 +770,10 @@ async function handlePOST(req: NextRequest) {
             bodegaProductId: item.slicedProductId,
             type: "STOCK_IN",
             quantity: item.actualSlicedPcs,
+            bags: 0,
+            kilos: 0,
+            heads: 0,
+            pieces: item.actualSlicedPcs,
             previousStock: slicedPreviousStock,
             newStock: slicedNewStock,
             remarks: `SLICING IN ${batch._id.toString()}`,

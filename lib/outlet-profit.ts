@@ -87,9 +87,10 @@ export async function cogsByOutlet(
           $multiply: [
             "$quantity",
             {
-              $ifNull: [
-                { $arrayElemAt: ["$inv.buyingPrice", 0] },
-                0,
+              $cond: [
+                { $gt: [{ $ifNull: ["$unitCost", 0] }, 0] },
+                "$unitCost",
+                { $ifNull: [{ $arrayElemAt: ["$inv.buyingPrice", 0] }, 0] },
               ],
             },
           ],

@@ -22,6 +22,7 @@ export interface IStockTransfer extends Document {
   _id: Types.ObjectId;
   transferNumber: string;
   outletId: Types.ObjectId;
+  saleId?: Types.ObjectId;
   status: StockTransferStatus;
   transferDate: Date;
 
@@ -62,6 +63,12 @@ const StockTransferSchema = new Schema<IStockTransfer>(
       type: Schema.Types.ObjectId,
       ref: "Outlet",
       required: true,
+    },
+
+    saleId: {
+      type: Schema.Types.ObjectId,
+      ref: "Sale",
+      required: false,
     },
 
     status: {
@@ -134,6 +141,7 @@ const StockTransferSchema = new Schema<IStockTransfer>(
 );
 
 StockTransferSchema.index({ outletId: 1, status: 1, createdAt: -1 });
+StockTransferSchema.index({ saleId: 1 }, { unique: true, sparse: true });
 StockTransferSchema.index({ status: 1, createdAt: -1 });
 StockTransferSchema.index({ transferDate: -1 });
 StockTransferSchema.index({ hasDiscrepancy: 1 });

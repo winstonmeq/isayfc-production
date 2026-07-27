@@ -146,8 +146,16 @@ body {
 @media print {
   aside,
   header,
-  button {
+  button,
+  .no-print {
     display: none !important;
+  }
+
+  .print-report-header {
+    display: block !important;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #0f172a;
   }
 
   main {

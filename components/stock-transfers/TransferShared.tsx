@@ -43,6 +43,7 @@ export type TransferItemRow = {
   source: "BODEGA" | "GROCERY";
   bodegaProductId: string;
   productId: string;
+  standardPackingId: string;
   productName: string;
   categoryName: string;
   packSize: number;

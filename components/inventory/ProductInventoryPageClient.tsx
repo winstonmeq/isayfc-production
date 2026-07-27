@@ -1,24 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  AlertTriangle,
   Boxes,
+  Eye,
   Loader2,
-  PackagePlus,
-  Pencil,
-  Plus,
   RefreshCcw,
   Save,
   Search,
-  SlidersHorizontal,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { ModuleHeader } from "@/components/app-shell/ModuleHeader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -51,7 +45,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { cn, formatPeso } from "@/lib/utils";
 
 type CategoryOption = {
   _id: string;
@@ -68,20 +61,16 @@ type ProductInventoryItem = {
   stockPcs: number;
   stockBags: number;
   stockKilos: number;
+  stockInPcs: number;
+  stockOutPcs: number;
+  stockInBags: number;
+  stockOutBags: number;
+  stockInKilos: number;
+  stockOutKilos: number;
   lowStockAlert: number;
   isLowStock: boolean;
   estimatedCostValue: number;
   estimatedSellingValue: number;
-};
-
-type ProductInventorySummary = {
-  totalProducts: number;
-  totalPcs: number;
-  totalBags: number;
-  totalKilos: number;
-  totalCostValue: number;
-  totalSellingValue: number;
-  lowStockCount: number;
 };
 
 type ApiMeta = {
@@ -113,16 +102,6 @@ const emptyStockForm = {
   remarks: "",
 };
 
-const emptySummary: ProductInventorySummary = {
-  totalProducts: 0,
-  totalPcs: 0,
-  totalBags: 0,
-  totalKilos: 0,
-  totalCostValue: 0,
-  totalSellingValue: 0,
-  lowStockCount: 0,
-};
-
 function formatNumber(value: number, digits = 0) {
   return Number(value || 0).toLocaleString(undefined, {
     minimumFractionDigits: digits,
@@ -139,7 +118,6 @@ function getStockByUnit(product: ProductInventoryItem, unit: StockUnit) {
 export function ProductInventoryPageClient() {
   const [items, setItems] = useState<ProductInventoryItem[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
-  const [summary, setSummary] = useState<ProductInventorySummary>(emptySummary);
   const [meta, setMeta] = useState<ApiMeta>({
     page: 1,
     limit: 10,
@@ -153,14 +131,16 @@ export function ProductInventoryPageClient() {
   const [draftSearch, setDraftSearch] = useState("");
   const [categoryId, setCategoryId] = useState("ALL");
   const [stockStatus, setStockStatus] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<ProductInventoryItem | null>(null);
-  const [stockItem, setStockItem] = useState<ProductInventoryItem | null>(null);
+  const [editingItem] = useState<ProductInventoryItem | null>(null);
+  const [stockItem] = useState<ProductInventoryItem | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [stockForm, setStockForm] = useState(emptyStockForm);
 
@@ -195,6 +175,8 @@ export function ProductInventoryPageClient() {
     if (search) params.set("search", search);
     if (categoryId !== "ALL") params.set("categoryId", categoryId);
     if (stockStatus !== "ALL") params.set("stockStatus", stockStatus);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
 
     try {
       const res = await fetch(`/api/inventory/products?${params.toString()}`, {
@@ -207,7 +189,6 @@ export function ProductInventoryPageClient() {
       }
 
       setItems(json.data || []);
-      setSummary(json.summary || emptySummary);
       setMeta(
         json.meta || {
           page,
@@ -234,7 +215,7 @@ export function ProductInventoryPageClient() {
   useEffect(() => {
     void loadItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, search, categoryId, stockStatus]);
+  }, [page, limit, search, categoryId, stockStatus, dateFrom, dateTo]);
 
   function updateForm(name: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -242,36 +223,6 @@ export function ProductInventoryPageClient() {
 
   function updateStockForm(name: keyof typeof emptyStockForm, value: string) {
     setStockForm((current) => ({ ...current, [name]: value }));
-  }
-
-  function openCreateDialog() {
-    setEditingItem(null);
-    setForm(emptyForm);
-    setFormDialogOpen(true);
-  }
-
-  function openEditDialog(product: ProductInventoryItem) {
-    setEditingItem(product);
-    setForm({
-      name: product.name,
-      categoryId: product.categoryId,
-      buyingPrice: String(product.buyingPrice),
-      unitPrice: String(product.unitPrice),
-      stockPcs: String(product.stockPcs),
-      stockBags: String(product.stockBags),
-      stockKilos: String(product.stockKilos),
-      lowStockAlert: String(product.lowStockAlert),
-    });
-    setFormDialogOpen(true);
-  }
-
-  function openStockDialog(product: ProductInventoryItem) {
-    setStockItem(product);
-    setStockForm({
-      ...emptyStockForm,
-      newStock: String(product.stockPcs),
-    });
-    setStockDialogOpen(true);
   }
 
   function applySearch() {
@@ -284,6 +235,8 @@ export function ProductInventoryPageClient() {
     setSearch("");
     setCategoryId("ALL");
     setStockStatus("ALL");
+    setDateFrom("");
+    setDateTo("");
     setPage(1);
   }
 
@@ -347,88 +300,10 @@ export function ProductInventoryPageClient() {
     }
   }
 
-  async function deleteProduct(product: ProductInventoryItem) {
-    const confirmed = window.confirm(`Delete ${product.name}?`);
-    if (!confirmed) return;
-
-    try {
-      const res = await fetch(`/api/inventory/products/${product._id}`, {
-        method: "DELETE",
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.message || "Failed to delete product inventory item.");
-      }
-
-      toast.success(json.message || "Product inventory item deleted successfully.");
-      await loadItems();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete product inventory item."
-      );
-    }
-  }
-
   return (
     <div className="space-y-6">
-      <ModuleHeader
-        eyebrow="Inventory"
-        title="Grocery/Product Inventory"
-        description="Manage grocery products, prices, current stock, low stock alerts, and stock corrections."
-        actions={
-          <Button onClick={openCreateDialog} className="rounded-xl">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Product
-          </Button>
-        }
-      />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Items</p>
-            <p className="mt-2 text-2xl font-black">{formatNumber(summary.totalProducts)}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current PCS</p>
-            <p className="mt-2 text-2xl font-black">{formatNumber(summary.totalPcs)}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bags / Kilos</p>
-            <p className="mt-2 text-2xl font-black">
-              {formatNumber(summary.totalBags)} / {formatNumber(summary.totalKilos, 2)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cost Value</p>
-            <p className="mt-2 text-2xl font-black">{formatPeso(summary.totalCostValue)}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Low Stock</p>
-            <p className={cn("mt-2 text-2xl font-black", summary.lowStockCount > 0 && "text-amber-600")}>
-              {formatNumber(summary.lowStockCount)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="rounded-2xl border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <SlidersHorizontal className="h-4 w-4" />
-            Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_auto_auto]">
+        <CardContent className="grid items-end gap-3 pt-6 md:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_auto_auto]">
           <Input
             value={draftSearch}
             onChange={(event) => setDraftSearch(event.target.value)}
@@ -475,6 +350,31 @@ export function ProductInventoryPageClient() {
             </SelectContent>
           </Select>
 
+          <div className="space-y-1">
+            <Label>Start Date</Label>
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => {
+                setDateFrom(event.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>End Date</Label>
+            <Input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(event) => {
+                setDateTo(event.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+
           <Button onClick={applySearch}>
             <Search className="mr-2 h-4 w-4" />
             Search
@@ -491,7 +391,7 @@ export function ProductInventoryPageClient() {
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Boxes className="h-4 w-4" />
-              Grocery/Product Stock List
+              Grocery/Product Stock Movement
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               Showing {items.length} of {meta.total} records
@@ -520,28 +420,35 @@ export function ProductInventoryPageClient() {
             <Table>
               <TableHeader className="bg-slate-950">
                 <TableRow>
-                  <TableHead className="text-white">Product</TableHead>
-                  <TableHead className="text-white">Category</TableHead>
-                  <TableHead className="text-right text-white">Buying</TableHead>
-                  <TableHead className="text-right text-white">Selling</TableHead>
-                  <TableHead className="text-right text-white">PCS Now</TableHead>
-                  <TableHead className="text-right text-white">Bags</TableHead>
-                  <TableHead className="text-right text-white">Kilos</TableHead>
-                  <TableHead className="text-right text-white">Low Alert</TableHead>
-                  <TableHead className="text-center text-white">Status</TableHead>
-                  <TableHead className="text-center text-white">Action</TableHead>
+                  <TableHead rowSpan={2} className="text-white">Product</TableHead>
+                  <TableHead rowSpan={2} className="text-white">Category</TableHead>
+                  <TableHead colSpan={3} className="bg-emerald-600 text-center text-white">IN</TableHead>
+                  <TableHead colSpan={3} className="bg-rose-500 text-center text-white">OUT</TableHead>
+                  <TableHead colSpan={3} className="bg-blue-500 text-center text-white">CURRENT</TableHead>
+                  <TableHead rowSpan={2} className="text-center text-white">Action</TableHead>
+                </TableRow>
+                <TableRow>
+                  {["PCS", "Bags", "Kilos"].map((label) => (
+                    <TableHead key={`in-${label}`} className="text-right text-white">{label}</TableHead>
+                  ))}
+                  {["PCS", "Bags", "Kilos"].map((label) => (
+                    <TableHead key={`out-${label}`} className="text-right text-white">{label}</TableHead>
+                  ))}
+                  {["PCS", "Bags", "Kilos"].map((label) => (
+                    <TableHead key={`current-${label}`} className="text-right text-white">{label}</TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-32 text-center">
+                    <TableCell colSpan={12} className="h-32 text-center">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
+                    <TableCell colSpan={12} className="h-32 text-center text-muted-foreground">
                       No grocery/product inventory found.
                     </TableCell>
                   </TableRow>
@@ -550,37 +457,24 @@ export function ProductInventoryPageClient() {
                     <TableRow key={product._id}>
                       <TableCell className="font-bold">{product.name}</TableCell>
                       <TableCell>{product.categoryName || "-"}</TableCell>
-                      <TableCell className="text-right">{formatPeso(product.buyingPrice)}</TableCell>
-                      <TableCell className="text-right">{formatPeso(product.unitPrice)}</TableCell>
+                      <TableCell className="text-right text-emerald-700">{formatNumber(product.stockInPcs)}</TableCell>
+                      <TableCell className="text-right text-emerald-700">{formatNumber(product.stockInBags)}</TableCell>
+                      <TableCell className="text-right text-emerald-700">{formatNumber(product.stockInKilos, 2)}</TableCell>
+                      <TableCell className="text-right text-rose-600">{formatNumber(product.stockOutPcs)}</TableCell>
+                      <TableCell className="text-right text-rose-600">{formatNumber(product.stockOutBags)}</TableCell>
+                      <TableCell className="text-right text-rose-600">{formatNumber(product.stockOutKilos, 2)}</TableCell>
                       <TableCell className="text-right font-semibold">
                         {formatNumber(product.stockPcs)}
                       </TableCell>
                       <TableCell className="text-right">{formatNumber(product.stockBags)}</TableCell>
                       <TableCell className="text-right">{formatNumber(product.stockKilos, 2)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(product.lowStockAlert)}</TableCell>
-                      <TableCell className="text-center">
-                        {product.isLowStock ? (
-                          <Badge variant="destructive" className="gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            Low
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">OK</Badge>
-                        )}
-                      </TableCell>
                       <TableCell>
-                        <div className="flex justify-center gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => openStockDialog(product)}>
-                            <PackagePlus className="mr-1 h-4 w-4" />
-                            Stock
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => openEditDialog(product)}>
-                            <Pencil className="mr-1 h-4 w-4" />
-                            Edit
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={() => deleteProduct(product)}>
-                            <Trash2 className="mr-1 h-4 w-4" />
-                            Delete
+                        <div className="flex justify-center">
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/inventory/products/${product._id}`}>
+                              <Eye className="mr-1 h-4 w-4" />
+                              View
+                            </Link>
                           </Button>
                         </div>
                       </TableCell>
@@ -603,46 +497,36 @@ export function ProductInventoryPageClient() {
             ) : (
               items.map((product) => (
                 <div key={product._id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-base font-black">{product.name}</p>
-                      <p className="text-sm text-muted-foreground">{product.categoryName || "No category"}</p>
-                    </div>
-                    {product.isLowStock ? (
-                      <Badge variant="destructive">Low</Badge>
-                    ) : (
-                      <Badge variant="secondary">OK</Badge>
-                    )}
+                  <div>
+                    <p className="text-base font-black">{product.name}</p>
+                    <p className="text-sm text-muted-foreground">{product.categoryName || "No category"}</p>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-muted-foreground">PCS Now</p>
-                      <p className="font-bold">{formatNumber(product.stockPcs)}</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-muted-foreground">Bags / Kilos</p>
+                      <p className="text-xs font-bold text-emerald-700">Stock In</p>
                       <p className="font-bold">
-                        {formatNumber(product.stockBags)} / {formatNumber(product.stockKilos, 2)}
+                        {formatNumber(product.stockInPcs)} PCS / {formatNumber(product.stockInBags)} bags / {formatNumber(product.stockInKilos, 2)} kg
                       </p>
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-muted-foreground">Buying</p>
-                      <p className="font-bold">{formatPeso(product.buyingPrice)}</p>
+                      <p className="text-xs font-bold text-rose-600">Stock Out</p>
+                      <p className="font-bold">
+                        {formatNumber(product.stockOutPcs)} PCS / {formatNumber(product.stockOutBags)} bags / {formatNumber(product.stockOutKilos, 2)} kg
+                      </p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-muted-foreground">Selling</p>
-                      <p className="font-bold">{formatPeso(product.unitPrice)}</p>
+                    <div className="col-span-2 rounded-xl bg-blue-50 p-3">
+                      <p className="text-xs font-bold text-blue-700">Current Stock</p>
+                      <p className="font-bold">
+                        {formatNumber(product.stockPcs)} PCS / {formatNumber(product.stockBags)} bags / {formatNumber(product.stockKilos, 2)} kg
+                      </p>
                     </div>
                   </div>
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => openStockDialog(product)}>
-                      Stock
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => openEditDialog(product)}>
-                      Edit
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={() => deleteProduct(product)}>
-                      Delete
+                  <div className="mt-4">
+                    <Button size="sm" variant="outline" className="w-full" asChild>
+                      <Link href={`/inventory/products/${product._id}`}>
+                        <Eye className="mr-1 h-4 w-4" />
+                        View Transactions
+                      </Link>
                     </Button>
                   </div>
                 </div>

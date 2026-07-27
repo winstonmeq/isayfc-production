@@ -5,7 +5,8 @@ import { LoginForm } from "@/components/auth/LoginForm";
 import { authOptions } from "@/lib/auth";
 
 export const metadata = {
-  title: "Login | LETSON Inventory",
+  title: "Sign in | ISAY Business Operations",
+  description: "Secure staff access to ISAY Fried Chicken business operations.",
 };
 
 export default async function LoginPage() {

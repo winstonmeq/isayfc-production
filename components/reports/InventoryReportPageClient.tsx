@@ -18,6 +18,11 @@ type Row = {
   potentialMargin: number;
   lowStockAlert: number;
   stockStatus: "OUT" | "LOW" | "OK";
+  source: "GROCERY" | "BODEGA" | "OUTLET";
+  location: string;
+  unitLabel: string;
+  packSize: number;
+  stockDisplay: string;
 };
 type CatRow = {
   categoryName: string;
@@ -175,6 +180,7 @@ export function InventoryReportPageClient() {
                   <thead className="bg-slate-50 text-left text-slate-500">
                     <tr>
                       <th className="p-2.5 font-semibold">Product</th>
+                      <th className="p-2.5 font-semibold">Location</th>
                       <th className="p-2.5 font-semibold">Category</th>
                       <th className="p-2.5 text-right font-semibold">Stock</th>
                       <th className="p-2.5 text-right font-semibold">Unit Cost</th>
@@ -191,10 +197,14 @@ export function InventoryReportPageClient() {
                     {data.rows.map((r) => (
                       <tr key={r.id} className="border-t border-slate-100">
                         <td className="p-2.5 font-medium">{r.name}</td>
+                        <td className="p-2.5 text-slate-500">{r.location}</td>
                         <td className="p-2.5 text-slate-500">
                           {r.categoryName}
                         </td>
-                        <td className="p-2.5 text-right">{qtyFmt(r.stockPcs)}</td>
+                        <td className="p-2.5 text-right">
+                          {r.stockDisplay ||
+                            `${qtyFmt(r.stockPcs)} ${r.unitLabel}`}
+                        </td>
                         <td className="p-2.5 text-right text-slate-600">
                           {peso(r.buyingPrice)}
                         </td>
@@ -218,7 +228,7 @@ export function InventoryReportPageClient() {
                   </tbody>
                   <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-bold">
                     <tr>
-                      <td className="p-2.5" colSpan={2}>
+                      <td className="p-2.5" colSpan={3}>
                         GRAND TOTAL ({data.grand.items})
                       </td>
                       <td className="p-2.5 text-right">

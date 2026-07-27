@@ -16,7 +16,6 @@ import { toast } from "sonner";
 import {
   ErpField,
   ErpKeyValue,
-  ErpMetricCard,
   ErpMobileCard,
   ErpPage,
   ErpPageHeader,
@@ -41,6 +40,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import {
+  getSlicingKiloIssue,
+  getSlicingKiloRange,
+} from "@/lib/slicing-validation";
 
 type SlicingStandardOption = {
   _id: string;
@@ -49,6 +52,8 @@ type SlicingStandardOption = {
   productId: string;
   productName: string;
   standardPacking: number;
+  minimumKilos: number;
+  maximumKilos: number;
   standardSlice: number;
   chickenSizeType?: string;
 };
@@ -60,6 +65,8 @@ type SlicingRow = {
   productId: string;
   productName: string;
   standardPacking: number;
+  minimumKilos: number;
+  maximumKilos: number;
   standardSlice: number;
   bags: string;
   heads: string;
@@ -79,6 +86,8 @@ const emptyRow: SlicingRow = {
   productId: "",
   productName: "",
   standardPacking: 0,
+  minimumKilos: 0,
+  maximumKilos: 0,
   standardSlice: 0,
   bags: "0",
   heads: "0",
@@ -97,8 +106,9 @@ function calculateRow(row: SlicingRow) {
   const butal = standardPacking > 0 ? actualSlicedPcs - actualPacks * standardPacking : actualSlicedPcs;
   const variance = actualSlicedPcs - totalStdPcs;
   const yieldRate = totalStdPcs > 0 ? (actualSlicedPcs / totalStdPcs) * 100 : 0;
+  const totalKilos = Math.max(0, numberValue(row.kilos));
 
-  return { totalStdPcs, actualPacks, butal, variance, yieldRate };
+  return { totalStdPcs, actualPacks, butal, variance, yieldRate, totalKilos };
 }
 
 function formatPercent(value: number) {
@@ -117,7 +127,8 @@ function getRowIssues(row: SlicingRow) {
   const issues: string[] = [];
   const heads = numberValue(row.heads);
   const bags = numberValue(row.bags);
-  const kilos = numberValue(row.kilos);
+  const totalKilos = numberValue(row.kilos);
+  const kilosPerBag = bags > 0 ? totalKilos / bags : totalKilos;
   const actualSlicedPcs = numberValue(row.actualSlicedPcs);
   const computed = calculateRow(row);
 
@@ -139,9 +150,31 @@ function getRowIssues(row: SlicingRow) {
   if (bags > 0 && !Number.isInteger(bags)) {
     issues.push("Bags must be a whole number.");
   }
+  if ((row.minimumKilos > 0 || row.maximumKilos > 0) && bags <= 0) {
+    issues.push("Bags must be greater than zero for a kg/bag standard.");
+  }
 
-  if (kilos > 0 && heads > 0 && kilos / heads > MAX_KILOS_PER_HEAD) {
-    issues.push(`Kilos looks too high (${(kilos / heads).toFixed(2)} kg/head).`);
+  if (computed.totalKilos > 0 && heads > 0 && computed.totalKilos / heads > MAX_KILOS_PER_HEAD) {
+    issues.push(`Total kilos looks too high (${(computed.totalKilos / heads).toFixed(2)} kg/head).`);
+  }
+
+  const kiloIssue = getSlicingKiloIssue({
+    bags,
+    kilosPerBag,
+    minimumKilosPerBag: row.minimumKilos,
+    maximumKilosPerBag: row.maximumKilos,
+  });
+  if (kiloIssue?.kind === "below-minimum") {
+    issues.push(
+      `Total kilos must be at least ${kiloIssue.minimumTotalKilos.toFixed(2)} kg ` +
+        `(${bags} bags × ${row.minimumKilos.toFixed(2)} kg/bag).`
+    );
+  }
+  if (kiloIssue?.kind === "above-maximum") {
+    issues.push(
+      `Total kilos must not exceed ${kiloIssue.maximumTotalKilos.toFixed(2)} kg ` +
+        `(${bags} bags × ${row.maximumKilos.toFixed(2)} kg/bag).`
+    );
   }
 
   if (actualSlicedPcs <= 0) {
@@ -210,6 +243,11 @@ function StandardPicker({
                     <div className="flex flex-wrap gap-1">
                       <Badge variant="secondary">Std Slice: {formatWholeNumber(standard.standardSlice)} pcs/head</Badge>
                       <Badge variant="secondary">Pack: {formatWholeNumber(standard.standardPacking)} pcs</Badge>
+                      {standard.minimumKilos > 0 || standard.maximumKilos > 0 ? (
+                        <Badge variant="secondary">
+                          Weight: {standard.minimumKilos.toFixed(2)}–{standard.maximumKilos.toFixed(2)} kg/bag
+                        </Badge>
+                      ) : null}
                       {standard.chickenSizeType ? <Badge variant="outline">{standard.chickenSizeType}</Badge> : null}
                     </div>
                   </div>
@@ -232,29 +270,6 @@ export function AddSlicingPageClient() {
   const [rows, setRows] = useState<SlicingRow[]>([{ ...emptyRow }]);
   const [isLoadingStandards, setIsLoadingStandards] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-
-	  const totals = useMemo(() => {
-    const computed = rows.reduce(
-      (sum, row) => {
-        const rowComputed = calculateRow(row);
-        return {
-          heads: sum.heads + numberValue(row.heads),
-          kilos: sum.kilos + numberValue(row.kilos),
-          totalStdPcs: sum.totalStdPcs + rowComputed.totalStdPcs,
-          actualSlicedPcs: sum.actualSlicedPcs + numberValue(row.actualSlicedPcs),
-          packs: sum.packs + rowComputed.actualPacks,
-          butal: sum.butal + rowComputed.butal,
-          variance: sum.variance + rowComputed.variance,
-        };
-      },
-      { heads: 0, kilos: 0, totalStdPcs: 0, actualSlicedPcs: 0, packs: 0, butal: 0, variance: 0 }
-    );
-
-    return {
-      ...computed,
-      yieldRate: computed.totalStdPcs > 0 ? (computed.actualSlicedPcs / computed.totalStdPcs) * 100 : 0,
-    };
-	  }, [rows]);
 
 	  const hasBlockingIssues = useMemo(
 	    () => rows.some((row) => hasRowEntry(row) && getRowIssues(row).length > 0),
@@ -306,6 +321,8 @@ export function AddSlicingPageClient() {
         productId: standard.productId,
         productName: standard.productName,
         standardPacking: numberValue(standard.standardPacking),
+        minimumKilos: numberValue(standard.minimumKilos),
+        maximumKilos: numberValue(standard.maximumKilos),
         standardSlice: numberValue(standard.standardSlice),
       };
       return next;
@@ -371,6 +388,8 @@ export function AddSlicingPageClient() {
             kilos: numberValue(row.kilos),
             standardSlice: numberValue(row.standardSlice),
             standardPacking: numberValue(row.standardPacking),
+            minimumKilos: numberValue(row.minimumKilos),
+            maximumKilos: numberValue(row.maximumKilos),
             totalStdPcs: computed.totalStdPcs,
             actualSlicedPcs: numberValue(row.actualSlicedPcs),
             actualPacks: computed.actualPacks,
@@ -406,22 +425,16 @@ export function AddSlicingPageClient() {
       <ErpPageHeader
         eyebrow="Production Entry"
         title="Add New Slicing"
-        description="Record slicing activities with clear standard PCS, actual PCS, full packs, loose PCS, and variance. Profit information is hidden from this employee-facing screen."
         actions={
-          <Button variant="secondary" onClick={() => router.push("/slicing")}>
-            Back to History
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => router.push("/slicing")}>
+              Back to History
+            </Button>
+          </div>
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <ErpMetricCard label="Heads" value={formatWholeNumber(totals.heads)} description="Whole chickens selected" tone="blue" />
-        <ErpMetricCard label="Standard PCS" value={formatWholeNumber(totals.totalStdPcs)} description="Heads multiplied by standard slice" tone="violet" />
-        <ErpMetricCard label="Actual PCS" value={formatWholeNumber(totals.actualSlicedPcs)} description={`${formatWholeNumber(totals.packs)} packs / ${formatWholeNumber(totals.butal)} loose pcs`} tone="emerald" />
-        <ErpMetricCard label="Yield" value={formatPercent(totals.yieldRate)} description={`Variance ${formatWholeNumber(totals.variance)} pcs`} tone={totals.variance < 0 ? "rose" : "amber"} />
-      </div>
-
-      <ErpSection title="Slicing Details" description="One batch can contain multiple sliced products.">
+      <ErpSection>
         <div className="grid gap-4 md:grid-cols-3">
           <ErpField label="Slicing Date">
             <Input type="date" value={slicingDate} onChange={(event) => setSlicingDate(event.target.value)} />
@@ -453,6 +466,11 @@ export function AddSlicingPageClient() {
           <div className="space-y-4">
 	            {rows.map((row, index) => {
 	              const computed = calculateRow(row);
+	              const kiloRange = getSlicingKiloRange(
+	                numberValue(row.bags),
+	                row.minimumKilos,
+	                row.maximumKilos
+	              );
 	              const rowIssues = hasRowEntry(row) ? getRowIssues(row) : [];
 	              return (
 	                <ErpMobileCard key={index} className="bg-slate-50/60">
@@ -474,6 +492,14 @@ export function AddSlicingPageClient() {
                       <p className="mt-2 text-xs text-slate-500">
                         Std Slice: {formatWholeNumber(row.standardSlice)} pcs/head • Pack Size: {formatWholeNumber(row.standardPacking)} pcs/pack
                       </p>
+                      {row.minimumKilos > 0 || row.maximumKilos > 0 ? (
+                        <p className="mt-1 text-xs font-semibold text-blue-700">
+                          Weight standard: {formatDecimal(row.minimumKilos, 2)}–{formatDecimal(row.maximumKilos, 2)} kg/bag
+                          {numberValue(row.bags) > 0
+                            ? ` • Allowed total: ${formatDecimal(kiloRange.minimumTotalKilos, 2)}–${formatDecimal(kiloRange.maximumTotalKilos, 2)} kg`
+                            : ""}
+                        </p>
+                      ) : null}
                     </div>
                     <ErpField label="Bags">
                       <Input type="number" min="0" value={row.bags} onChange={(event) => updateRow(index, "bags", event.target.value)} />
@@ -481,7 +507,7 @@ export function AddSlicingPageClient() {
                     <ErpField label="Heads">
                       <Input type="number" min="0" value={row.heads} onChange={(event) => updateRow(index, "heads", event.target.value)} />
                     </ErpField>
-                    <ErpField label="Kilos">
+                    <ErpField label="Total Kilos">
                       <Input type="number" min="0" step="0.01" value={row.kilos} onChange={(event) => updateRow(index, "kilos", event.target.value)} />
                     </ErpField>
                     <ErpField label="Actual Sliced PCS">
@@ -531,18 +557,6 @@ export function AddSlicingPageClient() {
 	            })}
           </div>
         )}
-
-        <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm">
-          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-7">
-            <div>Total Heads: <span className="font-bold">{formatWholeNumber(totals.heads)}</span></div>
-            <div>Total Kilos: <span className="font-bold">{formatDecimal(totals.kilos, 2)}</span></div>
-            <div>Std PCS: <span className="font-bold">{formatWholeNumber(totals.totalStdPcs)}</span></div>
-            <div>Actual PCS: <span className="font-bold">{formatWholeNumber(totals.actualSlicedPcs)}</span></div>
-            <div>Packs: <span className="font-bold">{formatWholeNumber(totals.packs)}</span></div>
-            <div>Loose: <span className="font-bold">{formatWholeNumber(totals.butal)}</span></div>
-            <div>Variance: <span className={cn("font-bold", totals.variance < 0 ? "text-red-600" : "text-emerald-700")}>{formatWholeNumber(totals.variance)}</span></div>
-          </div>
-        </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => router.push("/slicing")}>

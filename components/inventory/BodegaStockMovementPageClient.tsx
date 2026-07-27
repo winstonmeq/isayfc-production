@@ -17,7 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatPeso } from "@/lib/utils";
 
 type BodegaMovementRow = {
   _id: string;
@@ -40,6 +39,15 @@ type BodegaMovementRow = {
   currentStockLoosePcs?: number;
   pricePerPack?: number;
   pricePerPcs?: number;
+  stockInBags?: number;
+  stockOutBags?: number;
+  stockInKilos?: number;
+  stockOutKilos?: number;
+  stockInHeads?: number;
+  stockOutHeads?: number;
+  currentBags?: number;
+  currentKilos?: number;
+  currentHeads?: number;
 };
 
 type BodegaTotals = {
@@ -154,33 +162,9 @@ export function BodegaStockMovementPageClient() {
     return new Date(value).toISOString().slice(0, 10);
   }
 
-  function renderStockQuantity(
-    row: BodegaMovementRow,
-    baseQty: number,
-    packs?: number,
-    loosePcs?: number
-  ) {
-    if (!row.isPackProduct || !row.packSize) {
-      return (
-        <div className="text-right">
-          <div className="font-semibold">{formatNumber(baseQty)}</div>
-          <div className="text-xs text-muted-foreground">base units</div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="text-right leading-tight">
-        <div className="font-semibold text-slate-950">
-          {formatWholeNumber(packs)} pack{Number(packs || 0) === 1 ? "" : "s"}
-          {Number(loosePcs || 0) > 0 ? ` / ${formatWholeNumber(loosePcs)} pcs` : ""}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {formatWholeNumber(baseQty)} pcs total
-        </div>
-      </div>
-    );
-  }
+  const wholeRows = rows.filter((row) => !row.isPackProduct);
+  const wholeTotal = (field: keyof BodegaMovementRow) =>
+    wholeRows.reduce((sum, row) => sum + Number(row[field] || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -241,68 +225,42 @@ export function BodegaStockMovementPageClient() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Sliced Products Current Now</p>
-            <p className="mt-1 text-2xl font-bold">
-              {formatWholeNumber(totals.sliced?.currentPcs)} pcs
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Pack totals are shown per product because pack size can differ.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Whole / Other Current Now</p>
-            <p className="mt-1 text-2xl font-bold">
-              {formatNumber(totals.whole?.currentStock || 0)}
-            </p>
-            <p className="text-xs text-muted-foreground">Heads or base units.</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Inventory Rule</p>
-            <p className="mt-1 text-sm font-semibold">PCS is the source of truth</p>
-            <p className="text-xs text-muted-foreground">
-              Example: 30 loose + 20 loose becomes 1 pack automatically when total PCS reaches pack size.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card>
         <CardContent className="p-5">
           <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Stock In</TableHead>
-                  <TableHead className="text-right">Stock Out</TableHead>
-                  <TableHead className="text-right">Current Stock Now</TableHead>
-                  <TableHead className="text-right">Pack Size</TableHead>
-                  <TableHead className="text-right">Price / PCS</TableHead>
-                  <TableHead className="text-right">Price / Pack</TableHead>
-                  <TableHead>Date Added</TableHead>
-                  <TableHead className="text-center">Action</TableHead>
+                  <TableHead rowSpan={2}>#</TableHead>
+                  <TableHead rowSpan={2}>Product</TableHead>
+                  <TableHead colSpan={3} className="bg-emerald-600 text-center text-white">IN</TableHead>
+                  <TableHead colSpan={3} className="bg-rose-500 text-center text-white">OUT</TableHead>
+                  <TableHead colSpan={3} className="bg-blue-500 text-center text-white">CURRENT</TableHead>
+                  <TableHead rowSpan={2}>Updated</TableHead>
+                  <TableHead rowSpan={2} className="text-center">Action</TableHead>
+                </TableRow>
+                <TableRow>
+                  {["Heads / PCS", "Bags / Packs", "Kilos"].map((label) => (
+                    <TableHead key={`in-${label}`} className="text-right">{label}</TableHead>
+                  ))}
+                  {["Heads / PCS", "Bags / Packs", "Kilos"].map((label) => (
+                    <TableHead key={`out-${label}`} className="text-right">{label}</TableHead>
+                  ))}
+                  {["Heads / PCS", "Bags / Packs", "Kilos"].map((label) => (
+                    <TableHead key={`current-${label}`} className="text-right">{label}</TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-32 text-center">
+                    <TableCell colSpan={13} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
+                    <TableCell colSpan={13} className="h-32 text-center text-muted-foreground">
                       No bodega stock movement records found.
                     </TableCell>
                   </TableRow>
@@ -310,32 +268,21 @@ export function BodegaStockMovementPageClient() {
                   rows.map((row, index) => (
                     <TableRow key={row._id}>
                       <TableCell>{index + 1}</TableCell>
-                      <TableCell className="font-medium">{row.product}</TableCell>
-                      <TableCell>
-                        {renderStockQuantity(row, row.stockIn, row.stockInPacks, row.stockInLoosePcs)}
+                      <TableCell className="font-medium">
+                        {row.product}
+                        {row.isPackProduct && row.packSize ? (
+                          <div className="text-xs text-muted-foreground">{formatWholeNumber(row.packSize)} pcs/pack</div>
+                        ) : null}
                       </TableCell>
-                      <TableCell>
-                        {renderStockQuantity(row, row.stockOut, row.stockOutPacks, row.stockOutLoosePcs)}
-                      </TableCell>
-                      <TableCell>
-                        {renderStockQuantity(
-                          row,
-                          row.currentStock,
-                          row.currentStockPacks,
-                          row.currentStockLoosePcs
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {row.isPackProduct && row.packSize
-                          ? `${formatWholeNumber(row.packSize)} pcs / pack`
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {row.isPackProduct ? formatPeso(row.pricePerPcs || 0) : "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {row.isPackProduct ? formatPeso(row.pricePerPack || 0) : formatPeso(row.price)}
-                      </TableCell>
+                      <TableCell className="text-right text-emerald-700">{formatWholeNumber(row.isPackProduct ? row.stockInPcs : row.stockInHeads || row.stockIn)}</TableCell>
+                      <TableCell className="text-right text-emerald-700">{formatNumber(row.isPackProduct ? row.stockInPacks : row.stockInBags)}</TableCell>
+                      <TableCell className="text-right text-emerald-700">{row.isPackProduct ? "—" : formatNumber(row.stockInKilos)}</TableCell>
+                      <TableCell className="text-right text-rose-600">{formatWholeNumber(row.isPackProduct ? row.stockOutPcs : row.stockOutHeads || row.stockOut)}</TableCell>
+                      <TableCell className="text-right text-rose-600">{formatNumber(row.isPackProduct ? row.stockOutPacks : row.stockOutBags)}</TableCell>
+                      <TableCell className="text-right text-rose-600">{row.isPackProduct ? "—" : formatNumber(row.stockOutKilos)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatWholeNumber(row.isPackProduct ? row.currentStockPcs : row.currentHeads || row.currentStock)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatNumber(row.isPackProduct ? row.currentStockPacks : row.currentBags)}</TableCell>
+                      <TableCell className="text-right font-semibold">{row.isPackProduct ? "—" : formatNumber(row.currentKilos)}</TableCell>
                       <TableCell>{formatDate(row.dateAdded)}</TableCell>
                       <TableCell className="text-center">
                         <Button size="sm" variant="outline" asChild>
@@ -352,33 +299,26 @@ export function BodegaStockMovementPageClient() {
                   <>
                     <TableRow className="bg-slate-50 font-semibold">
                       <TableCell colSpan={2}>Total Sliced Products</TableCell>
-                      <TableCell className="text-right">
-                        {formatWholeNumber(totals.sliced?.stockInPcs)} pcs
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatWholeNumber(totals.sliced?.stockOutPcs)} pcs
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatWholeNumber(totals.sliced?.currentPcs)} pcs
-                      </TableCell>
-                      <TableCell colSpan={5} className="text-xs text-muted-foreground">
-                        Pack count is displayed per product because each product can use a different pack size.
-                      </TableCell>
+                      <TableCell className="text-right">{formatWholeNumber(totals.sliced?.stockInPcs)}</TableCell>
+                      <TableCell className="text-right">Varies</TableCell><TableCell>—</TableCell>
+                      <TableCell className="text-right">{formatWholeNumber(totals.sliced?.stockOutPcs)}</TableCell>
+                      <TableCell className="text-right">Varies</TableCell><TableCell>—</TableCell>
+                      <TableCell className="text-right">{formatWholeNumber(totals.sliced?.currentPcs)}</TableCell>
+                      <TableCell className="text-right">Varies</TableCell><TableCell>—</TableCell>
+                      <TableCell colSpan={2} />
                     </TableRow>
                     <TableRow className="bg-slate-50 font-semibold">
                       <TableCell colSpan={2}>Total Whole / Other Products</TableCell>
-                      <TableCell className="text-right">
-                        {formatNumber(totals.whole?.stockIn || 0)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatNumber(totals.whole?.stockOut || 0)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatNumber(totals.whole?.currentStock || 0)}
-                      </TableCell>
-                      <TableCell colSpan={5} className="text-xs text-muted-foreground">
-                        Whole chicken and other products remain in base units.
-                      </TableCell>
+                      <TableCell className="text-right">{formatWholeNumber(wholeTotal("stockInHeads"))}</TableCell>
+                      <TableCell className="text-right">{formatNumber(wholeTotal("stockInBags"))}</TableCell>
+                      <TableCell className="text-right">{formatNumber(wholeTotal("stockInKilos"))}</TableCell>
+                      <TableCell className="text-right">{formatWholeNumber(wholeTotal("stockOutHeads"))}</TableCell>
+                      <TableCell className="text-right">{formatNumber(wholeTotal("stockOutBags"))}</TableCell>
+                      <TableCell className="text-right">{formatNumber(wholeTotal("stockOutKilos"))}</TableCell>
+                      <TableCell className="text-right">{formatWholeNumber(wholeTotal("currentHeads"))}</TableCell>
+                      <TableCell className="text-right">{formatNumber(wholeTotal("currentBags"))}</TableCell>
+                      <TableCell className="text-right">{formatNumber(wholeTotal("currentKilos"))}</TableCell>
+                      <TableCell colSpan={2} />
                     </TableRow>
                   </>
                 ) : null}
@@ -387,6 +327,7 @@ export function BodegaStockMovementPageClient() {
           </div>
         </CardContent>
       </Card>
+
     </div>
   );
 }

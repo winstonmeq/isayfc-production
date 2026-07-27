@@ -11,6 +11,8 @@ export interface ISlicingItem extends Document {
   bags: number;
   heads: number;
   kilos: number;
+  minimumKilos: number;
+  maximumKilos: number;
   standardSlice: number;
   standardPacking: number;
   totalStdPcs: number;
@@ -77,6 +79,16 @@ const SlicingItemSchema = new Schema<ISlicingItem>(
       min: 0,
     },
     kilos: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    minimumKilos: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    maximumKilos: {
       type: Number,
       default: 0,
       min: 0,

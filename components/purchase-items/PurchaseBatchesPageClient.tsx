@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  Check,
+  ChevronsUpDown,
   Eye,
   Loader2,
   PackagePlus,
@@ -28,6 +30,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -42,7 +57,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatPeso } from "@/lib/utils";
+import { cn, formatPeso } from "@/lib/utils";
 
 type ProductOption = {
   _id: string;
@@ -105,6 +120,74 @@ function getProductBuyingPrice(product?: ProductOption) {
 function getProductStock(product?: ProductOption) {
   if (!product) return 0;
   return Number(product.stockPcs || 0);
+}
+
+function ProductPicker({
+  products,
+  value,
+  onSelect,
+}: {
+  products: ProductOption[];
+  value: string;
+  onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedProduct = products.find((product) => product._id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between bg-white font-normal"
+        >
+          <span className="truncate">
+            {selectedProduct
+              ? `${selectedProduct.name} — Stock: ${getProductStock(selectedProduct)}`
+              : "Select product"}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[520px] max-w-[calc(100vw-2rem)] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput placeholder="Search product..." />
+          <CommandList>
+            <CommandEmpty>No product found.</CommandEmpty>
+            <CommandGroup>
+              {products.map((product) => (
+                <CommandItem
+                  key={product._id}
+                  value={`${product.name} ${product.categoryName || ""}`}
+                  onSelect={() => {
+                    onSelect(product._id);
+                    setOpen(false);
+                  }}
+                  className="cursor-pointer"
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === product._id ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <span className="truncate">
+                    {product.name} — Stock: {getProductStock(product)}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function formatDate(value?: string) {
@@ -177,7 +260,7 @@ export function PurchaseBatchesPageClient() {
 
   async function loadProducts() {
     try {
-      const res = await fetch("/api/products?limit=1000", {
+      const res = await fetch("/api/products?page=1&limit=100", {
         cache: "no-store",
       });
 
@@ -187,7 +270,27 @@ export function PurchaseBatchesPageClient() {
         throw new Error(json.message || "Failed to load products.");
       }
 
-      setProducts(json.data || []);
+      const allProducts: ProductOption[] = [...(json.data || [])];
+      const totalPages = Math.max(Number(json.meta?.totalPages || 1), 1);
+
+      if (totalPages > 1) {
+        const remainingPages = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, index) =>
+            fetch(`/api/products?page=${index + 2}&limit=100`, {
+              cache: "no-store",
+            }).then(async (response) => {
+              const pageJson = await response.json();
+              if (!response.ok || !pageJson.success) {
+                throw new Error(pageJson.message || "Failed to load products.");
+              }
+              return (pageJson.data || []) as ProductOption[];
+            })
+          )
+        );
+        allProducts.push(...remainingPages.flat());
+      }
+
+      setProducts(allProducts);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to load products."
@@ -817,25 +920,13 @@ export function PurchaseBatchesPageClient() {
                     <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
                       <div className="space-y-1">
                         <Label>Product</Label>
-                        <Select
+                        <ProductPicker
+                          products={products}
                           value={item.productId}
-                          onValueChange={(value) =>
+                          onSelect={(value) =>
                             updateItem(index, "productId", value)
                           }
-                        >
-                          <SelectTrigger className="bg-white">
-                            <SelectValue placeholder="Select product" />
-                          </SelectTrigger>
-
-                          <SelectContent>
-                            {products.map((product) => (
-                              <SelectItem key={product._id} value={product._id}>
-                                {product.name} — Stock:{" "}
-                                {getProductStock(product)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        />
 
                         {selectedProduct ? (
                           <p className="text-xs text-slate-500">

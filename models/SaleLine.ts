@@ -2,7 +2,7 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type SaleLineSource = "CHICKEN" | "BODEGA";
-export type SaleStockUnit = "PACK" | "QTY";
+export type SaleStockUnit = "PACK" | "HEAD" | "QTY";
 
 export interface ISaleLine extends Document {
   _id: Types.ObjectId;
@@ -19,6 +19,7 @@ export interface ISaleLine extends Document {
   qty: number;
   price: number;
   lineTotal: number;
+  unitCost: number;
 
   stockUnit: SaleStockUnit;
   packSize: number;
@@ -91,9 +92,17 @@ const SaleLineSchema = new Schema<ISaleLine>(
       min: 0,
     },
 
+    // Cost per base stock unit at the time of sale. Historical reports use
+    // this snapshot instead of today's product price.
+    unitCost: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     stockUnit: {
       type: String,
-      enum: ["PACK", "QTY"],
+      enum: ["PACK", "HEAD", "QTY"],
       required: true,
     },
 

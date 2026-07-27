@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/require-permission";
 import { cleanString, escapeRegex } from "@/lib/crud-utils";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
+import { activeMovementTransactions } from "@/lib/stock-movement-report";
 import StandardPackingModel from "@/models/StandardPacking";
 
 function numberValue(value: unknown) {
@@ -107,11 +108,17 @@ export async function GET(req: NextRequest) {
     {
       stockIn: number;
       stockOut: number;
+      inBags: number;
+      outBags: number;
+      inKilos: number;
+      outKilos: number;
+      inHeads: number;
+      outHeads: number;
       latestDate?: Date;
     }
   >();
 
-  for (const transaction of transactions as any[]) {
+  for (const transaction of activeMovementTransactions(transactions as any[])) {
     const productId = objectIdString(transaction.bodegaProductId);
     if (!productId) continue;
 
@@ -120,11 +127,27 @@ export async function GET(req: NextRequest) {
     const current = movementMap.get(productId) || {
       stockIn: 0,
       stockOut: 0,
+      inBags: 0,
+      outBags: 0,
+      inKilos: 0,
+      outKilos: 0,
+      inHeads: 0,
+      outHeads: 0,
       latestDate: undefined,
     };
 
     if (direction === "IN") current.stockIn += quantity;
     if (direction === "OUT") current.stockOut += quantity;
+    if (direction === "IN") {
+      current.inBags += numberValue(transaction.bags);
+      current.inKilos += numberValue(transaction.kilos);
+      current.inHeads += numberValue(transaction.heads) || quantity;
+    }
+    if (direction === "OUT") {
+      current.outBags += numberValue(transaction.bags);
+      current.outKilos += numberValue(transaction.kilos);
+      current.outHeads += numberValue(transaction.heads) || quantity;
+    }
 
     if (
       transaction.createdAt &&
@@ -141,6 +164,12 @@ export async function GET(req: NextRequest) {
     const movement = movementMap.get(id) || {
       stockIn: 0,
       stockOut: 0,
+      inBags: 0,
+      outBags: 0,
+      inKilos: 0,
+      outKilos: 0,
+      inHeads: 0,
+      outHeads: 0,
       latestDate: product.updatedAt || product.createdAt,
     };
 
@@ -151,17 +180,19 @@ export async function GET(req: NextRequest) {
 
       // Compatibility with the existing UI names.
       inPcs: numberValue(movement.stockIn),
-      inBags: 0,
-      inKilos: 0,
+      inBags: numberValue(movement.inBags),
+      inKilos: numberValue(movement.inKilos),
       outQty: numberValue(movement.stockOut),
       currentPcs: numberValue(product.stockQty),
-      currentBags: 0,
-      currentKilos: 0,
+      outBags: numberValue(movement.outBags),
+      outKilos: numberValue(movement.outKilos),
+      currentBags: numberValue(product.stockBags),
+      currentKilos: numberValue(product.stockKilos),
 
       // Clear owner-facing names.
-      stockInHeads: numberValue(movement.stockIn),
-      stockOutHeads: numberValue(movement.stockOut),
-      currentHeads: numberValue(product.stockQty),
+      stockInHeads: numberValue(movement.inHeads || movement.stockIn),
+      stockOutHeads: numberValue(movement.outHeads || movement.stockOut),
+      currentHeads: numberValue(product.stockHeads || product.stockQty),
 
       updated: movement.latestDate
         ? new Date(movement.latestDate).toISOString()
@@ -176,8 +207,12 @@ export async function GET(req: NextRequest) {
   const totals = data.reduce(
     (sum, row) => ({
       inPcs: sum.inPcs + row.inPcs,
-      inBags: 0,
-      inKilos: 0,
+      inBags: sum.inBags + row.inBags,
+      inKilos: sum.inKilos + row.inKilos,
+      outBags: sum.outBags + row.outBags,
+      outKilos: sum.outKilos + row.outKilos,
+      currentBags: sum.currentBags + row.currentBags,
+      currentKilos: sum.currentKilos + row.currentKilos,
       outQty: sum.outQty + row.outQty,
       currentPcs: sum.currentPcs + row.currentPcs,
       stockInHeads: sum.stockInHeads + row.stockInHeads,
@@ -188,6 +223,10 @@ export async function GET(req: NextRequest) {
       inPcs: 0,
       inBags: 0,
       inKilos: 0,
+      outBags: 0,
+      outKilos: 0,
+      currentBags: 0,
+      currentKilos: 0,
       outQty: 0,
       currentPcs: 0,
       stockInHeads: 0,

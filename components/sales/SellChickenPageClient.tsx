@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Loader2, PackageCheck, ShoppingCart, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   ErpEmptyState,
   ErpField,
   ErpKeyValue,
-  ErpMetricCard,
   ErpMobileCard,
   ErpPage,
-  ErpPageHeader,
   ErpSection,
 } from "@/components/erp/ErpShell";
 import { formatWholeNumber, numberValue, PackStockDisplay, wholeNumber } from "@/components/erp/StockDisplay";
@@ -23,7 +21,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -44,6 +41,7 @@ import { formatPeso } from "@/lib/utils";
 type CustomerOption = {
   _id: string;
   name: string;
+  outletName?: string;
 };
 
 type ChickenProductOption = {
@@ -53,11 +51,13 @@ type ChickenProductOption = {
   name: string;
   categoryId?: string;
   categoryName?: string;
-  pricePerPack: number;
   pricePerPcs: number;
+  pricePerUnit: number;
+  saleUnit: "PACK" | "HEAD";
   packSize: number;
   stockPcs: number;
-  availablePacks: number;
+  stockHeads: number;
+  availableQty: number;
   loosePcs: number;
 };
 
@@ -66,10 +66,11 @@ type CartItem = {
   bodegaProductId: string;
   name: string;
   categoryName?: string;
-  availablePacks: number;
+  availableQty: number;
   loosePcs: number;
-  packs: number;
-  pricePerPack: number;
+  quantity: number;
+  saleUnit: "PACK" | "HEAD";
+  pricePerUnit: number;
   pricePerPcs: number;
   packSize: number;
   stockPcsOut: number;
@@ -92,11 +93,12 @@ export function SellChickenPageClient() {
   const totals = useMemo(() => {
     return cart.reduce(
       (sum, item) => ({
-        packs: sum.packs + item.packs,
+        packs: sum.packs + (item.saleUnit === "PACK" ? item.quantity : 0),
+        heads: sum.heads + (item.saleUnit === "HEAD" ? item.quantity : 0),
         pcsOut: sum.pcsOut + item.stockPcsOut,
-        grandTotal: sum.grandTotal + item.packs * item.pricePerPack,
+        grandTotal: sum.grandTotal + item.quantity * item.pricePerUnit,
       }),
-      { packs: 0, pcsOut: 0, grandTotal: 0 }
+      { packs: 0, heads: 0, pcsOut: 0, grandTotal: 0 }
     );
   }, [cart]);
 
@@ -130,6 +132,8 @@ export function SellChickenPageClient() {
 
   useEffect(() => {
     void loadInitialData();
+    // Initial page load only; later refreshes are performed after a sale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function addToCart() {
@@ -138,28 +142,28 @@ export function SellChickenPageClient() {
       return;
     }
 
-    const packsToSell = wholeNumber(packs);
-    if (packsToSell <= 0) {
-      toast.error("Packs must be greater than zero.");
+    const quantityToSell = wholeNumber(packs);
+    if (quantityToSell <= 0) {
+      toast.error("Quantity must be greater than zero.");
       return;
     }
 
-    if (numberValue(selectedProduct.packSize) <= 0) {
+    if (selectedProduct.saleUnit === "PACK" && numberValue(selectedProduct.packSize) <= 0) {
       toast.error("Pack size is not configured for this product.");
       return;
     }
 
-    if (numberValue(selectedProduct.pricePerPack) <= 0) {
-      toast.error("Price per pack is not configured for this product.");
+    if (numberValue(selectedProduct.pricePerUnit) <= 0) {
+      toast.error(`Price per ${selectedProduct.saleUnit.toLowerCase()} is not configured for this product.`);
       return;
     }
 
     const existing = cart.find((item) => item.bodegaProductId === selectedProduct.bodegaProductId);
-    const currentPacks = existing?.packs || 0;
-    const newTotalPacks = currentPacks + packsToSell;
+    const currentQuantity = existing?.quantity || 0;
+    const newTotalQuantity = currentQuantity + quantityToSell;
 
-    if (newTotalPacks > selectedProduct.availablePacks) {
-      toast.error(`Not enough stock. Available full packs: ${selectedProduct.availablePacks}.`);
+    if (newTotalQuantity > selectedProduct.availableQty) {
+      toast.error(`Not enough stock. Available: ${selectedProduct.availableQty} ${selectedProduct.saleUnit.toLowerCase()}(s).`);
       return;
     }
 
@@ -169,8 +173,8 @@ export function SellChickenPageClient() {
           item.bodegaProductId === selectedProduct.bodegaProductId
             ? {
                 ...item,
-                packs: newTotalPacks,
-                stockPcsOut: newTotalPacks * item.packSize,
+                quantity: newTotalQuantity,
+                stockPcsOut: newTotalQuantity * (item.saleUnit === "PACK" ? item.packSize : 1),
               }
             : item
         )
@@ -183,13 +187,14 @@ export function SellChickenPageClient() {
           bodegaProductId: selectedProduct.bodegaProductId,
           name: selectedProduct.name,
           categoryName: selectedProduct.categoryName,
-          availablePacks: selectedProduct.availablePacks,
+          availableQty: selectedProduct.availableQty,
           loosePcs: selectedProduct.loosePcs,
-          packs: packsToSell,
-          pricePerPack: selectedProduct.pricePerPack,
+          quantity: quantityToSell,
+          saleUnit: selectedProduct.saleUnit,
+          pricePerUnit: selectedProduct.pricePerUnit,
           pricePerPcs: selectedProduct.pricePerPcs,
           packSize: selectedProduct.packSize,
-          stockPcsOut: packsToSell * selectedProduct.packSize,
+          stockPcsOut: quantityToSell * (selectedProduct.saleUnit === "PACK" ? selectedProduct.packSize : 1),
         },
       ]);
     }
@@ -218,6 +223,22 @@ export function SellChickenPageClient() {
       return;
     }
 
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const correctionReason =
+      saleDate < today
+        ? window.prompt("Reason for entering this sale late (required):")?.trim()
+        : "";
+
+    if (saleDate < today && (!correctionReason || correctionReason.length < 5)) {
+      toast.error("Enter a late-entry reason of at least 5 characters.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -229,11 +250,12 @@ export function SellChickenPageClient() {
           customerId,
           saleDate,
           receiptNumber,
+          correctionReason,
           items: cart.map((item) => ({
             productId: item.bodegaProductId,
             bodegaProductId: item.bodegaProductId,
-            packs: item.packs,
-            quantity: item.packs,
+            quantity: item.quantity,
+            saleUnit: item.saleUnit,
           })),
         }),
       });
@@ -259,34 +281,6 @@ export function SellChickenPageClient() {
 
   return (
     <ErpPage>
-      <ErpPageHeader
-        eyebrow="Sales Desk"
-        title="Sell Chicken"
-        description="Pack-based chicken sales. Cashiers enter packs to sell, while the system deducts PCS using the configured pack size."
-      />
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <ErpMetricCard
-          label="Cart Packs"
-          value={formatWholeNumber(totals.packs)}
-          description="Full packs to sell"
-          tone="blue"
-          icon={<PackageCheck className="h-5 w-5" />}
-        />
-        <ErpMetricCard
-          label="PCS Out"
-          value={formatWholeNumber(totals.pcsOut)}
-          description="Inventory deduction"
-          tone="violet"
-        />
-        <ErpMetricCard
-          label="Grand Total"
-          value={formatPeso(totals.grandTotal)}
-          description="Server still confirms DB price on save"
-          tone="emerald"
-        />
-      </div>
-
       {isLoading ? (
         <ErpSection>
           <div className="flex h-56 items-center justify-center">
@@ -296,7 +290,7 @@ export function SellChickenPageClient() {
       ) : (
         <div className="grid gap-5 xl:grid-cols-[1fr_390px]">
           <div className="space-y-5">
-            <ErpSection title="Sale Details" description="Choose customer, receipt, product, and number of packs.">
+            <ErpSection title="Sale Details" description="Choose customer, receipt, product, and quantity.">
               <div className="grid gap-4 md:grid-cols-3">
                 <ErpField label="Customer *">
                   <Select value={customerId} onValueChange={setCustomerId}>
@@ -307,6 +301,7 @@ export function SellChickenPageClient() {
                       {customers.map((customer) => (
                         <SelectItem key={customer._id} value={customer._id}>
                           {customer.name}
+                          {customer.outletName ? ` — Outlet: ${customer.outletName}` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -329,13 +324,13 @@ export function SellChickenPageClient() {
                     <SelectContent>
                       {products.map((product) => (
                         <SelectItem key={product.bodegaProductId} value={product.bodegaProductId}>
-                          {product.name} - {formatWholeNumber(product.availablePacks)} packs / {formatWholeNumber(product.loosePcs)} pcs loose
+                          {product.name} - {formatWholeNumber(product.availableQty)} {product.saleUnit.toLowerCase()}(s)
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </ErpField>
-                <ErpField label="Packs to Sell">
+                <ErpField label={selectedProduct ? `${selectedProduct.saleUnit === "PACK" ? "Packs" : "Heads"} to Sell` : "Quantity to Sell"}>
                   <Input type="number" min="0" step="1" value={packs} onChange={(event) => setPacks(event.target.value)} />
                 </ErpField>
                 <div className="flex items-end">
@@ -350,15 +345,21 @@ export function SellChickenPageClient() {
                 <div className="mt-5 grid gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-4">
                   <div className="md:col-span-2">
                     <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Available Stock</p>
-                    <PackStockDisplay stockPcs={selectedProduct.stockPcs} packSize={selectedProduct.packSize} />
+                    {selectedProduct.saleUnit === "PACK" ? (
+                      <PackStockDisplay stockPcs={selectedProduct.stockPcs} packSize={selectedProduct.packSize} />
+                    ) : (
+                      <p className="text-lg font-black text-slate-950">{formatWholeNumber(selectedProduct.availableQty)} heads</p>
+                    )}
                   </div>
-                  <ErpKeyValue label="Price / Pack" value={formatPeso(selectedProduct.pricePerPack)} />
-                  <ErpKeyValue label="Price / PCS" value={formatPeso(selectedProduct.pricePerPcs)} />
+                  <ErpKeyValue label={`Price / ${selectedProduct.saleUnit === "PACK" ? "Pack" : "Head"}`} value={formatPeso(selectedProduct.pricePerUnit)} />
+                  {selectedProduct.saleUnit === "PACK" ? (
+                    <ErpKeyValue label="Price / PCS" value={formatPeso(selectedProduct.pricePerPcs)} />
+                  ) : null}
                 </div>
               ) : null}
             </ErpSection>
 
-            <ErpSection title="Cart Items" description="Review packs and inventory PCS deduction before submitting.">
+            <ErpSection title="Cart Items" description="Review quantities and inventory deduction before submitting.">
               {cart.length === 0 ? (
                 <ErpEmptyState title="No items yet" description="Select a product and add packs to sell." />
               ) : (
@@ -371,9 +372,10 @@ export function SellChickenPageClient() {
                           <TableHead className="text-white">Product</TableHead>
                           <TableHead className="text-white">Category</TableHead>
                           <TableHead className="text-white">Available</TableHead>
-                          <TableHead className="text-right text-white">Packs</TableHead>
+                          <TableHead className="text-right text-white">Unit</TableHead>
+                          <TableHead className="text-right text-white">Quantity</TableHead>
                           <TableHead className="text-right text-white">PCS Out</TableHead>
-                          <TableHead className="text-right text-white">Price / Pack</TableHead>
+                          <TableHead className="text-right text-white">Unit Price</TableHead>
                           <TableHead className="text-right text-white">Line Total</TableHead>
                           <TableHead className="text-center text-white">Action</TableHead>
                         </TableRow>
@@ -385,12 +387,13 @@ export function SellChickenPageClient() {
                             <TableCell className="font-bold text-slate-950">{item.name}</TableCell>
                             <TableCell>{item.categoryName || "-"}</TableCell>
                             <TableCell>
-                              {formatWholeNumber(item.availablePacks)} packs / {formatWholeNumber(item.loosePcs)} pcs loose
+                              {formatWholeNumber(item.availableQty)} {item.saleUnit.toLowerCase()}(s)
                             </TableCell>
-                            <TableCell className="text-right font-bold">{formatWholeNumber(item.packs)}</TableCell>
+                            <TableCell className="text-right">{item.saleUnit}</TableCell>
+                            <TableCell className="text-right font-bold">{formatWholeNumber(item.quantity)}</TableCell>
                             <TableCell className="text-right">{formatWholeNumber(item.stockPcsOut)} pcs</TableCell>
-                            <TableCell className="text-right">{formatPeso(item.pricePerPack)}</TableCell>
-                            <TableCell className="text-right font-bold">{formatPeso(item.packs * item.pricePerPack)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(item.pricePerUnit)}</TableCell>
+                            <TableCell className="text-right font-bold">{formatPeso(item.quantity * item.pricePerUnit)}</TableCell>
                             <TableCell className="text-center">
                               <Button size="icon" variant="destructive" onClick={() => removeCartItem(item.bodegaProductId)}>
                                 <Trash2 className="h-4 w-4" />
@@ -415,10 +418,10 @@ export function SellChickenPageClient() {
                           </Button>
                         </div>
                         <div className="mt-4 grid grid-cols-2 gap-3">
-                          <ErpKeyValue label="Packs" value={formatWholeNumber(item.packs)} />
+                          <ErpKeyValue label={item.saleUnit === "PACK" ? "Packs" : "Heads"} value={formatWholeNumber(item.quantity)} />
                           <ErpKeyValue label="PCS Out" value={`${formatWholeNumber(item.stockPcsOut)} pcs`} />
-                          <ErpKeyValue label="Price / Pack" value={formatPeso(item.pricePerPack)} />
-                          <ErpKeyValue label="Line Total" value={formatPeso(item.packs * item.pricePerPack)} />
+                          <ErpKeyValue label="Unit Price" value={formatPeso(item.pricePerUnit)} />
+                          <ErpKeyValue label="Line Total" value={formatPeso(item.quantity * item.pricePerUnit)} />
                         </div>
                       </ErpMobileCard>
                     ))}
@@ -439,6 +442,7 @@ export function SellChickenPageClient() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <ErpKeyValue label="Total Packs" value={formatWholeNumber(totals.packs)} />
+                <ErpKeyValue label="Total Heads" value={formatWholeNumber(totals.heads)} />
                 <ErpKeyValue label="PCS Out" value={`${formatWholeNumber(totals.pcsOut)} pcs`} />
               </div>
               <Button type="button" onClick={submitSale} disabled={isSaving || cart.length === 0} className="h-12 w-full rounded-2xl">
@@ -446,7 +450,7 @@ export function SellChickenPageClient() {
                 Submit Sale
               </Button>
               <p className="text-xs leading-5 text-slate-500">
-                Staff sell by pack. Inventory is deducted as packs multiplied by pack size, while loose PCS remains available for future pack conversion.
+                Sliced products sell by pack. Whole-chicken products sell by head. Every sale is recorded as an inventory stock-out.
               </p>
             </CardContent>
           </Card>

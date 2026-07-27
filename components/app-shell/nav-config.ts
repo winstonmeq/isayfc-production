@@ -1,4 +1,4 @@
-// components/app-shell/nav-config.ts
+﻿// components/app-shell/nav-config.ts
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeftRight,
@@ -6,7 +6,6 @@ import {
   Send,
   BarChart3,
   Building2,
-  UtensilsCrossed,
   Boxes,
   ClipboardList,
   Clock,
@@ -60,27 +59,6 @@ export const appNavItems: AppNavItem[] = [
     section: "Workspace",
   },
   {
-    title: "Outlets",
-    href: "/outlets",
-    icon: Building2,
-    permission: "outlets.view",
-    section: "Workspace",
-  },
-  {
-    title: "Outlet Menu",
-    href: "/outlet-menu",
-    icon: UtensilsCrossed,
-    permission: "outlets.view",
-    section: "Workspace",
-  },
-  {
-    title: "Stock Transfers",
-    href: "/stock-transfers",
-    icon: Send,
-    permission: "stock-transfers.view",
-    section: "Workspace",
-  },
-  {
     title: "Suppliers",
     href: "/suppliers",
     icon: Truck,
@@ -101,7 +79,7 @@ export const appNavItems: AppNavItem[] = [
     section: "Workspace",
     children: [
       {
-        title: "Products",
+        title: "Grocery Products",
         href: "/products",
         icon: Package,
         permission: "products.view",
@@ -190,6 +168,18 @@ export const appNavItems: AppNavItem[] = [
         icon: ReceiptText,
         permission: "sales-lines.view",
       },
+      {
+        title: "Outlets",
+        href: "/outlets",
+        icon: Building2,
+        permission: "outlets.view",
+      },
+      {
+        title: "Stock Transfers",
+        href: "/stock-transfers",
+        icon: Send,
+        permission: "stock-transfers.view",
+      },
     ],
   },
   {
@@ -253,10 +243,10 @@ export const appNavItems: AppNavItem[] = [
     section: "Finance",
     children: [
       {
-        title: "Outlet Inventory",
-        href: "/outlet-inventory",
-        icon: Warehouse,
-        permission: "outlet-inventory.view",
+        title: "Bodega Stock Movement",
+        href: "/inventory/bodega",
+        icon: ArrowLeftRight,
+        permission: "inventory.view",
       },
       {
         title: "Grocery/Product Inventory",
@@ -265,16 +255,10 @@ export const appNavItems: AppNavItem[] = [
         permission: "inventory.view",
       },
       {
-        title: "Whole Chicken Movement",
-        href: "/inventory/whole-chicken",
-        icon: ArrowLeftRight,
-        permission: "inventory.view",
-      },
-      {
-        title: "Bodega Stock Movement",
-        href: "/inventory/bodega",
-        icon: ArrowLeftRight,
-        permission: "inventory.view",
+        title: "Outlet Inventory",
+        href: "/outlet-inventory",
+        icon: Warehouse,
+        permission: "outlet-inventory.view",
       },
     ],
   },
@@ -294,6 +278,12 @@ export const appNavItems: AppNavItem[] = [
         title: "Inventory Report",
         href: "/reports/inventory",
         icon: Boxes,
+        permission: "reports.inventory",
+      },
+      {
+        title: "Inventory Movements",
+        href: "/reports/inventory-movements",
+        icon: ArrowLeftRight,
         permission: "reports.inventory",
       },
       {
@@ -333,6 +323,13 @@ export const appNavItems: AppNavItem[] = [
   {
     title: "Audit Logs",
     href: "/audit-logs",
+    icon: ScrollText,
+    permission: "audit-logs.view",
+    section: "Admin",
+  },
+  {
+    title: "Correction Register",
+    href: "/corrections",
     icon: ScrollText,
     permission: "audit-logs.view",
     section: "Admin",

@@ -65,13 +65,22 @@ async function handleDELETE(
 
       for (const item of items) {
         const heads = Number(item.heads || 0);
+        const bags = Number(item.bags || 0);
+        const kilos = Number(item.kilos || 0);
         const slicedPcs = Number(item.actualSlicedPcs || 0);
 
         // Restore whole chicken stock.
         if (heads > 0) {
           const mainProduct = await BodegaProductModel.findOneAndUpdate(
             { _id: item.mainProductId },
-            { $inc: { stockQty: heads } },
+            {
+              $inc: {
+                stockQty: heads,
+                stockBags: bags,
+                stockKilos: kilos,
+                stockHeads: heads,
+              },
+            },
             { new: true, session: mongoSession }
           );
 
@@ -88,6 +97,10 @@ async function handleDELETE(
             bodegaProductId: mainProduct._id,
             type: "VOID_REVERSAL",
             quantity: heads,
+            bags,
+            kilos,
+            heads,
+            pieces: 0,
             previousStock: mainNewStock - heads,
             newStock: mainNewStock,
             remarks: `VOID SLICING ${batch._id}`,
@@ -129,6 +142,10 @@ async function handleDELETE(
             bodegaProductId: slicedProduct._id,
             type: "VOID_REVERSAL",
             quantity: slicedPcs,
+            bags: 0,
+            kilos: 0,
+            heads: 0,
+            pieces: slicedPcs,
             previousStock: slicedNewStock + slicedPcs,
             newStock: slicedNewStock,
             remarks: `VOID SLICING ${batch._id}`,

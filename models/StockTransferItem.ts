@@ -22,12 +22,13 @@ export interface IStockTransferItem extends Document {
   source: "BODEGA" | "GROCERY";
   bodegaProductId?: Types.ObjectId;
   productId?: Types.ObjectId;
+  standardPackingId?: Types.ObjectId;
 
   // Snapshots at dispatch time so history stays correct if the product changes.
   productName: string;
   categoryName?: string;
   packSize: number;
-  unitLabel: "PACK" | "PCS" | "QTY";
+  unitLabel: "PACK" | "HEAD" | "PCS" | "QTY";
   buyingPrice: number;
   sellingPrice: number;
 
@@ -70,6 +71,11 @@ const StockTransferItemSchema = new Schema<IStockTransferItem>(
       ref: "Product",
     },
 
+    standardPackingId: {
+      type: Schema.Types.ObjectId,
+      ref: "StandardPacking",
+    },
+
     productName: {
       type: String,
       required: true,
@@ -90,7 +96,7 @@ const StockTransferItemSchema = new Schema<IStockTransferItem>(
 
     unitLabel: {
       type: String,
-      enum: ["PACK", "PCS", "QTY"],
+      enum: ["PACK", "HEAD", "PCS", "QTY"],
       default: "PCS",
     },
 
@@ -157,6 +163,7 @@ const StockTransferItemSchema = new Schema<IStockTransferItem>(
 StockTransferItemSchema.index({ transferId: 1 });
 StockTransferItemSchema.index({ bodegaProductId: 1 });
 StockTransferItemSchema.index({ productId: 1 });
+StockTransferItemSchema.index({ standardPackingId: 1 });
 
 const StockTransferItemModel: Model<IStockTransferItem> =
   mongoose.models.StockTransferItem ||

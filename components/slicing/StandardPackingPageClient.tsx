@@ -46,6 +46,8 @@ type StandardPackingRow = {
   productId: string;
   productName: string;
   standardPacking: number;
+  minimumKilos: number;
+  maximumKilos: number;
   standardSlice: number;
   chickenSizeType: string;
 };
@@ -54,6 +56,8 @@ const emptyForm = {
   wholeChickenId: "",
   productId: "",
   standardPacking: "0",
+  minimumKilos: "0",
+  maximumKilos: "0",
   standardSlice: "0",
   chickenSizeType: "",
 };
@@ -154,6 +158,8 @@ export function StandardPackingPageClient() {
       wholeChickenId: item.wholeChickenId,
       productId: item.productId,
       standardPacking: String(item.standardPacking),
+      minimumKilos: String(item.minimumKilos || 0),
+      maximumKilos: String(item.maximumKilos || 0),
       standardSlice: String(item.standardSlice),
       chickenSizeType: item.chickenSizeType || "",
     });
@@ -180,6 +186,14 @@ export function StandardPackingPageClient() {
 
     if ((Number(form.standardSlice) || 0) <= 0) {
       toast.error("Standard slice / pcs per head must be greater than zero.");
+      return;
+    }
+
+    if (
+      Number(form.maximumKilos) > 0 &&
+      Number(form.maximumKilos) < Number(form.minimumKilos)
+    ) {
+      toast.error("Maximum kilos must be greater than or equal to minimum kilos.");
       return;
     }
 
@@ -302,6 +316,12 @@ export function StandardPackingPageClient() {
                     <span className="block text-xs font-normal text-slate-300">pcs per pack</span>
                   </TableHead>
                   <TableHead className="text-right text-white">
+                    Minimum kg/bag
+                  </TableHead>
+                  <TableHead className="text-right text-white">
+                    Maximum kg/bag
+                  </TableHead>
+                  <TableHead className="text-right text-white">
                     Standard Slice
                     <span className="block text-xs font-normal text-slate-300">pcs per head</span>
                   </TableHead>
@@ -317,14 +337,14 @@ export function StandardPackingPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center">
+                    <TableCell colSpan={8} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : filteredStandards.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={8}
                       className="h-32 text-center text-muted-foreground"
                     >
                       No standard packing records found.
@@ -339,6 +359,16 @@ export function StandardPackingPageClient() {
                       <TableCell>{item.productName}</TableCell>
                       <TableCell className="text-right">
                         {item.standardPacking.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {item.minimumKilos > 0
+                          ? item.minimumKilos.toFixed(2)
+                          : "-"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {item.maximumKilos > 0
+                          ? item.maximumKilos.toFixed(2)
+                          : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         {item.standardSlice.toLocaleString()}
@@ -421,7 +451,7 @@ export function StandardPackingPageClient() {
               </Select>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Standard Packing (pcs per full pack)</Label>
                 <Input
@@ -436,6 +466,32 @@ export function StandardPackingPageClient() {
                 <p className="text-xs text-muted-foreground">
                   Example: C10 = 50 pcs per pack.
                 </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Minimum kg/bag</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.minimumKilos}
+                  onChange={(event) =>
+                    updateForm("minimumKilos", event.target.value)
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Maximum kg/bag</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.maximumKilos}
+                  onChange={(event) =>
+                    updateForm("maximumKilos", event.target.value)
+                  }
+                />
               </div>
 
               <div className="space-y-2">

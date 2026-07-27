@@ -16,6 +16,10 @@ export interface IBodegaStockTransaction extends Document {
   bodegaProductId: Types.ObjectId;
   type: BodegaStockTransactionType;
   quantity: number;
+  bags: number;
+  kilos: number;
+  heads: number;
+  pieces: number;
   previousStock: number;
   newStock: number;
   remarks?: string;
@@ -54,6 +58,11 @@ const BodegaStockTransactionSchema = new Schema<IBodegaStockTransaction>(
       required: true,
       min: 0,
     },
+
+    bags: { type: Number, default: 0, min: 0 },
+    kilos: { type: Number, default: 0, min: 0 },
+    heads: { type: Number, default: 0, min: 0 },
+    pieces: { type: Number, default: 0, min: 0 },
 
     previousStock: {
       type: Number,

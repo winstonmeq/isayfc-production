@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  CalendarDays,
   Loader2,
   PlusCircle,
   Printer,
@@ -17,7 +16,6 @@ import {
   ErpEmptyState,
   ErpField,
   ErpKeyValue,
-  ErpMetricCard,
   ErpMobileCard,
   ErpPage,
   ErpPageHeader,
@@ -25,10 +23,8 @@ import {
   ErpToolbar,
 } from "@/components/erp/ErpShell";
 import { formatDecimal, formatWholeNumber, numberValue } from "@/components/erp/StockDisplay";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -40,6 +36,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -110,10 +107,6 @@ function getYieldRate(record: SlicingHistoryItem) {
   return (numberValue(record.actualSlicedPcs) / stdPcs) * 100;
 }
 
-function getDayKey(record: SlicingHistoryItem) {
-  return formatDate(record.slicingDate);
-}
-
 export function SliceHistoryPageClient() {
   const [records, setRecords] = useState<SlicingHistoryItem[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -135,70 +128,34 @@ export function SliceHistoryPageClient() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  const totals = useMemo(() => {
-    const computed = records.reduce(
-      (sum, record) => {
-        const stdPcs = getStdPcs(record);
-        return {
-          heads: sum.heads + numberValue(record.heads ?? record.qtyToSlice),
-          kilos: sum.kilos + numberValue(record.kilos),
-          stdPcs: sum.stdPcs + stdPcs,
-          actualPcs: sum.actualPcs + numberValue(record.actualSlicedPcs),
-          packs: sum.packs + numberValue(record.actualPacks),
-          loosePcs: sum.loosePcs + getLoosePcs(record),
-          variance: sum.variance + numberValue(record.variance),
-        };
-      },
-      { heads: 0, kilos: 0, stdPcs: 0, actualPcs: 0, packs: 0, loosePcs: 0, variance: 0 }
-    );
-
-    return {
-      ...computed,
-      yieldRate: computed.stdPcs > 0 ? (computed.actualPcs / computed.stdPcs) * 100 : 0,
-    };
-  }, [records]);
-
-  const dayGroups = useMemo(() => {
-    const map = new Map<
-      string,
+  const tableTotals = useMemo(() => {
+    const totals = records.reduce(
+      (sum, record) => ({
+        heads: sum.heads + numberValue(record.heads ?? record.qtyToSlice),
+        bags: sum.bags + numberValue(record.bags),
+        kilos: sum.kilos + numberValue(record.kilos),
+        stdPcs: sum.stdPcs + getStdPcs(record),
+        actualPcs: sum.actualPcs + numberValue(record.actualSlicedPcs),
+        packs: sum.packs + numberValue(record.actualPacks),
+        loosePcs: sum.loosePcs + getLoosePcs(record),
+        variance: sum.variance + numberValue(record.variance),
+      }),
       {
-        date: string;
-        rows: number;
-        heads: number;
-        kilos: number;
-        stdPcs: number;
-        actualPcs: number;
-        packs: number;
-        loosePcs: number;
-        variance: number;
-      }
-    >();
-
-    for (const record of records) {
-      const date = getDayKey(record);
-      const current = map.get(date) || {
-        date,
-        rows: 0,
         heads: 0,
+        bags: 0,
         kilos: 0,
         stdPcs: 0,
         actualPcs: 0,
         packs: 0,
         loosePcs: 0,
         variance: 0,
-      };
-      current.rows += 1;
-      current.heads += numberValue(record.heads ?? record.qtyToSlice);
-      current.kilos += numberValue(record.kilos);
-      current.stdPcs += getStdPcs(record);
-      current.actualPcs += numberValue(record.actualSlicedPcs);
-      current.packs += numberValue(record.actualPacks);
-      current.loosePcs += getLoosePcs(record);
-      current.variance += numberValue(record.variance);
-      map.set(date, current);
-    }
+      }
+    );
 
-    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+    return {
+      ...totals,
+      yieldRate: totals.stdPcs > 0 ? (totals.actualPcs / totals.stdPcs) * 100 : 0,
+    };
   }, [records]);
 
   async function loadProducts() {
@@ -300,19 +257,6 @@ export function SliceHistoryPageClient() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <ErpMetricCard label="Total Heads" value={formatWholeNumber(totals.heads)} description="Whole chickens sliced" tone="blue" />
-        <ErpMetricCard label="Actual PCS" value={formatWholeNumber(totals.actualPcs)} description={`${formatWholeNumber(totals.stdPcs)} standard PCS`} tone="violet" />
-        <ErpMetricCard label="Full Packs" value={formatWholeNumber(totals.packs)} description={`${formatWholeNumber(totals.loosePcs)} loose PCS`} tone="emerald" />
-        <ErpMetricCard
-          label="Yield"
-          value={formatPercent(totals.yieldRate)}
-          description={`Variance ${formatWholeNumber(totals.variance)} PCS`}
-          tone={totals.variance < 0 ? "rose" : "amber"}
-          icon={<CalendarDays className="h-5 w-5" />}
-        />
-      </div>
-
       <ErpToolbar>
         <ErpField label="Show Entries">
           <Select
@@ -366,40 +310,6 @@ export function SliceHistoryPageClient() {
         </div>
       </ErpToolbar>
 
-      <ErpSection title="Daily Slicing Summary" description="All slicing activity within the same date is grouped into one daily production view.">
-        {isLoading ? (
-          <div className="flex h-40 items-center justify-center">
-            <Loader2 className="h-7 w-7 animate-spin text-slate-500" />
-          </div>
-        ) : dayGroups.length === 0 ? (
-          <ErpEmptyState title="No daily slicing summary" description="Add slicing records or change your filters." />
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-            {dayGroups.map((day) => (
-              <div key={day.date} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-black text-slate-950">{day.date}</div>
-                    <p className="text-sm text-slate-500">{day.rows} slicing transaction{day.rows === 1 ? "" : "s"}</p>
-                  </div>
-                  <Badge className="rounded-full bg-slate-950 text-white hover:bg-slate-950">
-                    {formatWholeNumber(day.packs)} packs
-                  </Badge>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <ErpKeyValue label="Heads" value={formatWholeNumber(day.heads)} />
-                  <ErpKeyValue label="Kilos" value={formatDecimal(day.kilos, 2)} />
-                  <ErpKeyValue label="Actual PCS" value={formatWholeNumber(day.actualPcs)} />
-                  <ErpKeyValue label="Loose PCS" value={formatWholeNumber(day.loosePcs)} />
-                  <ErpKeyValue label="Std PCS" value={formatWholeNumber(day.stdPcs)} />
-                  <ErpKeyValue label="Variance" value={<span className={day.variance < 0 ? "text-red-600" : "text-emerald-700"}>{formatWholeNumber(day.variance)}</span>} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </ErpSection>
-
       <ErpSection title="Slicing Transactions" description="Detailed line-level slicing activity.">
         {isLoading ? (
           <div className="flex h-56 items-center justify-center">
@@ -417,6 +327,7 @@ export function SliceHistoryPageClient() {
                     <TableHead className="text-white">Main Product</TableHead>
                     <TableHead className="text-white">Sliced Product</TableHead>
                     <TableHead className="text-right text-white">Heads</TableHead>
+                    <TableHead className="text-right text-white">Bags</TableHead>
                     <TableHead className="text-right text-white">Kilos</TableHead>
                     <TableHead className="text-right text-white">Std PCS</TableHead>
                     <TableHead className="text-right text-white">Actual PCS</TableHead>
@@ -440,6 +351,7 @@ export function SliceHistoryPageClient() {
                         <TableCell className="font-bold text-slate-950">{record.mainProductName}</TableCell>
                         <TableCell>{record.slicedProductName}</TableCell>
                         <TableCell className="text-right">{formatWholeNumber(record.heads ?? record.qtyToSlice)}</TableCell>
+                        <TableCell className="text-right">{formatWholeNumber(record.bags)}</TableCell>
                         <TableCell className="text-right">{formatDecimal(record.kilos, 2)}</TableCell>
                         <TableCell className="text-right">{formatWholeNumber(stdPcs)}</TableCell>
                         <TableCell className="text-right font-bold">{formatWholeNumber(record.actualSlicedPcs)}</TableCell>
@@ -466,6 +378,37 @@ export function SliceHistoryPageClient() {
                     );
                   })}
                 </TableBody>
+                <TableFooter className="bg-slate-100 font-bold text-slate-950">
+                  <TableRow>
+                    <TableCell>Total</TableCell>
+                    <TableCell>—</TableCell>
+                    <TableCell>—</TableCell>
+                    <TableCell className="text-right">{formatWholeNumber(tableTotals.heads)}</TableCell>
+                    <TableCell className="text-right">{formatWholeNumber(tableTotals.bags)}</TableCell>
+                    <TableCell className="text-right">{formatDecimal(tableTotals.kilos, 2)}</TableCell>
+                    <TableCell className="text-right">{formatWholeNumber(tableTotals.stdPcs)}</TableCell>
+                    <TableCell className="text-right">{formatWholeNumber(tableTotals.actualPcs)}</TableCell>
+                    <TableCell className="text-right">—</TableCell>
+                    <TableCell className="text-right">
+                      {formatWholeNumber(tableTotals.packs)} packs / {formatWholeNumber(tableTotals.loosePcs)} pcs
+                    </TableCell>
+                    <TableCell className="text-right">{formatPercent(tableTotals.yieldRate)}</TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right",
+                        tableTotals.variance < 0
+                          ? "text-red-600"
+                          : tableTotals.variance > 0
+                            ? "text-emerald-700"
+                            : "text-slate-700"
+                      )}
+                    >
+                      {formatWholeNumber(tableTotals.variance)}
+                    </TableCell>
+                    <TableCell>—</TableCell>
+                    <TableCell className="text-center">—</TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             </div>
 
@@ -488,6 +431,7 @@ export function SliceHistoryPageClient() {
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3">
                       <ErpKeyValue label="Heads" value={formatWholeNumber(record.heads ?? record.qtyToSlice)} />
+                      <ErpKeyValue label="Bags" value={formatWholeNumber(record.bags)} />
                       <ErpKeyValue label="Kilos" value={formatDecimal(record.kilos, 2)} />
                       <ErpKeyValue label="Std PCS" value={formatWholeNumber(stdPcs)} />
                       <ErpKeyValue label="Actual PCS" value={formatWholeNumber(record.actualSlicedPcs)} />

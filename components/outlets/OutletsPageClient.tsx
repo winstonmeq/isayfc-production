@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Building2, Loader2, Pencil, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, Pencil, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   ErpEmptyState,
   ErpField,
   ErpKeyValue,
-  ErpMetricCard,
   ErpMobileCard,
   ErpPage,
   ErpPageHeader,
@@ -76,7 +75,6 @@ const emptyForm = {
 export function OutletsPageClient() {
   const [outlets, setOutlets] = useState<OutletItem[]>([]);
   const [meta, setMeta] = useState<ApiMeta>({ page: 1, limit: 10, total: 0, totalPages: 1 });
-  const [summary, setSummary] = useState({ activeCount: 0, inactiveCount: 0, totalCount: 0 });
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState("25");
   const [search, setSearch] = useState("");
@@ -88,10 +86,6 @@ export function OutletsPageClient() {
   const [editingOutlet, setEditingOutlet] = useState<OutletItem | null>(null);
   const [form, setForm] = useState(emptyForm);
 
-  const activeOutletsOnPage = useMemo(
-    () => outlets.filter((outlet) => outlet.status === "ACTIVE").length,
-    [outlets]
-  );
 
   async function loadOutlets() {
     setIsLoading(true);
@@ -109,7 +103,6 @@ export function OutletsPageClient() {
       }
 
       setOutlets(json.data || []);
-      setSummary(json.summary || { activeCount: 0, inactiveCount: 0, totalCount: 0 });
       setMeta(json.meta || { page, limit: Number(limit), total: 0, totalPages: 1 });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load outlets.");
@@ -208,27 +201,6 @@ export function OutletsPageClient() {
           </Button>
         }
       />
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <ErpMetricCard
-          label="Total Outlets"
-          value={summary.totalCount.toLocaleString()}
-          description="Active and inactive outlets"
-          icon={<Building2 className="h-5 w-5" />}
-        />
-        <ErpMetricCard
-          label="Active Outlets"
-          value={summary.activeCount.toLocaleString()}
-          description={`${activeOutletsOnPage.toLocaleString()} shown on this page`}
-          tone="emerald"
-        />
-        <ErpMetricCard
-          label="Inactive Outlets"
-          value={summary.inactiveCount.toLocaleString()}
-          description="Closed or temporarily disabled outlets"
-          tone="amber"
-        />
-      </div>
 
       <ErpToolbar>
         <ErpField label="Search">

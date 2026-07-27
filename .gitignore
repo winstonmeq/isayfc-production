@@ -42,6 +42,8 @@ next-env.d.ts
 
 # tooling artifacts
 type-errors.txt
+*.zip
 
 # runtime receipt uploads (move to object storage for serverless deploys)
 /public/uploads/
+/var/uploads/

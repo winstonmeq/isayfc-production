@@ -6,6 +6,12 @@ import { cleanString, escapeRegex } from "@/lib/crud-utils";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import StandardPackingModel from "@/models/StandardPacking";
+import {
+  fromBaseQuantity,
+  packingSnapshot,
+  toBaseUnitCost,
+} from "@/lib/inventory-units";
+import { activeMovementTransactions } from "@/lib/stock-movement-report";
 
 function toNumber(value: unknown) {
   const parsed = Number(value);
@@ -26,26 +32,18 @@ function objectIdString(value: unknown) {
 }
 
 function getPackBreakdown(totalPcsValue: unknown, packSizeValue: unknown) {
-  const totalPcs = toWhole(totalPcsValue);
   const packSize = toWhole(packSizeValue);
-
-  if (packSize <= 0) {
-    return {
-      totalPcs,
-      packSize: 0,
-      packs: 0,
-      loosePcs: totalPcs,
-    };
-  }
-
-  const packs = Math.floor(totalPcs / packSize);
-  const loosePcs = totalPcs - packs * packSize;
-
+  const packing = packingSnapshot({
+    unit: packSize > 0 ? "PACK" : "PCS",
+    baseUnit: "PCS",
+    multiplier: packSize,
+  });
+  const breakdown = fromBaseQuantity(totalPcsValue, packing);
   return {
-    totalPcs,
+    totalPcs: breakdown.baseQty,
     packSize,
-    packs,
-    loosePcs,
+    packs: breakdown.fullUnits,
+    loosePcs: breakdown.looseBaseQty,
   };
 }
 
@@ -150,11 +148,17 @@ export async function GET(req: NextRequest) {
     {
       stockIn: number;
       stockOut: number;
+      stockInBags: number;
+      stockOutBags: number;
+      stockInKilos: number;
+      stockOutKilos: number;
+      stockInHeads: number;
+      stockOutHeads: number;
       latestDate?: Date;
     }
   >();
 
-  for (const transaction of transactions as any[]) {
+  for (const transaction of activeMovementTransactions(transactions as any[])) {
     const productId = objectIdString(transaction.bodegaProductId);
     if (!productId) continue;
 
@@ -163,12 +167,27 @@ export async function GET(req: NextRequest) {
     const current = movementMap.get(productId) || {
       stockIn: 0,
       stockOut: 0,
+      stockInBags: 0,
+      stockOutBags: 0,
+      stockInKilos: 0,
+      stockOutKilos: 0,
+      stockInHeads: 0,
+      stockOutHeads: 0,
       latestDate: undefined,
     };
 
     if (direction === "IN") current.stockIn += quantity;
     if (direction === "OUT") current.stockOut += quantity;
-
+    if (direction === "IN") {
+      current.stockInBags += toNumber(transaction.bags);
+      current.stockInKilos += toNumber(transaction.kilos);
+      current.stockInHeads += toNumber(transaction.heads);
+    }
+    if (direction === "OUT") {
+      current.stockOutBags += toNumber(transaction.bags);
+      current.stockOutKilos += toNumber(transaction.kilos);
+      current.stockOutHeads += toNumber(transaction.heads);
+    }
     if (
       transaction.createdAt &&
       (!current.latestDate || new Date(transaction.createdAt) > new Date(current.latestDate))
@@ -184,6 +203,12 @@ export async function GET(req: NextRequest) {
     const movement = movementMap.get(id) || {
       stockIn: 0,
       stockOut: 0,
+      stockInBags: 0,
+      stockOutBags: 0,
+      stockInKilos: 0,
+      stockOutKilos: 0,
+      stockInHeads: 0,
+      stockOutHeads: 0,
       latestDate: product.updatedAt || product.createdAt,
     };
 
@@ -193,7 +218,14 @@ export async function GET(req: NextRequest) {
     const stockOutBreakdown = getPackBreakdown(movement.stockOut, packSize);
     const currentBreakdown = getPackBreakdown(product.stockQty, packSize);
     const price = toNumber(product.sellingPrice || product.buyingPrice || 0);
-    const pricePerPcs = isPackProduct && packSize > 0 ? price / packSize : price;
+    const pricePerPcs = toBaseUnitCost(
+      price,
+      packingSnapshot({
+        unit: isPackProduct ? "PACK" : "PCS",
+        baseUnit: "PCS",
+        multiplier: packSize,
+      })
+    );
 
     return {
       _id: id,
@@ -203,6 +235,15 @@ export async function GET(req: NextRequest) {
       stockIn: toNumber(movement.stockIn),
       stockOut: toNumber(movement.stockOut),
       currentStock: toNumber(product.stockQty),
+      currentBags: toNumber(product.stockBags),
+      currentKilos: toNumber(product.stockKilos),
+      currentHeads: toNumber(product.stockHeads || product.stockQty),
+      stockInBags: movement.stockInBags,
+      stockOutBags: movement.stockOutBags,
+      stockInKilos: movement.stockInKilos,
+      stockOutKilos: movement.stockOutKilos,
+      stockInHeads: movement.stockInHeads,
+      stockOutHeads: movement.stockOutHeads,
       currentStockPcs: currentBreakdown.totalPcs,
 
       price,

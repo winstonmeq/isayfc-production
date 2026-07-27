@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Boxes, Loader2, Pencil, Plus, RefreshCcw, Search, Trash2, Warehouse } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, Pencil, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   ErpEmptyState,
   ErpField,
   ErpKeyValue,
-  ErpMetricCard,
   ErpMobileCard,
   ErpPage,
   ErpPageHeader,
@@ -112,11 +111,6 @@ const emptyEditForm = {
   remarks: "",
 };
 
-function numberValue(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function sourceLabel(source: ProductSource) {
   return source === "BODEGA" ? "Bodega" : "Grocery/Product";
 }
@@ -143,18 +137,6 @@ export function OutletInventoryPageClient() {
   const [editForm, setEditForm] = useState(emptyEditForm);
 
   const productOptions = form.productSource === "BODEGA" ? bodegaProducts : groceryProducts;
-
-  const summary = useMemo(() => {
-    return items.reduce(
-      (sum, item) => ({
-        rows: sum.rows + 1,
-        bodegaRows: sum.bodegaRows + (item.productSource === "BODEGA" ? 1 : 0),
-        groceryRows: sum.groceryRows + (item.productSource === "GROCERY" ? 1 : 0),
-        lowStockRows: sum.lowStockRows + (item.isLowStock ? 1 : 0),
-      }),
-      { rows: 0, bodegaRows: 0, groceryRows: 0, lowStockRows: 0 }
-    );
-  }, [items]);
 
   async function loadOutlets() {
     try {
@@ -341,13 +323,6 @@ export function OutletInventoryPageClient() {
           </Button>
         }
       />
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <ErpMetricCard label="Rows Shown" value={summary.rows.toLocaleString()} icon={<Warehouse className="h-5 w-5" />} />
-        <ErpMetricCard label="Bodega Items" value={summary.bodegaRows.toLocaleString()} tone="blue" />
-        <ErpMetricCard label="Grocery Items" value={summary.groceryRows.toLocaleString()} tone="emerald" />
-        <ErpMetricCard label="Low Stock" value={summary.lowStockRows.toLocaleString()} tone={summary.lowStockRows > 0 ? "rose" : "slate"} />
-      </div>
 
       <ErpToolbar>
         <ErpField label="Search">

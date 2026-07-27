@@ -9,9 +9,13 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleDollarSign,
   Flame,
+  LayoutGrid,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings2,
+  Workflow,
   X,
 } from "lucide-react";
 
@@ -30,6 +34,18 @@ type Props = {
 type SectionName = NonNullable<AppNavItem["section"]>;
 
 const sections: SectionName[] = ["Workspace", "Operations", "Finance", "Admin"];
+const sectionHrefs: Record<SectionName, string> = {
+  Workspace: "/workspace",
+  Operations: "/operations",
+  Finance: "/finance",
+  Admin: "/admin",
+};
+const sectionIcons = {
+  Workspace: LayoutGrid,
+  Operations: Workflow,
+  Finance: CircleDollarSign,
+  Admin: Settings2,
+};
 
 function isRouteActive(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === "/dashboard";
@@ -48,6 +64,11 @@ function isItemActive(pathname: string, item: AppNavItem) {
   }
 
   return false;
+}
+
+function getWorkspaceHref(section: SectionName | undefined, href: string) {
+  const area = section || "Workspace";
+  return `${sectionHrefs[area]}?module=${encodeURIComponent(href)}`;
 }
 
 function hasPermission(
@@ -113,17 +134,35 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
     return filterNavItemsByPermissions(appNavItems, userPermissions, isAdmin);
   }, [status, userPermissions, isAdmin]);
 
+  const activeSection = useMemo<SectionName>(() => {
+    const sectionRoute = sections.find((section) =>
+      pathname.startsWith(sectionHrefs[section])
+    );
+    if (sectionRoute) return sectionRoute;
+
+    return (
+      visibleNavItems.find((item) => isItemActive(pathname, item))?.section ||
+      "Workspace"
+    );
+  }, [pathname, visibleNavItems]);
+
   useEffect(() => {
     const activeParentTitle = getActiveParentTitle(pathname, visibleNavItems);
     if (activeParentTitle) setOpenGroup(activeParentTitle);
   }, [pathname, visibleNavItems]);
 
   const groupedItems = useMemo(() => {
-    return sections.map((section) => ({
-      section,
-      items: visibleNavItems.filter((item) => (item.section || "Workspace") === section),
-    }));
-  }, [visibleNavItems]);
+    return [
+      {
+        section: activeSection,
+        items: visibleNavItems.filter(
+          (item) =>
+            (item.section || "Workspace") === activeSection &&
+            item.href !== "/dashboard"
+        ),
+      },
+    ];
+  }, [activeSection, visibleNavItems]);
 
   function handleGroupClick(title: string) {
     if (collapsed && !mobile) return;
@@ -139,7 +178,7 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
       return (
         <Link
           key={item.title}
-          href={item.href || "#"}
+          href={item.href ? getWorkspaceHref(item.section, item.href) : "#"}
           onClick={onNavigate}
           title={collapsed && !mobile ? item.title : undefined}
           className={cn(
@@ -150,7 +189,7 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             collapsed && !mobile && "justify-center px-0"
           )}
         >
-          <Icon className={cn("h-5 w-5 shrink-0", active ? "text-rose-600" : "text-white/80 group-hover:text-white")} />
+          <Icon className={cn("h-5 w-5 shrink-0", active ? "text-teal-600" : "text-white/80 group-hover:text-white")} />
           {!collapsed || mobile ? <span className="truncate">{item.title}</span> : null}
         </Link>
       );
@@ -188,7 +227,7 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
               return (
                 <Link
                   key={child.href}
-                  href={child.href}
+                  href={getWorkspaceHref(item.section, child.href)}
                   onClick={onNavigate}
                   className={cn(
                     "flex min-h-10 items-center gap-2 rounded-xl px-3 py-2 text-sm transition-all",
@@ -197,7 +236,7 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
                       : "text-white/70 hover:bg-white/12 hover:text-white"
                   )}
                 >
-                  {ChildIcon ? <ChildIcon className={cn("h-4 w-4", childActive ? "text-rose-600" : "text-white/70")} /> : null}
+                  {ChildIcon ? <ChildIcon className={cn("h-4 w-4", childActive ? "text-teal-600" : "text-white/70")} /> : null}
                   <span className="truncate">{child.title}</span>
                 </Link>
               );
@@ -212,11 +251,11 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
     <aside
       className={cn(
         "flex h-full flex-col overflow-hidden border-r border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/20",
-        mobile ? "w-[318px] max-w-[86vw]" : collapsed ? "w-20" : "w-[280px]"
+        mobile ? "w-[300px] max-w-[86vw]" : collapsed ? "w-[72px]" : "w-[252px]"
       )}
     >
       <div className="flex h-20 items-center gap-3 border-b border-white/10 px-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-orange-400 shadow-lg shadow-rose-950/30">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-teal-400 shadow-lg shadow-blue-950/30">
           <Flame className="h-6 w-6" />
         </div>
 
@@ -245,7 +284,37 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
         </Button>
       </div>
 
-      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+        <div className={cn("grid gap-1", collapsed && !mobile ? "grid-cols-1" : "grid-cols-2")}>
+          {sections.map((section) => {
+            const SectionIcon = sectionIcons[section];
+            const sectionActive = activeSection === section;
+            const hasItems = visibleNavItems.some(
+              (item) => (item.section || "Workspace") === section
+            );
+            if (!hasItems) return null;
+
+            return (
+              <Link
+                key={section}
+                href={sectionHrefs[section]}
+                onClick={onNavigate}
+                title={collapsed && !mobile ? section : undefined}
+                className={cn(
+                  "flex min-h-11 items-center gap-2 rounded-xl px-3 text-xs font-black transition",
+                  sectionActive
+                    ? "bg-teal-400 text-slate-950"
+                    : "bg-white/7 text-white/70 hover:bg-white/12 hover:text-white",
+                  collapsed && !mobile && "justify-center px-0"
+                )}
+              >
+                <SectionIcon className="h-4 w-4 shrink-0" />
+                {!collapsed || mobile ? <span>{section}</span> : null}
+              </Link>
+            );
+          })}
+        </div>
+
         {groupedItems.map(({ section, items }) => {
           if (items.length === 0) return null;
 
@@ -253,7 +322,7 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             <div key={section} className="space-y-2">
               {!collapsed || mobile ? (
                 <p className="px-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/35">
-                  {section}
+                  {section} modules
                 </p>
               ) : null}
 

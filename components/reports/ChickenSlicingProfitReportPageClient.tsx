@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { getReportPeriod, PrintReportHeader } from "./PrintReportHeader";
 
 type ProductOption = {
   _id: string;
@@ -224,15 +225,20 @@ export function ChickenSlicingProfitReportPageClient() {
 
   return (
     <div className="space-y-5">
-      <ModuleHeader
+      <div className="no-print">
+        <ModuleHeader
+          title="Chicken Slicing Profit Report"
+          actions={
+            <Button type="button" variant="outline" onClick={() => window.print()}>
+              <Printer className="mr-2 h-4 w-4" />
+              Print
+            </Button>
+          }
+        />
+      </div>
+      <PrintReportHeader
         title="Chicken Slicing Profit Report"
-        description="Search slicing profit by date, chicken size, and sliced product."
-        actions={
-          <Button type="button" variant="outline" onClick={() => window.print()}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-        }
+        period={getReportPeriod(dateFrom, dateTo)}
       />
 
       <Card className="rounded-2xl border-slate-200 shadow-sm print:hidden">
@@ -330,66 +336,6 @@ export function ChickenSlicingProfitReportPageClient() {
           </div>
         </CardContent>
       </Card>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Total Capital</p>
-            <p className="mt-2 text-2xl font-bold">{formatMoney(summary.totalCapital)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Total Amount</p>
-            <p className="mt-2 text-2xl font-bold">{formatMoney(summary.totalGross)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Gross Profit</p>
-            <p
-              className={cn(
-                "mt-2 text-2xl font-bold",
-                summary.grossProfit < 0 ? "text-red-600" : "text-emerald-700"
-              )}
-            >
-              {formatMoney(summary.grossProfit)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Bodega Expenses</p>
-            <p className="mt-2 text-2xl font-bold text-red-600">
-              {formatMoney(summary.totalBodegaExpenses)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Net Profit</p>
-            <p
-              className={cn(
-                "mt-2 text-2xl font-bold",
-                summary.netProfit < 0 ? "text-red-600" : "text-emerald-700"
-              )}
-            >
-              {formatMoney(summary.netProfit)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5 text-center">
-            <p className="text-sm text-muted-foreground">Total Packs</p>
-            <p className="mt-2 text-2xl font-bold">{formatNumber(summary.totalPacks)}</p>
-          </CardContent>
-        </Card>
-      </div>
 
       <Card className="rounded-2xl border-slate-200 shadow-sm">
         <CardHeader className="border-b print:border-b-0">

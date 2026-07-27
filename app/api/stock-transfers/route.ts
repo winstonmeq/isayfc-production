@@ -133,6 +133,7 @@ async function handlePOST(req: NextRequest) {
       source?: string;
       bodegaProductId?: string;
       productId?: string;
+      standardPackingId?: string;
       qty?: number;
     }[];
   };

@@ -7,6 +7,7 @@ import { cleanString } from "@/lib/crud-utils";
 import OutletModel, { OutletStatus } from "@/models/Outlet";
 import OutletInventoryModel from "@/models/OutletInventory";
 import AuditLogModel from "@/models/AuditLog";
+import CustomerModel from "@/models/Customer";
 
 const outletStatuses: OutletStatus[] = ["ACTIVE", "INACTIVE"];
 
@@ -102,6 +103,18 @@ export async function PATCH(
   current.status = isOutletStatus(statusInput) ? statusInput : "ACTIVE";
   await current.save();
 
+  await CustomerModel.findOneAndUpdate(
+    { outletId: current._id, isActive: true },
+    {
+      $set: {
+        name,
+        address,
+        phone: contactNumber,
+        type: "SALE",
+      },
+    }
+  );
+
   await AuditLogModel.create({
     outletId: current._id,
     module: "OUTLETS",
@@ -167,6 +180,11 @@ export async function DELETE(
       { status: 404 }
     );
   }
+
+  await CustomerModel.updateMany(
+    { outletId: outlet._id, isActive: true },
+    { $set: { isActive: false } }
+  );
 
   await AuditLogModel.create({
     outletId: outlet._id,

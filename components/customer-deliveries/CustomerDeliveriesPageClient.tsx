@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Loader2,
@@ -183,6 +183,7 @@ function getProductPrice(product?: ProductOption) {
 }
 
 export function CustomerDeliveriesPageClient() {
+  const generatedDeliveryId = useId().replace(/[^a-zA-Z0-9]/g, "").slice(-6);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [bodegaProducts, setBodegaProducts] = useState<BodegaProductOption[]>([]);
@@ -211,7 +212,7 @@ export function CustomerDeliveriesPageClient() {
   });
 
   const [form, setForm] = useState({
-    deliveryCode: `CD-${Date.now().toString().slice(-6)}`,
+    deliveryCode: `CD-${generatedDeliveryId}`,
     customerId: "",
     outletId: "",
     category: "DELIVER" as DeliveryCategory,

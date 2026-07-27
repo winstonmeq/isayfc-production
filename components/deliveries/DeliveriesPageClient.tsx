@@ -451,11 +451,29 @@ export function DeliveriesPageClient() {
       return;
     }
 
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const isLateEntry = !editingId && form.deliveryDate < today;
+    const correctionReason = editingId
+      ? window.prompt("Reason for correcting this posted delivery (required):")?.trim()
+      : isLateEntry
+        ? window.prompt("Reason for entering this delivery late (required):")?.trim()
+        : "";
+    if ((editingId || isLateEntry) && (!correctionReason || correctionReason.length < 5)) {
+      toast.error("Enter a correction reason of at least 5 characters.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
       const payload = {
         ...form,
+        correctionReason,
         items: validItems.map((item) => ({
           categoryId: item.categoryId,
 
@@ -603,10 +621,17 @@ export function DeliveriesPageClient() {
     );
 
     if (!confirmed) return;
+    const reason = window.prompt("Reason for voiding this delivery:")?.trim();
+    if (!reason || reason.length < 5) {
+      toast.error("Enter a correction reason of at least 5 characters.");
+      return;
+    }
 
     try {
       const res = await fetch(`/api/deliveries/${delivery._id}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
       });
 
       const json = await res.json();

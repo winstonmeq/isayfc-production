@@ -2,17 +2,21 @@
 "use client";
 
 import { signOut, useSession } from "next-auth/react";
-import { Bell, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, UserCircle2 } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, UserCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { appNavItems, type AppNavItem } from "./nav-config";
 
 type Props = {
   collapsed: boolean;
   onToggle: () => void;
   onMobileMenu: () => void;
 };
+
+type SectionName = NonNullable<AppNavItem["section"]>;
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -22,10 +26,269 @@ function getGreeting() {
 }
 
 export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const user = session?.user;
   const displayName = user?.name || user?.username || "User";
   const roleName = user?.roleName || user?.role || "Staff";
+  const selectedModule = searchParams.get("module") || "";
+  const isPurchasingModule = ["/purchase-items", "/deliveries"].some(
+    (route) => selectedModule === route || pathname === route
+  );
+  const isProductionModule = ["/slicing"].some(
+    (route) =>
+      selectedModule === route ||
+      selectedModule.startsWith(`${route}/`) ||
+      pathname === route ||
+      pathname.startsWith(`${route}/`)
+  );
+  const isSalesModule = ["/sales", "/outlets", "/stock-transfers"].some(
+    (route) =>
+      selectedModule === route ||
+      selectedModule.startsWith(`${route}/`) ||
+      pathname === route ||
+      pathname.startsWith(`${route}/`)
+  );
+  const isCollectionsModule = ["/payments"].some(
+    (route) =>
+      selectedModule === route ||
+      selectedModule.startsWith(`${route}/`) ||
+      pathname === route ||
+      pathname.startsWith(`${route}/`)
+  );
+  const isProfitabilityModule = [
+    "/outlet-summary",
+    "/profit/chicken-slicing",
+    "/profit/products",
+  ].some(
+    (route) =>
+      selectedModule === route ||
+      selectedModule.startsWith(`${route}/`) ||
+      pathname === route ||
+      pathname.startsWith(`${route}/`)
+  );
+  const isExpensesModule =
+    selectedModule === "/expenses-bodega" || pathname === "/expenses-bodega";
+  const isInventoryModule = [
+    "/inventory/bodega",
+    "/inventory/products",
+    "/outlet-inventory",
+  ].some(
+    (route) =>
+      selectedModule === route ||
+      selectedModule.startsWith(`${route}/`) ||
+      pathname === route ||
+      pathname.startsWith(`${route}/`)
+  );
+  const currentArea = selectedModule.startsWith("/reports/")
+    ? "Reports"
+    : selectedModule === "/users" || selectedModule === "/roles"
+      ? "Users"
+      : isPurchasingModule
+        ? "Purchasing"
+        : isProductionModule
+          ? "Production"
+          : isSalesModule
+            ? "Sales"
+            : isCollectionsModule
+              ? "Collections"
+              : isProfitabilityModule
+                ? "Profitability"
+                : isExpensesModule
+                  ? "Expenses"
+                  : isInventoryModule
+                    ? "Inventory"
+            : pathname.startsWith("/operations")
+              ? "Operations"
+    : pathname.startsWith("/finance")
+      ? "Finance"
+      : pathname.startsWith("/admin")
+        ? "Administration"
+        : pathname.startsWith("/workspace")
+          ? "Workspace"
+          : "Home";
+  const permissions = user?.permissions || [];
+  const normalizedRole = String(user?.roleName || user?.role || "").toUpperCase();
+  const isAdmin = normalizedRole === "ADMIN";
+  const canViewReports =
+    isAdmin || permissions.some((permission) => permission.startsWith("reports."));
+  const canManageUsers =
+    isAdmin ||
+    permissions.includes("users.view") ||
+    permissions.includes("roles.view");
+  const firstReport =
+    [
+      ["reports.sales", "/reports/sales"],
+      ["reports.inventory", "/reports/inventory"],
+      ["reports.payments", "/reports/payments"],
+      ["reports.profit", "/reports/profit"],
+    ].find(([permission]) => isAdmin || permissions.includes(permission))?.[1] ||
+    "/reports/sales";
+  const firstUserModule =
+    isAdmin || permissions.includes("users.view") ? "/users" : "/roles";
+  function canAccessSection(section: SectionName) {
+    if (isAdmin) return true;
+    return appNavItems
+      .filter((item) => item.section === section)
+      .some(
+        (item) =>
+          (!item.permission || permissions.includes(item.permission)) ||
+          item.children?.some(
+            (child) =>
+              !child.permission || permissions.includes(child.permission)
+          )
+      );
+  }
+  function canAccessAnyRoute(routes: string[]) {
+    if (isAdmin) return true;
+    return appNavItems
+      .filter((item) => item.section === "Operations")
+      .flatMap((item) =>
+        item.children?.length
+          ? item.children.map((child) => ({
+              href: child.href,
+              permission: child.permission,
+            }))
+          : item.href
+            ? [{ href: item.href, permission: item.permission }]
+            : []
+      )
+      .some(
+        (item) =>
+          routes.some(
+            (route) =>
+              item.href === route || item.href.startsWith(`${route}/`)
+          ) &&
+          (!item.permission || permissions.includes(item.permission))
+      );
+  }
+  function canAccessAnyFinanceRoute(routes: string[]) {
+    if (isAdmin) return true;
+    return appNavItems
+      .filter((item) => item.section === "Finance")
+      .flatMap((item) =>
+        item.children?.length
+          ? item.children.map((child) => ({
+              href: child.href,
+              permission: child.permission,
+            }))
+          : item.href
+            ? [{ href: item.href, permission: item.permission }]
+            : []
+      )
+      .some(
+        (item) =>
+          routes.some(
+            (route) =>
+              item.href === route || item.href.startsWith(`${route}/`)
+          ) &&
+          (!item.permission || permissions.includes(item.permission))
+      );
+  }
+
+  const primaryNavigation = [
+    ...(canAccessSection("Workspace")
+      ? [
+          {
+            label: "Workspace",
+            href: "/workspace",
+            active:
+              pathname.startsWith("/workspace") &&
+              !selectedModule.startsWith("/reports/"),
+          },
+        ]
+      : []),
+    ...(canAccessAnyRoute(["/purchase-items", "/deliveries"])
+      ? [
+          {
+            label: "Purchasing",
+            href: `/operations?module=${encodeURIComponent("/purchase-items")}`,
+            active: isPurchasingModule,
+          },
+        ]
+      : []),
+    ...(canAccessAnyRoute(["/slicing"])
+      ? [
+          {
+            label: "Production",
+            href: `/operations?module=${encodeURIComponent("/slicing")}`,
+            active: isProductionModule,
+          },
+        ]
+      : []),
+    ...(canAccessAnyRoute(["/sales", "/outlets", "/stock-transfers"])
+      ? [
+          {
+            label: "Sales",
+            href: `/operations?module=${encodeURIComponent("/sales")}`,
+            active: isSalesModule,
+          },
+        ]
+      : []),
+    ...(canAccessAnyFinanceRoute(["/payments"])
+      ? [
+          {
+            label: "Collections",
+            href: `/finance?module=${encodeURIComponent("/payments")}`,
+            active: isCollectionsModule,
+          },
+        ]
+      : []),
+    ...(canAccessAnyFinanceRoute([
+      "/outlet-summary",
+      "/profit/chicken-slicing",
+      "/profit/products",
+    ])
+      ? [
+          {
+            label: "Profitability",
+            href: `/finance?module=${encodeURIComponent("/outlet-summary")}`,
+            active: isProfitabilityModule,
+          },
+        ]
+      : []),
+    ...(canAccessAnyFinanceRoute(["/expenses-bodega"])
+      ? [
+          {
+            label: "Expenses",
+            href: `/finance?module=${encodeURIComponent("/expenses-bodega")}`,
+            active: isExpensesModule,
+          },
+        ]
+      : []),
+    ...(canAccessAnyFinanceRoute([
+      "/inventory/bodega",
+      "/inventory/products",
+      "/outlet-inventory",
+    ])
+      ? [
+          {
+            label: "Inventory",
+            href: `/finance?module=${encodeURIComponent("/inventory/bodega")}`,
+            active: isInventoryModule,
+          },
+        ]
+      : []),
+    ...(canViewReports
+      ? [
+          {
+            label: "Reports",
+            href: `/finance?module=${encodeURIComponent(firstReport)}`,
+            active: selectedModule.startsWith("/reports/"),
+          },
+        ]
+      : []),
+    ...(canManageUsers
+      ? [
+          {
+            label: "Users",
+            href: `/admin?module=${encodeURIComponent(firstUserModule)}`,
+            active: selectedModule === "/users" || selectedModule === "/roles",
+          },
+        ]
+      : []),
+  ];
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
@@ -57,27 +320,26 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
             {getGreeting()}
           </p>
           <h1 className="truncate text-base font-black text-slate-950 sm:text-lg">
-            Business command center
+            {currentArea}
           </h1>
         </div>
 
-        <div className="hidden min-w-[280px] max-w-md flex-1 items-center rounded-2xl border border-slate-200 bg-slate-50 px-3 md:flex">
-          <Search className="mr-2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search pages, products, customers..."
-            className="h-10 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-          />
-        </div>
-
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          className="hidden h-10 w-10 rounded-2xl border-slate-200 bg-white md:inline-flex"
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5" />
-        </Button>
+        <nav className="hidden items-center gap-1 rounded-2xl bg-slate-100 p-1 xl:flex">
+          {primaryNavigation.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className={cn(
+                "rounded-xl px-3 py-2 text-sm font-bold transition",
+                item.active
+                  ? "bg-white text-slate-950 shadow-sm"
+                  : "text-slate-500 hover:text-slate-950"
+              )}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
 
         <div className="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm sm:flex">
           <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-950 text-white">
@@ -93,7 +355,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           type="button"
           onClick={() => signOut({ callbackUrl: "/login" })}
           className={cn(
-            "h-10 rounded-2xl bg-rose-600 px-3 font-bold hover:bg-rose-700",
+            "h-10 rounded-xl bg-slate-900 px-3 font-bold hover:bg-slate-800",
             "sm:px-4"
           )}
         >

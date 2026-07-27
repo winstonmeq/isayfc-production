@@ -71,11 +71,13 @@ function buildBodegaExpenseFilter(dateFrom: string, dateTo: string) {
     filter.expenseDate = {};
 
     if (dateFrom) {
-      filter.expenseDate.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      filter.expenseDate.$gte = new Date(`${dateFrom}T00:00:00+08:00`);
     }
 
     if (dateTo) {
-      filter.expenseDate.$lte = new Date(`${dateTo}T23:59:59.999Z`);
+      filter.expenseDate.$lt = new Date(
+        new Date(`${dateTo}T00:00:00+08:00`).getTime() + 24 * 60 * 60 * 1000
+      );
     }
   }
 
@@ -124,11 +126,13 @@ export async function GET(req: NextRequest) {
     batchFilter.slicingDate = {};
 
     if (dateFrom) {
-      batchFilter.slicingDate.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      batchFilter.slicingDate.$gte = new Date(`${dateFrom}T00:00:00+08:00`);
     }
 
     if (dateTo) {
-      batchFilter.slicingDate.$lte = new Date(`${dateTo}T23:59:59.999Z`);
+      batchFilter.slicingDate.$lt = new Date(
+        new Date(`${dateTo}T00:00:00+08:00`).getTime() + 24 * 60 * 60 * 1000
+      );
     }
   }
 
@@ -219,8 +223,12 @@ export async function GET(req: NextRequest) {
     const loosePcs = Math.trunc(numberValue(item.butal));
     const variance = numberValue(item.variance);
 
-    const deliveryPrice = getProductPrice(mainProduct, "buyingPrice");
-    const pricePerPack = getProductPrice(slicedProduct, "sellingPrice");
+    const deliveryPrice =
+      numberValue(item.inputUnitCost) ||
+      getProductPrice(mainProduct, "buyingPrice");
+    const pricePerPack =
+      numberValue(item.outputUnitPrice) ||
+      getProductPrice(slicedProduct, "sellingPrice");
     const pricePerPcs = standardPacking > 0 ? roundMoney(pricePerPack / standardPacking) : 0;
 
     // Sliced product sellingPrice is treated as PRICE PER PACK.
@@ -228,8 +236,15 @@ export async function GET(req: NextRequest) {
     // Price per pcs = 377 / 50 = 7.54.
     // Total amount/gross = full packs x price per pack + loose pcs x price per pcs.
     const capitalBaseQty = kilos > 0 ? kilos : heads;
-    const capital = roundMoney(capitalBaseQty * deliveryPrice);
-    const gross = roundMoney(actualPacks * pricePerPack + loosePcs * pricePerPcs);
+    const capital =
+      numberValue(item.inputCost) ||
+      roundMoney(capitalBaseQty * deliveryPrice);
+    const gross =
+      numberValue(item.outputValue) ||
+      roundMoney(actualPacks * pricePerPack + loosePcs * pricePerPcs);
+    // Profit shown by this report must be based on the current report values.
+    // Older slicing records can contain a stale recoveryProfit snapshot that
+    // represented capital as a negative amount instead of gross less capital.
     const profit = roundMoney(gross - capital);
 
     return {

@@ -5,13 +5,11 @@
 // an optional mapping to raw outlet-inventory stock.
 
 import { NextRequest, NextResponse } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import crypto from "node:crypto";
 import type { Types } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requireMobileAuth } from "@/lib/mobile-auth";
+import { saveUpload } from "@/lib/upload-storage";
 import OutletMenuItemModel from "@/models/OutletMenuItem";
 import OutletInventoryModel from "@/models/OutletInventory";
 
@@ -81,13 +79,11 @@ async function saveMenuImage(file: File | null): Promise<string> {
     throw new Error("Menu image must not exceed 5MB.");
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const filename = `${crypto.randomUUID()}.${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "menu");
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), buffer);
-
-  return `/uploads/menu/${filename}`;
+  return saveUpload(
+    "menu",
+    new Uint8Array(await file.arrayBuffer()),
+    extension
+  );
 }
 
 /**`r`n * Quick-add a simple sellable item from the mobile POS: name + price +`r`n * category + optional photo. If the name matches an active outlet-inventory`r`n * row, it is linked as a one-unit component so selling it deducts stock. Recipe`r`n * items with multiple ingredients are still set up on the web admin.`r`n *`r`n * Accepts multipart/form-data (so an image can be attached) and also plain

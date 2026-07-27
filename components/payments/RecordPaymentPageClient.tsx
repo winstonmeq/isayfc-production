@@ -249,6 +249,22 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
       return;
     }
 
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const correctionReason =
+      paymentDate < today
+        ? window.prompt("Reason for entering this payment late (required):")?.trim()
+        : "";
+
+    if (paymentDate < today && (!correctionReason || correctionReason.length < 5)) {
+      toast.error("Enter a late-entry reason of at least 5 characters.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -259,6 +275,7 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
       formData.set("amount", amount);
       formData.set("referenceNumber", referenceNumber);
       formData.set("remarks", remarks);
+      formData.set("correctionReason", correctionReason || "");
 
       if (receiptImage) {
         formData.set("receiptImage", receiptImage);
@@ -303,10 +320,17 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
     );
 
     if (!confirmed) return;
+    const reason = window.prompt("Reason for voiding this payment:")?.trim();
+    if (!reason || reason.length < 5) {
+      toast.error("Enter a correction reason of at least 5 characters.");
+      return;
+    }
 
     try {
       const res = await fetch(`/api/payments/${paymentId}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
       });
 
       const json = await res.json();
@@ -332,10 +356,17 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
     );
 
     if (!confirmed) return;
+    const reason = window.prompt("Reason for voiding this sale:")?.trim();
+    if (!reason || reason.length < 5) {
+      toast.error("Enter a correction reason of at least 5 characters.");
+      return;
+    }
 
     try {
       const res = await fetch(`/api/sales/${saleId}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
       });
 
       const json = await res.json();

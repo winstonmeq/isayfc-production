@@ -133,11 +133,6 @@ async function main() {
     .find({ name: nameRegex })
     .select("_id")
     .lean();
-  const testGrocery = await (ProductModel as any)
-    .find({ name: nameRegex })
-    .select("_id")
-    .lean();
-
   if (testBodega.length) {
     results.standardPacking = (
       await (StandardPackingModel as any).deleteMany({

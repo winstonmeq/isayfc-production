@@ -14,10 +14,21 @@ import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import CategoryModel from "@/models/Category";
 import CustomerModel from "@/models/Customer";
+import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ProductModel from "@/models/Product";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import StandardPackingModel from "@/models/StandardPacking";
+import OutletModel from "@/models/Outlet";
+import StockTransferModel from "@/models/StockTransfer";
+import StockTransferItemModel from "@/models/StockTransferItem";
+import { generateTransferNumber } from "@/lib/stock-transfers";
+import {
+  packingSnapshot,
+  toBaseUnitCost,
+} from "@/lib/inventory-units";
+import { correctionReason, recordCorrection } from "@/lib/corrections";
+import { manilaDateString } from "@/lib/date-utils";
 
 type SaleSource = "CHICKEN" | "BODEGA";
 
@@ -32,6 +43,7 @@ type SaleItemInput = {
   pricePerPack?: number;
   packSize?: number;
   stockPcsOut?: number;
+  saleUnit?: string;
   remarks?: string;
 };
 
@@ -45,7 +57,8 @@ type PreparedSaleItem = {
   qty: number;
   price: number;
   lineTotal: number;
-  stockUnit: "PACK" | "QTY";
+  unitCost: number;
+  stockUnit: "PACK" | "HEAD" | "QTY";
   packSize: number;
   stockPcsOut: number;
   previousStock: number;
@@ -67,6 +80,10 @@ function serializeSale(sale: any) {
     _id: sale._id.toString(),
     customerId: sale.customerId?._id?.toString?.() || sale.customerId?.toString?.(),
     customerName: sale.customerId?.name || "",
+    stockTransferId:
+      sale.stockTransferId?._id?.toString?.() ||
+      sale.stockTransferId?.toString?.() ||
+      "",
     source: sale.source || "BODEGA",
     receiptNumber: sale.receiptNumber || "",
     saleDate: sale.saleDate ? new Date(sale.saleDate).toISOString() : undefined,
@@ -237,7 +254,9 @@ async function handlePOST(req: NextRequest) {
   const saleDate = cleanString(body.saleDate);
   const receiptNumber = cleanString(body.receiptNumber);
   const remarks = cleanString(body.remarks);
+  const lateEntryReason = correctionReason(body.correctionReason);
   const items: SaleItemInput[] = Array.isArray(body.items) ? body.items : [];
+  const isLateEntry = Boolean(saleDate && saleDate < manilaDateString());
 
   if (!customerId || !isValidObjectId(customerId)) {
     return NextResponse.json(
@@ -260,6 +279,13 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
+  if (isLateEntry && lateEntryReason.length < 5) {
+    return NextResponse.json(
+      { success: false, message: "A reason of at least 5 characters is required for a backdated sale." },
+      { status: 400 }
+    );
+  }
+
   if (items.length === 0) {
     return NextResponse.json(
       { success: false, message: "At least one sale item is required." },
@@ -267,16 +293,30 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
-  const customerExists = await CustomerModel.exists({
+  const customer = await CustomerModel.findOne({
     _id: customerId,
     isActive: true,
-  });
+  }).select("_id outletId").lean();
 
-  if (!customerExists) {
+  if (!customer) {
     return NextResponse.json(
       { success: false, message: "Customer not found." },
       { status: 404 }
     );
+  }
+  const linkedOutletId = customer.outletId?.toString();
+  if (linkedOutletId) {
+    const outletExists = await OutletModel.exists({
+      _id: linkedOutletId,
+      isActive: true,
+      status: "ACTIVE",
+    });
+    if (!outletExists) {
+      return NextResponse.json(
+        { success: false, message: "The customer’s linked outlet is inactive or missing." },
+        { status: 400 }
+      );
+    }
   }
 
   const mongoSession = await mongoose.startSession();
@@ -340,7 +380,7 @@ async function handlePOST(req: NextRequest) {
           fail(
             400,
             source === "CHICKEN"
-              ? `Price per pack must be set in Bodega Product for ${product.name}.`
+              ? `Selling price must be set in Bodega Product for ${product.name}.`
               : `Unit price must be set in Product for ${product.name}.`
           );
         }
@@ -355,24 +395,30 @@ async function handlePOST(req: NextRequest) {
             ? await getPackSizeForBodegaProduct(product._id.toString(), mongoSession)
             : 0;
 
-        if (source === "CHICKEN" && standardPackSize <= 0) {
-          fail(400, `Pack size is not configured for ${product.name}.`);
-        }
-
         // SECURITY: for chicken sales, pack size must also come from the
         // active Standard PCS & Packs record, not from the browser request.
+        // Products without an output pack standard are sold per head.
+        const chickenUnit = standardPackSize > 0 ? "PACK" : "HEAD";
         const packSize = source === "CHICKEN" ? standardPackSize : 1;
-        const stockOut = source === "CHICKEN" ? qty * packSize : qty;
+        const stockOut =
+          source === "CHICKEN" && chickenUnit === "PACK" ? qty * packSize : qty;
 
         if (previousStock < stockOut) {
           fail(400, `Not enough stock for ${product.name}. Available: ${previousStock}.`);
+        }
+        if (
+          source === "CHICKEN" &&
+          chickenUnit === "HEAD" &&
+          Number(product.stockHeads || 0) < qty
+        ) {
+          fail(400, `Not enough heads for ${product.name}. Available: ${Number(product.stockHeads || 0)}.`);
         }
 
         const lineTotal = roundMoney(qty * price);
         totalQty += source === "CHICKEN" ? stockOut : qty;
         totalAmount = roundMoney(totalAmount + lineTotal);
 
-        if (source === "CHICKEN") {
+        if (source === "CHICKEN" && chickenUnit === "PACK") {
           totalPacks += qty;
         }
 
@@ -386,7 +432,15 @@ async function handlePOST(req: NextRequest) {
           qty,
           price,
           lineTotal,
-          stockUnit: source === "CHICKEN" ? "PACK" : "QTY",
+          unitCost: toBaseUnitCost(
+            product.buyingPrice,
+            packingSnapshot({
+              unit: source === "CHICKEN" && chickenUnit === "PACK" ? "PACK" : "QTY",
+              baseUnit: "PCS",
+              multiplier: packSize,
+            })
+          ),
+          stockUnit: source === "CHICKEN" ? chickenUnit : "QTY",
           packSize: source === "CHICKEN" ? packSize : 0,
           stockPcsOut: stockOut,
           previousStock,
@@ -417,23 +471,82 @@ async function handlePOST(req: NextRequest) {
 
       saleId = sale._id;
 
+      let stockTransfer: any = null;
+      if (linkedOutletId) {
+        [stockTransfer] = await StockTransferModel.create(
+          [{
+            transferNumber: await generateTransferNumber(),
+            outletId: linkedOutletId,
+            saleId: sale._id,
+            status: "DRAFT",
+            transferDate: new Date(saleDate),
+            totalItems: preparedItems.length,
+            totalQty: preparedItems.reduce(
+              (sum, item) => sum + item.stockPcsOut,
+              0
+            ),
+            remarks: `AUTO-CREATED FROM SALE ${receiptNumber}`,
+            createdBy: authSession?.user?.id,
+          }],
+          { session: mongoSession }
+        );
+
+        await StockTransferItemModel.insertMany(
+          preparedItems.map((item) => ({
+            transferId: stockTransfer._id,
+            source:
+              item.productType === "BODEGA_PRODUCT" ? "BODEGA" : "GROCERY",
+            bodegaProductId: item.bodegaProductId,
+            productId: item.productId,
+            productName: item.productName,
+            categoryName: item.categoryName,
+            packSize: item.packSize,
+            unitLabel:
+              item.stockUnit === "PACK"
+                ? "PACK"
+                : item.stockUnit === "HEAD"
+                  ? "HEAD"
+                  : "QTY",
+            buyingPrice: item.unitCost,
+            sellingPrice: item.price,
+            qty: item.qty,
+            qtyPcs: item.stockPcsOut,
+            receivedQty: 0,
+            receivedPcs: 0,
+            varianceQty: 0,
+            itemStatus: "PENDING",
+            remarks: `SALE ${receiptNumber}`,
+          })),
+          { session: mongoSession }
+        );
+
+        sale.stockTransferId = stockTransfer._id;
+        await sale.save({ session: mongoSession });
+      }
+
       const saleLinesToInsert = [];
       const bodegaStockTransactions = [];
+      const inventoryTransactions = [];
 
       for (const item of preparedItems) {
         let updatedProduct: any = null;
         let previousStock = item.previousStock;
         let newStock = previousStock - item.stockPcsOut;
 
-        if (item.productType === "BODEGA_PRODUCT") {
+        if (!linkedOutletId && item.productType === "BODEGA_PRODUCT") {
+          const isHeadSale = item.stockUnit === "HEAD";
           updatedProduct = await BodegaProductModel.findOneAndUpdate(
             {
               _id: item.bodegaProductId,
               isActive: true,
               stockQty: { $gte: item.stockPcsOut },
+              ...(isHeadSale ? { stockHeads: { $gte: item.qty } } : {}),
             },
             {
-              $inc: { stockQty: -item.stockPcsOut },
+              $inc: {
+                stockQty: -item.stockPcsOut,
+                ...(isHeadSale ? { stockHeads: -item.qty } : {}),
+              },
             },
             { new: true, session: mongoSession }
           );
@@ -449,6 +562,8 @@ async function handlePOST(req: NextRequest) {
             bodegaProductId: item.bodegaProductId,
             type: "STOCK_OUT",
             quantity: item.stockPcsOut,
+            heads: isHeadSale ? item.qty : 0,
+            pieces: isHeadSale ? 0 : item.stockPcsOut,
             previousStock,
             newStock,
             remarks: `SALE ${receiptNumber}`,
@@ -458,7 +573,7 @@ async function handlePOST(req: NextRequest) {
           });
         }
 
-        if (item.productType === "PRODUCT") {
+        if (!linkedOutletId && item.productType === "PRODUCT") {
           updatedProduct = await ProductModel.findOneAndUpdate(
             {
               _id: item.productId,
@@ -474,6 +589,21 @@ async function handlePOST(req: NextRequest) {
           if (!updatedProduct) {
             fail(400, `Not enough stock for ${item.productName}.`);
           }
+
+          newStock = Number(updatedProduct.stockPcs || 0);
+          previousStock = newStock + item.stockPcsOut;
+          inventoryTransactions.push({
+            productId: item.productId,
+            type: "SALE",
+            unit: "PCS",
+            quantity: item.stockPcsOut,
+            previousStock,
+            newStock,
+            remarks: `SALE ${receiptNumber}`,
+            referenceType: "SALE",
+            referenceId: sale._id,
+            createdBy: authSession?.user?.id,
+          });
         }
 
         saleLinesToInsert.push({
@@ -487,6 +617,7 @@ async function handlePOST(req: NextRequest) {
           qty: item.qty,
           price: item.price,
           lineTotal: item.lineTotal,
+          unitCost: item.unitCost,
           stockUnit: item.stockUnit,
           packSize: item.packSize,
           stockPcsOut: item.stockPcsOut,
@@ -501,6 +632,26 @@ async function handlePOST(req: NextRequest) {
           session: mongoSession,
         });
       }
+
+      if (inventoryTransactions.length > 0) {
+        await InventoryTransactionModel.insertMany(inventoryTransactions, {
+          session: mongoSession,
+        });
+      }
+
+      if (isLateEntry) {
+        await recordCorrection({
+          entityType: "SALE",
+          entityId: sale._id,
+          referenceNumber: receiptNumber,
+          correctionType: "LATE_ENTRY",
+          reason: lateEntryReason,
+          transactionDate: sale.saleDate,
+          correctedBy: authSession?.user?.id,
+          metadata: { postedAt: new Date().toISOString() },
+          session: mongoSession,
+        });
+      }
     });
 
     const populatedSale = await SaleModel.findById(saleId)
@@ -510,7 +661,9 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: "Sale created successfully.",
+        message: linkedOutletId
+          ? "Sale created successfully with a pending stock transfer."
+          : "Sale created successfully.",
         data: serializeSale(populatedSale),
       },
       { status: 201 }

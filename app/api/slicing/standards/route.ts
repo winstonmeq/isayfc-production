@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
@@ -9,7 +9,7 @@ function cleanLabel(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const { response } = await requirePermission(["slicing.manage", "slicing.view", "standard-packing.view", "standard-packing.manage"]);
   if (response) return response;
 
@@ -43,6 +43,8 @@ export async function GET(_req: NextRequest) {
           "",
         productName,
         standardPacking: Number(standard.standardPacking || 0),
+        minimumKilos: Number(standard.minimumKilos || 0),
+        maximumKilos: Number(standard.maximumKilos || 0),
         standardSlice: Number(standard.standardSlice || 0),
         chickenSizeType: standard.chickenSizeType || "",
         availableStock: Number(standard.wholeChickenId?.stockQty || 0),
