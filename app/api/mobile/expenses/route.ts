@@ -1,5 +1,6 @@
 // app/api/mobile/expenses/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import connectDb from "@/lib/mongodb";
@@ -115,47 +116,69 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Expenses are cash-drawer movements, so require an open shift. Otherwise the
-  // outlet can spend cash that never appears in the close-shift variance.
-  const shift = await CashShiftModel.findOne({
-    cashierId: user.id,
-    outletId: user.outlet.id,
-    status: "OPEN",
-  })
-    .select("_id")
-    .lean<{ _id: { toString: () => string } }>();
+  const mongoSession = await mongoose.startSession();
+  try {
+    let expenseId = "";
 
-  if (!shift) {
+    await mongoSession.withTransaction(async () => {
+      // Writing the shift inside the same transaction makes expense posting
+      // conflict safely with OPEN -> CLOSING during drawer close.
+      const shift = await CashShiftModel.findOneAndUpdate(
+        {
+          cashierId: user.id,
+          outletId: user.outlet!.id,
+          status: "OPEN",
+        },
+        { $inc: { cashExpenses: amount } },
+        { new: true, session: mongoSession }
+      );
+
+      if (!shift) {
+        throw new Error("NO_OPEN_SHIFT");
+      }
+
+      const shiftId = shift._id.toString();
+      const [expense] = await ExpenseModel.create(
+        [
+          {
+            name,
+            expenseCategory: "BODEGA",
+            type,
+            expenseDate: new Date(),
+            amount,
+            outletId: user.outlet!.id,
+            shiftId,
+            remarks: `MOBILE EXPENSE OUTLET:${user.outlet!.id} SHIFT:${shiftId}`,
+            createdBy: user.id,
+            isActive: true,
+          },
+        ],
+        { session: mongoSession }
+      );
+      expenseId = expense._id.toString();
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Expense recorded.",
+      expense: { id: expenseId, name, amount },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NO_OPEN_SHIFT") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Open a cash shift before recording expenses.",
+        },
+        { status: 409 }
+      );
+    }
+    console.error(error);
     return NextResponse.json(
-      { success: false, message: "Open a cash shift before recording expenses." },
-      { status: 409 }
+      { success: false, message: "Unable to record the expense." },
+      { status: 500 }
     );
+  } finally {
+    await mongoSession.endSession();
   }
-
-  const shiftId = shift._id.toString();
-  const shiftTag = ` SHIFT:${shiftId}`;
-
-  const expense = await ExpenseModel.create({
-    name,
-    expenseCategory: "BODEGA",
-    type,
-    expenseDate: new Date(),
-    amount,
-    // First-class fields; remarks tag kept for backward compatibility.
-    outletId: user.outlet.id,
-    shiftId,
-    remarks: `MOBILE EXPENSE OUTLET:${user.outlet.id}${shiftTag}`,
-    createdBy: user.id,
-    isActive: true,
-  });
-
-  return NextResponse.json({
-    success: true,
-    message: "Expense recorded.",
-    expense: {
-      id: expense._id.toString(),
-      name: expense.name,
-      amount: expense.amount,
-    },
-  });
 }

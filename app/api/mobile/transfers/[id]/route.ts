@@ -109,14 +109,43 @@ export async function POST(
   const mongoSession = await mongoose.startSession();
   try {
     await mongoSession.withTransaction(async () => {
-      const transfer = await StockTransferModel.findOne({
-        _id: id,
-        outletId: user.outlet!.id,
-      }).session(mongoSession);
+      // Atomically claim a dispatched transfer. A second confirmation cannot
+      // pass this state guard, and a failed transaction rolls the claim back.
+      const transfer = await StockTransferModel.findOneAndUpdate(
+        {
+          _id: id,
+          outletId: user.outlet!.id,
+          status: { $in: ["IN_TRANSIT", "DELIVERED"] },
+        },
+        {
+          $set: {
+            status: "CONFIRMED",
+            confirmedAt: new Date(),
+            confirmedBy: user.id,
+            deliveredAt: new Date(),
+          },
+        },
+        { new: true, session: mongoSession }
+      );
 
-      if (!transfer) throw new ApiError(404, "Transfer not found.");
-      if (transfer.status === "CONFIRMED") throw new ApiError(400, "This transfer is already confirmed.");
-      if (transfer.status === "CANCELLED") throw new ApiError(400, "This transfer was cancelled.");
+      if (!transfer) {
+        const existing = await StockTransferModel.findOne({
+          _id: id,
+          outletId: user.outlet!.id,
+        })
+          .select("status")
+          .session(mongoSession)
+          .lean();
+        if (!existing) throw new ApiError(404, "Transfer not found.");
+        throw new ApiError(
+          400,
+          existing.status === "DRAFT"
+            ? "This transfer has not been dispatched yet."
+            : existing.status === "CONFIRMED"
+              ? "This transfer is already confirmed."
+              : "This transfer cannot be confirmed."
+        );
+      }
 
       const items = await StockTransferItemModel.find({ transferId: id }).session(mongoSession);
 
@@ -219,9 +248,6 @@ export async function POST(
       transfer.totalReceivedQty = totalReceivedQty;
       transfer.totalVarianceQty = totalVarianceQty;
       transfer.hasDiscrepancy = totalVarianceQty > 0;
-      transfer.status = "CONFIRMED";
-      transfer.confirmedAt = new Date();
-      transfer.confirmedBy = user.id as any;
       if (body?.outletRemarks) transfer.outletRemarks = String(body.outletRemarks).trim();
       await transfer.save({ session: mongoSession });
     });

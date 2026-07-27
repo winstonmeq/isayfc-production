@@ -1,5 +1,5 @@
 // lib/cash-shift.ts
-import { Types } from "mongoose";
+import { Types, type ClientSession } from "mongoose";
 
 import SaleModel from "@/models/Sale";
 import ExpenseModel from "@/models/Expense";
@@ -21,17 +21,20 @@ function shiftMatch(shiftId: string) {
 }
 
 /** Sum the (non-voided, cash) sales belonging to a given shift. */
-export async function sumShiftSales(shiftId: string) {
-  const sales = await SaleModel.find({
+export async function sumShiftSales(
+  shiftId: string,
+  session?: ClientSession
+) {
+  const query = SaleModel.find({
     ...shiftMatch(shiftId),
     // Only cash counts toward the drawer. Legacy rows have no paymentMethod
     // (undefined) and were all cash, so accept CASH or unset; exclude GCASH
     // and CREDIT once those start being written.
     paymentMethod: { $in: ["CASH", null] },
     isVoided: { $ne: true },
-  })
-    .select("totalAmount")
-    .lean();
+  }).select("totalAmount");
+  if (session) query.session(session);
+  const sales = await query.lean();
 
   let total = 0;
   for (const s of sales as Array<{ totalAmount?: number }>) {
@@ -41,13 +44,16 @@ export async function sumShiftSales(shiftId: string) {
 }
 
 /** Sum the active expenses belonging to a given shift. */
-export async function sumShiftExpenses(shiftId: string) {
-  const expenses = await ExpenseModel.find({
+export async function sumShiftExpenses(
+  shiftId: string,
+  session?: ClientSession
+) {
+  const query = ExpenseModel.find({
     isActive: true,
     ...shiftMatch(shiftId),
-  })
-    .select("amount")
-    .lean();
+  }).select("amount");
+  if (session) query.session(session);
+  const expenses = await query.lean();
 
   let total = 0;
   for (const e of expenses as Array<{ amount?: number }>) {

@@ -86,7 +86,13 @@ async function saveMenuImage(file: File | null): Promise<string> {
   );
 }
 
-/**`r`n * Quick-add a simple sellable item from the mobile POS: name + price +`r`n * category + optional photo. If the name matches an active outlet-inventory`r`n * row, it is linked as a one-unit component so selling it deducts stock. Recipe`r`n * items with multiple ingredients are still set up on the web admin.`r`n *`r`n * Accepts multipart/form-data (so an image can be attached) and also plain
+/**
+ * Quick-add a simple sellable item from the mobile POS: name + price,
+ * category + optional photo. The name must match an active outlet-inventory
+ * row and is linked as a one-unit component so every sale deducts stock.
+ * Recipe items with multiple ingredients are set up by an administrator.
+ *
+ * Accepts multipart/form-data (so an image can be attached) and also plain
  * JSON (no image), for backward compatibility.
  */
 export async function POST(req: NextRequest) {
@@ -182,16 +188,25 @@ export async function POST(req: NextRequest) {
       productName?: string;
     }>();
 
-  const components = linkedInventory?.productId
-    ? [
-        {
-          productSource: linkedInventory.productSource || "BODEGA",
-          productId: linkedInventory.productId,
-          productName: linkedInventory.productName || name,
-          qtyPerSale: 1,
-        },
-      ]
-    : [];
+  if (!linkedInventory?.productId) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "This name does not match outlet inventory. Receive or create the stock item first so sales can deduct it.",
+      },
+      { status: 409 }
+    );
+  }
+
+  const components = [
+    {
+      productSource: linkedInventory.productSource || "BODEGA",
+      productId: linkedInventory.productId,
+      productName: linkedInventory.productName || name,
+      qtyPerSale: 1,
+    },
+  ];
 
   const item = await OutletMenuItemModel.create({
     outletId: user.outlet.id,
@@ -215,7 +230,7 @@ export async function POST(req: NextRequest) {
         category: item.category,
         price: Number(item.price || 0),
         imageUrl: item.imageUrl || "",
-        stockLinked: components.length > 0,
+        stockLinked: true,
       },
     },
     { status: 201 }

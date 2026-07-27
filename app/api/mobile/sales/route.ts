@@ -160,6 +160,12 @@ export async function POST(req: NextRequest) {
         totalQty?: number;
       }>();
     if (existing) {
+      const totalAmount = Number(existing.totalAmount || 0);
+      const retryCash = Number(body?.cashReceived);
+      const cashReceived =
+        Number.isFinite(retryCash) && retryCash >= totalAmount
+          ? retryCash
+          : totalAmount;
       return NextResponse.json({
         success: true,
         message: "Sale already recorded.",
@@ -167,8 +173,11 @@ export async function POST(req: NextRequest) {
         sale: {
           id: existing._id.toString(),
           receiptNumber: existing.receiptNumber,
-          totalAmount: Number(existing.totalAmount || 0),
+          totalAmount,
           totalQty: Number(existing.totalQty || 0),
+          cashReceived,
+          change: cashReceived - totalAmount,
+          warnings: [],
         },
       });
     }
@@ -177,30 +186,6 @@ export async function POST(req: NextRequest) {
 
   try {
     let result: any = null;
-
-    // A sale must belong to an open shift, otherwise its cash never appears in
-    // any drawer count and the cash-close variance is silently wrong. Require
-    // one up front instead of allowing an orphaned, untracked sale.
-    const openShift = await CashShiftModel.findOne({
-      cashierId: user.id,
-      outletId,
-      status: "OPEN",
-    })
-      .select("_id")
-      .lean<{ _id: { toString: () => string } }>();
-
-    if (!openShift) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Open a cash shift before recording sales.",
-        },
-        { status: 409 }
-      );
-    }
-
-    const shiftId = openShift._id.toString();
-    const shiftTag = ` SHIFT:${shiftId}`;
 
     await mongoSession.withTransaction(async () => {
       // 1) Load the menu items in the cart (scoped to this outlet).
@@ -267,6 +252,39 @@ export async function POST(req: NextRequest) {
             });
         }
       }
+
+      const cashReceived = Number(body?.cashReceived);
+      if (!Number.isFinite(cashReceived) || cashReceived < totalAmount) {
+        throw new ApiError(
+          400,
+          `Cash received must be at least ${totalAmount.toFixed(2)}.`
+        );
+      }
+
+      // Claim and update the OPEN shift inside this transaction. Close-shift
+      // changes OPEN -> CLOSING in its own transaction, so MongoDB makes the
+      // concurrent operations conflict instead of allowing an orphaned sale.
+      const openShift = await CashShiftModel.findOneAndUpdate(
+        {
+          cashierId: user.id,
+          outletId,
+          status: "OPEN",
+        },
+        {
+          $inc: {
+            cashSales: totalAmount,
+            salesCount: 1,
+          },
+        },
+        { new: true, session: mongoSession }
+      );
+
+      if (!openShift) {
+        throw new ApiError(409, "Open a cash shift before recording sales.");
+      }
+
+      const shiftId = openShift._id.toString();
+      const shiftTag = ` SHIFT:${shiftId}`;
 
       // 3) Create the sale.
       let receiptNumber = await nextReceiptNumber();
@@ -384,13 +402,12 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const cashReceived = Number(body?.cashReceived || 0);
       result = {
         id: sale._id.toString(),
         receiptNumber,
         totalAmount,
         totalQty,
-        cashReceived: cashReceived > 0 ? cashReceived : totalAmount,
+        cashReceived,
         change: cashReceived > totalAmount ? cashReceived - totalAmount : 0,
         warnings,
       };
@@ -413,6 +430,12 @@ export async function POST(req: NextRequest) {
           totalQty?: number;
         }>();
       if (existing) {
+        const totalAmount = Number(existing.totalAmount || 0);
+        const retryCash = Number(body?.cashReceived);
+        const cashReceived =
+          Number.isFinite(retryCash) && retryCash >= totalAmount
+            ? retryCash
+            : totalAmount;
         return NextResponse.json({
           success: true,
           message: "Sale already recorded.",
@@ -420,8 +443,11 @@ export async function POST(req: NextRequest) {
           sale: {
             id: existing._id.toString(),
             receiptNumber: existing.receiptNumber,
-            totalAmount: Number(existing.totalAmount || 0),
+            totalAmount,
             totalQty: Number(existing.totalQty || 0),
+            cashReceived,
+            change: cashReceived - totalAmount,
+            warnings: [],
           },
         });
       }

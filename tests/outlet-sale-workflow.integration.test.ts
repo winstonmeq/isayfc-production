@@ -54,3 +54,25 @@ test("payment and void routes retain allocation and reversal safeguards", () => 
     /Cancel the linked stock transfer before voiding this sale/
   );
 });
+
+test("mobile cashier flow retains shift, cash, confirmation, and void guards", () => {
+  const sale = source("app/api/mobile/sales/route.ts");
+  const closeShift = source("app/api/mobile/cash/close/route.ts");
+  const expense = source("app/api/mobile/expenses/route.ts");
+  const confirm = source("app/api/mobile/transfers/[id]/route.ts");
+  const voidSale = source("app/api/mobile/sales/[id]/route.ts");
+  const quickAdd = source("app/api/mobile/products/route.ts");
+
+  assert.match(sale, /cashReceived\s*<\s*totalAmount/);
+  assert.match(sale, /CashShiftModel\.findOneAndUpdate/);
+  assert.match(sale, /status:\s*"OPEN"/);
+  assert.match(closeShift, /status:\s*"CLOSING"/);
+  assert.match(closeShift, /withTransaction/);
+  assert.match(expense, /CashShiftModel\.findOneAndUpdate/);
+  assert.match(confirm, /status:\s*\{\s*\$in:\s*\["IN_TRANSIT",\s*"DELIVERED"\]\s*\}/);
+  assert.match(confirm, /StockTransferModel\.findOneAndUpdate/);
+  assert.match(voidSale, /status:\s*"VOIDED"/);
+  assert.match(voidSale, /type:\s*"VOID"/);
+  assert.match(voidSale, /stockQty:\s*Number\(movement\.quantity/);
+  assert.match(quickAdd, /does not match outlet inventory/);
+});

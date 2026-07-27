@@ -1,5 +1,6 @@
 // app/api/mobile/cash/close/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import connectDb from "@/lib/mongodb";
@@ -44,52 +45,92 @@ export async function POST(req: NextRequest) {
   // deadlock a cashier who was reassigned while holding an open shift: close
   // would 404 (outlet mismatch) while open would 409 (shift still open). The
   // shift document carries its own outletId for reporting.
-  const shift = await CashShiftModel.findOne({
-    cashierId: user.id,
-    status: "OPEN",
-  });
+  const mongoSession = await mongoose.startSession();
+  try {
+    let summary:
+      | {
+          openingFloat: number;
+          cashSales: number;
+          cashExpenses: number;
+          salesCount: number;
+          expectedCash: number;
+          countedCash: number;
+          variance: number;
+          openedAt: string | null;
+          closedAt: string;
+        }
+      | undefined;
 
-  if (!shift) {
+    await mongoSession.withTransaction(async () => {
+      // OPEN -> CLOSING is the atomic gate shared with checkout. A checkout
+      // that has not committed cannot silently land after this drawer count.
+      const shift = await CashShiftModel.findOneAndUpdate(
+        { cashierId: user.id, status: "OPEN" },
+        { $set: { status: "CLOSING" } },
+        { new: true, session: mongoSession }
+      );
+
+      if (!shift) {
+        throw new Error("NO_OPEN_SHIFT");
+      }
+
+      const { total: cashSales, count: salesCount } = await sumShiftSales(
+        shift._id.toString(),
+        mongoSession
+      );
+      const { total: cashExpenses } = await sumShiftExpenses(
+        shift._id.toString(),
+        mongoSession
+      );
+      const expectedCash =
+        Number(shift.openingFloat || 0) + cashSales - cashExpenses;
+      const variance = countedCash - expectedCash;
+      const closedAt = new Date();
+
+      shift.status = "CLOSED";
+      shift.cashSales = cashSales;
+      shift.cashExpenses = cashExpenses;
+      shift.salesCount = salesCount;
+      shift.expectedCash = expectedCash;
+      shift.countedCash = countedCash;
+      shift.variance = variance;
+      shift.closedAt = closedAt;
+      shift.closeRemarks = String(body?.remarks || "").trim();
+      await shift.save({ session: mongoSession });
+
+      summary = {
+        openingFloat: Number(shift.openingFloat || 0),
+        cashSales,
+        cashExpenses,
+        salesCount,
+        expectedCash,
+        countedCash,
+        variance,
+        openedAt: shift.openedAt
+          ? new Date(shift.openedAt).toISOString()
+          : null,
+        closedAt: closedAt.toISOString(),
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Shift closed.",
+      summary,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NO_OPEN_SHIFT") {
+      return NextResponse.json(
+        { success: false, message: "You have no open shift to close." },
+        { status: 404 }
+      );
+    }
+    console.error(error);
     return NextResponse.json(
-      { success: false, message: "You have no open shift to close." },
-      { status: 404 }
+      { success: false, message: "Unable to close the shift." },
+      { status: 500 }
     );
+  } finally {
+    await mongoSession.endSession();
   }
-
-  const { total: cashSales, count: salesCount } = await sumShiftSales(
-    shift._id.toString()
-  );
-
-  const { total: cashExpenses } = await sumShiftExpenses(shift._id.toString());
-  const expectedCash =
-    Number(shift.openingFloat || 0) + cashSales - cashExpenses;
-  const variance = countedCash - expectedCash;
-
-  shift.status = "CLOSED";
-  shift.cashSales = cashSales;
-  shift.cashExpenses = cashExpenses;
-  shift.salesCount = salesCount;
-  shift.expectedCash = expectedCash;
-  shift.countedCash = countedCash;
-  shift.variance = variance;
-  shift.closedAt = new Date();
-  shift.closeRemarks = String(body?.remarks || "").trim();
-
-  await shift.save();
-
-  return NextResponse.json({
-    success: true,
-    message: "Shift closed.",
-    summary: {
-      openingFloat: Number(shift.openingFloat || 0),
-      cashSales,
-      cashExpenses,
-      salesCount,
-      expectedCash,
-      countedCash,
-      variance, // positive = over, negative = short
-      openedAt: shift.openedAt ? new Date(shift.openedAt).toISOString() : null,
-      closedAt: shift.closedAt.toISOString(),
-    },
-  });
 }

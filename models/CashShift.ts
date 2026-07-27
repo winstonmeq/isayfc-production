@@ -16,7 +16,7 @@ export interface ICashShift extends Document {
   outletId: Types.ObjectId;
   cashierId: Types.ObjectId;
   cashierName: string;
-  status: "OPEN" | "CLOSED";
+  status: "OPEN" | "CLOSING" | "CLOSED";
 
   openingFloat: number;
   openedAt: Date;
@@ -44,7 +44,7 @@ const CashShiftSchema = new Schema<ICashShift>(
     cashierName: { type: String, default: "", trim: true },
     status: {
       type: String,
-      enum: ["OPEN", "CLOSED"],
+      enum: ["OPEN", "CLOSING", "CLOSED"],
       default: "OPEN",
       required: true,
     },
