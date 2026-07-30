@@ -142,6 +142,31 @@ function formatDate(value?: string) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+async function fetchAllLookupRows(path: string) {
+  const rows: any[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const separator = path.includes("?") ? "&" : "?";
+    const res = await fetch(
+      `${path}${separator}page=${page}&limit=100`,
+      { cache: "no-store" }
+    );
+    const json = await res.json();
+
+    if (!res.ok || !json.success) {
+      throw new Error(json.message || "Failed to load lookup data.");
+    }
+
+    rows.push(...(json.data || []));
+    totalPages = Math.max(Number(json.meta?.totalPages || 1), 1);
+    page += 1;
+  } while (page <= totalPages);
+
+  return rows;
+}
+
 export function DeliveriesPageClient() {
   const [deliveries, setDeliveries] = useState<DeliveryItem[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -221,38 +246,22 @@ export function DeliveriesPageClient() {
   }
 
   async function loadCategories() {
-    const res = await fetch("/api/categories?limit=1000", {
-      cache: "no-store",
-    });
-
-    const json = await res.json();
-
-    if (res.ok && json.success) {
-      setCategories(json.data || []);
-    }
+    const rows = await fetchAllLookupRows("/api/categories");
+    setCategories(rows);
   }
 
   async function loadProducts() {
-    const res = await fetch("/api/bodega-products?limit=1000", {
-      cache: "no-store",
-    });
+    const rows = await fetchAllLookupRows("/api/bodega-products");
+    const normalizedProducts: ProductOption[] = rows.map((item: any) => ({
+      _id: item._id,
+      name: item.name,
+      buyingPrice: Number(item.buyingPrice || 0),
+      categoryId: getCategoryId(item),
+      categoryName: getCategoryName(item),
+      stockQty: Number(item.stockQty || 0),
+    }));
 
-    const json = await res.json();
-
-    if (res.ok && json.success) {
-      const normalizedProducts: ProductOption[] = (json.data || []).map(
-        (item: any) => ({
-          _id: item._id,
-          name: item.name,
-          buyingPrice: Number(item.buyingPrice || 0),
-          categoryId: getCategoryId(item),
-          categoryName: getCategoryName(item),
-          stockQty: Number(item.stockQty || 0),
-        })
-      );
-
-      setProducts(normalizedProducts);
-    }
+    setProducts(normalizedProducts);
   }
 
   async function loadDeliveries() {
