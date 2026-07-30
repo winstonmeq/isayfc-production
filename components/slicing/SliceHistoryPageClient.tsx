@@ -42,6 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { getSlicingVariance } from "@/lib/slicing-validation";
 
 type ProductOption = {
   _id: string;
@@ -107,6 +108,10 @@ function getYieldRate(record: SlicingHistoryItem) {
   return (numberValue(record.actualSlicedPcs) / stdPcs) * 100;
 }
 
+function getVariance(record: SlicingHistoryItem) {
+  return getSlicingVariance(record.actualSlicedPcs, getStdPcs(record));
+}
+
 export function SliceHistoryPageClient() {
   const [records, setRecords] = useState<SlicingHistoryItem[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -138,7 +143,7 @@ export function SliceHistoryPageClient() {
         actualPcs: sum.actualPcs + numberValue(record.actualSlicedPcs),
         packs: sum.packs + numberValue(record.actualPacks),
         loosePcs: sum.loosePcs + getLoosePcs(record),
-        variance: sum.variance + numberValue(record.variance),
+        variance: sum.variance + getVariance(record),
       }),
       {
         heads: 0,
@@ -344,7 +349,7 @@ export function SliceHistoryPageClient() {
                     const stdPcs = getStdPcs(record);
                     const loosePcs = getLoosePcs(record);
                     const yieldRate = getYieldRate(record);
-                    const variance = numberValue(record.variance);
+                    const variance = getVariance(record);
                     return (
                       <TableRow key={record._id}>
                         <TableCell>{formatDate(record.slicingDate)}</TableCell>
@@ -417,7 +422,7 @@ export function SliceHistoryPageClient() {
                 const stdPcs = getStdPcs(record);
                 const loosePcs = getLoosePcs(record);
                 const yieldRate = getYieldRate(record);
-                const variance = numberValue(record.variance);
+                const variance = getVariance(record);
                 return (
                   <ErpMobileCard key={record._id}>
                     <div className="flex items-start justify-between gap-3">
