@@ -3,6 +3,13 @@ export type SlicingKiloRange = {
   maximumTotalKilos: number;
 };
 
+export function getSlicingVariance(actualSlicedPcs: unknown, totalStdPcs: unknown) {
+  const actual = Number(actualSlicedPcs);
+  const standard = Number(totalStdPcs);
+
+  return (Number.isFinite(actual) ? actual : 0) - (Number.isFinite(standard) ? standard : 0);
+}
+
 export function getSlicingKiloRange(
   bags: number,
   minimumKilosPerBag: number,

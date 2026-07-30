@@ -5,7 +5,7 @@ import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString, getPagination } from "@/lib/crud-utils";
-import { getSlicingKiloIssue } from "@/lib/slicing-validation";
+import { getSlicingKiloIssue, getSlicingVariance } from "@/lib/slicing-validation";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import SlicingBatchModel from "@/models/SlicingBatch";
@@ -85,6 +85,8 @@ function uniqueClean(values: unknown[]) {
 
 function serializeSlicingItem(item: any) {
   const batchId = item.batchId?._id?.toString?.() || item.batchId?.toString?.() || "";
+  const totalStdPcs = toNumber(item.totalStdPcs);
+  const actualSlicedPcs = toNumber(item.actualSlicedPcs);
 
   return {
     _id: item._id.toString(),
@@ -93,15 +95,15 @@ function serializeSlicingItem(item: any) {
     slicedProductName: item.slicedProductName,
     qtyToSlice: item.heads || 0,
     heads: item.heads || 0,
-    actualSlicedPcs: item.actualSlicedPcs || 0,
+    actualSlicedPcs,
     standardSlice: item.standardSlice || 0,
     standardPacking: item.standardPacking || 0,
     minimumKilos: item.minimumKilos || 0,
     maximumKilos: item.maximumKilos || 0,
-    totalStdPcs: item.totalStdPcs || 0,
+    totalStdPcs,
     actualPacks: item.actualPacks || 0,
     butal: item.butal || 0,
-    variance: item.variance || 0,
+    variance: getSlicingVariance(actualSlicedPcs, totalStdPcs),
     kilos: item.kilos || 0,
     bags: item.bags || 0,
     slicingDate: item.batchId?.slicingDate
@@ -185,7 +187,7 @@ export async function GET(req: NextRequest) {
           actualSlicedPcs: { $sum: "$actualSlicedPcs" },
           actualPacks: { $sum: "$actualPacks" },
           butal: { $sum: "$butal" },
-          variance: { $sum: "$variance" },
+          variance: { $sum: { $subtract: ["$actualSlicedPcs", "$totalStdPcs"] } },
         },
       },
       {
@@ -585,7 +587,7 @@ async function handlePOST(req: NextRequest) {
 	    const totalStd = heads * standardSlice;
 	    const actualPacks = Math.floor(actualSlicedPcs / standardPacking);
 	    const butal = actualSlicedPcs % standardPacking;
-	    const variance = actualSlicedPcs - totalStd;
+	    const variance = getSlicingVariance(actualSlicedPcs, totalStd);
 	    const yieldRate = totalStd > 0 ? actualSlicedPcs / totalStd : 0;
       const inputUnitCost = toNumber((mainProduct as any).buyingPrice);
       const outputUnitPrice = toNumber((slicedProduct as any).sellingPrice);

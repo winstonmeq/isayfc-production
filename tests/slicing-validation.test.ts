@@ -4,7 +4,17 @@ import test from "node:test";
 import {
   getSlicingKiloIssue,
   getSlicingKiloRange,
+  getSlicingVariance,
 } from "../lib/slicing-validation";
+
+test("keeps a negative slicing variance instead of converting it to zero", () => {
+  assert.equal(getSlicingVariance(350, 360), -10);
+});
+
+test("calculates positive and zero slicing variances", () => {
+  assert.equal(getSlicingVariance(1_100, 1_080), 20);
+  assert.equal(getSlicingVariance(350, 350), 0);
+});
 
 test("multiplies kg/bag standards by the entered bag count", () => {
   const range = getSlicingKiloRange(5, 15, 16);

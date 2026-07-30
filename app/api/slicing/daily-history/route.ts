@@ -3,6 +3,7 @@ import mongoose, { isValidObjectId, type PipelineStage } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
+import { getSlicingVariance } from "@/lib/slicing-validation";
 import BodegaProductModel from "@/models/BodegaProduct";
 import SlicingItemModel from "@/models/SlicingItem";
 
@@ -69,7 +70,7 @@ function serializeProduct(product: AnyRecord) {
     actualSlicedPcs: actualPcs,
     actualPacks,
     butal: loosePcs,
-    variance: toNumber(product.variance),
+    variance: getSlicingVariance(actualPcs, totalStdPcs),
     yieldRate,
   };
 }
@@ -142,7 +143,7 @@ export async function GET(req: NextRequest) {
         kilos: { $sum: "$kilos" },
         totalStdPcs: { $sum: "$totalStdPcs" },
         actualSlicedPcs: { $sum: "$actualSlicedPcs" },
-        variance: { $sum: "$variance" },
+        variance: { $sum: { $subtract: ["$actualSlicedPcs", "$totalStdPcs"] } },
       },
     },
     {
