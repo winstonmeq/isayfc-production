@@ -86,6 +86,10 @@ function formatPercent(value: number) {
   return `${numberValue(value).toFixed(2)}%`;
 }
 
+function formatSignedWholeNumber(value: unknown) {
+  return Math.trunc(numberValue(value)).toLocaleString();
+}
+
 function getStdPcs(record: SlicingHistoryItem) {
   const existing = numberValue(record.totalStdPcs);
   if (existing > 0) return existing;
@@ -366,7 +370,7 @@ export function SliceHistoryPageClient() {
                         </TableCell>
                         <TableCell className="text-right">{formatPercent(yieldRate)}</TableCell>
                         <TableCell className={cn("text-right font-bold", variance < 0 ? "text-red-600" : variance > 0 ? "text-emerald-700" : "text-slate-700")}>
-                          {formatWholeNumber(variance)}
+                          {formatSignedWholeNumber(variance)}
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
@@ -408,7 +412,7 @@ export function SliceHistoryPageClient() {
                             : "text-slate-700"
                       )}
                     >
-                      {formatWholeNumber(tableTotals.variance)}
+                      {formatSignedWholeNumber(tableTotals.variance)}
                     </TableCell>
                     <TableCell>—</TableCell>
                     <TableCell className="text-center">—</TableCell>
@@ -442,7 +446,7 @@ export function SliceHistoryPageClient() {
                       <ErpKeyValue label="Actual PCS" value={formatWholeNumber(record.actualSlicedPcs)} />
                       <ErpKeyValue label="Packs / Loose" value={`${formatWholeNumber(record.actualPacks)} / ${formatWholeNumber(loosePcs)}`} />
                       <ErpKeyValue label="Yield" value={formatPercent(yieldRate)} />
-                      <ErpKeyValue label="Variance" value={<span className={variance < 0 ? "text-red-600" : "text-emerald-700"}>{formatWholeNumber(variance)}</span>} />
+                      <ErpKeyValue label="Variance" value={<span className={variance < 0 ? "text-red-600" : "text-emerald-700"}>{formatSignedWholeNumber(variance)}</span>} />
                       <ErpKeyValue label="Staff" value={`${record.slicer || "-"} / ${record.packer || "-"}`} />
                     </div>
                   </ErpMobileCard>
