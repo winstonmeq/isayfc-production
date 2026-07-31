@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Eye, Loader2, RefreshCcw, Search } from "lucide-react";
+import { Eye, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -140,10 +140,6 @@ export function BodegaStockMovementPageClient() {
     setAppliedFilters({ search: "", dateFrom: "", dateTo: "" });
   }
 
-  function refreshData() {
-    void loadData();
-  }
-
   function formatNumber(value: number | undefined, decimals = 2) {
     return Number(value || 0).toLocaleString(undefined, {
       minimumFractionDigits: decimals,
@@ -168,19 +164,6 @@ export function BodegaStockMovementPageClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Bodega Stock Movement Inventory</h1>
-          <p className="text-sm text-muted-foreground">
-            Stock In and Stock Out follow the selected date filter. Current Stock Now is the live product balance.
-          </p>
-        </div>
-        <Button variant="outline" onClick={refreshData}>
-          <RefreshCcw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
-      </div>
-
       <Card>
         <CardContent className="grid gap-4 p-5 md:grid-cols-4">
           <div>
