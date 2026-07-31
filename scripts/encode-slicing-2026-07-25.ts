@@ -10,12 +10,11 @@ import mongoose from "mongoose";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-const SLICING_DATE = new Date("2026-07-25T00:00:00.000Z");
 const SLICER = "CLARENCE";
 const PACKER = "CLARENCE";
 const OUTPUT_PRODUCT = "C10";
 
-const ITEMS = [
+const JULY_25_ITEMS = [
   { main: "OS3", heads: 15, actualPcs: 450, kilos: 20.3, bags: 1, standardSlice: 31 },
   { main: "C1", heads: 60, actualPcs: 1500, kilos: 69.8, bags: 4, standardSlice: 24 },
   { main: "OS4", heads: 75, actualPcs: 2850, kilos: 110.6, bags: 5, standardSlice: 36 },
@@ -27,6 +26,37 @@ const ITEMS = [
   { main: "C1", heads: 30, actualPcs: 850, kilos: 35.9, bags: 2, standardSlice: 24 },
   { main: "OS4", heads: 45, actualPcs: 1600, kilos: 67.25, bags: 3, standardSlice: 36 },
 ] as const;
+
+const JULY_28_ITEMS = [
+  { main: "OS2", heads: 12, actualPcs: 400, kilos: 15.25, bags: 1, standardSlice: 31 },
+  { main: "PS4", heads: 30, actualPcs: 650, kilos: 31.49, bags: 2, standardSlice: 24 },
+  { main: "OS1", heads: 48, actualPcs: 1350, kilos: 54.83, bags: 4, standardSlice: 28 },
+  { main: "OS1", heads: 12, actualPcs: 350, kilos: 13.58, bags: 1, standardSlice: 28 },
+  { main: "OS4", heads: 36, actualPcs: 1300, kilos: 51.72, bags: 3, standardSlice: 36 },
+  { main: "OS3", heads: 36, actualPcs: 1150, kilos: 48.77, bags: 3, standardSlice: 31 },
+  { main: "OS3", heads: 24, actualPcs: 800, kilos: 32.24, bags: 2, standardSlice: 31 },
+  { main: "OS4", heads: 60, actualPcs: 2100, kilos: 87.38, bags: 5, standardSlice: 36 },
+  { main: "C2-OS", heads: 60, actualPcs: 1500, kilos: 69.36, bags: 4, standardSlice: 24 },
+  { main: "PS4", heads: 30, actualPcs: 750, kilos: 31.52, bags: 2, standardSlice: 24 },
+  { main: "OS1", heads: 12, actualPcs: 350, kilos: 13.73, bags: 1, standardSlice: 28 },
+  { main: "OS2", heads: 48, actualPcs: 1500, kilos: 59.35, bags: 4, standardSlice: 31 },
+  { main: "OS2", heads: 12, actualPcs: 350, kilos: 14.91, bags: 1, standardSlice: 31 },
+  { main: "OS4", heads: 12, actualPcs: 400, kilos: 17.24, bags: 1, standardSlice: 36 },
+  { main: "C2-OS", heads: 30, actualPcs: 750, kilos: 34.72, bags: 2, standardSlice: 24 },
+  { main: "OS1", heads: 48, actualPcs: 1400, kilos: 54.86, bags: 4, standardSlice: 28 },
+  { main: "OS4", heads: 12, actualPcs: 450, kilos: 17.8, bags: 1, standardSlice: 36 },
+  { main: "OS2", heads: 12, actualPcs: 350, kilos: 14.79, bags: 1, standardSlice: 31 },
+  { main: "OS3", heads: 12, actualPcs: 400, kilos: 16.1, bags: 1, standardSlice: 31 },
+  { main: "OS1", heads: 72, actualPcs: 1900, kilos: 83.1, bags: 6, standardSlice: 28 },
+  { main: "OS1", heads: 36, actualPcs: 1000, kilos: 41.2, bags: 3, standardSlice: 28 },
+  { main: "OS2", heads: 24, actualPcs: 800, kilos: 30.07, bags: 2, standardSlice: 31 },
+  { main: "PS4", heads: 60, actualPcs: 1400, kilos: 63.21, bags: 4, standardSlice: 24 },
+] as const;
+
+const isJuly28 = process.argv.includes("--july-28");
+const ITEMS = isJuly28 ? JULY_28_ITEMS : JULY_25_ITEMS;
+const DATE_TEXT = isJuly28 ? "2026-07-28" : "2026-07-25";
+const SLICING_DATE = new Date(`${DATE_TEXT}T00:00:00.000Z`);
 
 const STANDARD_PACKING = 50;
 
@@ -62,17 +92,11 @@ async function main() {
   );
   totals.kilos = round(totals.kilos);
 
-  if (
-    totals.heads !== 544 ||
-    totals.kilos !== 721 ||
-    totals.standardPcs !== 16221 ||
-    totals.actualPcs !== 17150 ||
-    totals.packs !== 343 ||
-    totals.loose !== 0 ||
-    totals.variance !== 929 ||
-    totals.bags !== 37
-  ) {
-    throw new Error("Slicing totals do not match the source image after excluding row 7.");
+  const expected = isJuly28
+    ? { heads: 738, kilos: 897.22, standardPcs: 21324, actualPcs: 21400, packs: 428, loose: 0, variance: 76, bags: 58 }
+    : { heads: 544, kilos: 721, standardPcs: 16221, actualPcs: 17150, packs: 343, loose: 0, variance: 929, bags: 37 };
+  if (Object.entries(expected).some(([key, value]) => totals[key as keyof typeof totals] !== value)) {
+    throw new Error(`Slicing totals do not match the ${DATE_TEXT} source image.`);
   }
 
   await mongoose.connect(uri);
@@ -97,7 +121,7 @@ async function main() {
     isVoided: false,
   };
   if (await SlicingBatchModel.exists(duplicateQuery)) {
-    throw new Error("This 10-row slicing import already exists. No changes made.");
+    throw new Error(`This ${ITEMS.length}-row slicing import already exists. No changes made.`);
   }
 
   const names = [...new Set([...ITEMS.map((item) => item.main), OUTPUT_PRODUCT])];
@@ -118,12 +142,23 @@ async function main() {
       standardSlice: item.standardSlice,
       isActive: true,
     }).lean();
-    if (matches.length !== 1) {
+    const namedMatches = matches.filter(
+      (match) => String(match.chickenSizeType || "").trim().toUpperCase() === item.main
+    );
+    const selectedStandard = matches.length === 1
+      ? matches[0]
+      : namedMatches.length === 1
+        ? namedMatches[0]
+        : null;
+    if (!selectedStandard) {
       throw new Error(
-        `Expected one active ${item.main} -> ${OUTPUT_PRODUCT} standard, found ${matches.length}.`
+        `Expected one active ${item.main} -> ${OUTPUT_PRODUCT} standard, found ${matches.length}: ` +
+          matches.map((match) =>
+            `${match._id} (${Number(match.minimumKilos || 0)}-${Number(match.maximumKilos || 0)} kg, ${String(match.chickenSizeType || "no size")})`
+          ).join(", ")
       );
     }
-    standards.set(item.main, matches[0]);
+    standards.set(item.main, selectedStandard);
   }
 
   const requiredByProduct = new Map<string, { heads: number; bags: number; kilos: number }>();
@@ -193,7 +228,7 @@ async function main() {
             stockQty: { $gte: item.heads },
             stockHeads: { $gte: item.heads },
             stockBags: { $gte: item.bags },
-            stockKilos: { $gte: item.kilos },
+            stockKilos: { $gte: item.kilos - 0.0001 },
           },
           {
             $inc: {
@@ -289,8 +324,8 @@ async function main() {
 
   console.log(`Database: ${mongoose.connection.db?.databaseName || "unknown"}`);
   console.log(`Slicing batch ID: ${batchId}`);
-  console.log(`Date: 2026-07-25 | Slicer: ${SLICER} | Packer: ${PACKER}`);
-  console.log(`Rows inserted: ${ITEMS.length} (row 7 excluded)`);
+  console.log(`Date: ${DATE_TEXT} | Slicer: ${SLICER} | Packer: ${PACKER}`);
+  console.log(`Rows inserted: ${ITEMS.length}${isJuly28 ? " (source rows 1 and 2 excluded)" : " (row 7 excluded)"}`);
   console.log(
     `Totals: ${totals.heads} heads | ${totals.kilos.toFixed(2)} kilos | ${totals.actualPcs} actual PCS | ${totals.packs} packs | variance ${totals.variance}`
   );
