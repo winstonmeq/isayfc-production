@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { CustomerPicker, type CustomerOption } from "@/components/sales/CustomerPicker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,12 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatPeso } from "@/lib/utils";
-
-type CustomerOption = {
-  _id: string;
-  name: string;
-  outletName?: string;
-};
 
 type ProductOption = {
   _id: string;
@@ -104,15 +99,20 @@ export function SaleGroceryPageClient() {
   }, [rows]);
 
   async function loadCustomers() {
-    const res = await fetch("/api/customers?limit=1000", {
-      cache: "no-store",
-    });
+    const allCustomers: CustomerOption[] = [];
+    let page = 1;
+    let totalPages = 1;
 
-    const json = await res.json();
+    do {
+      const res = await fetch(`/api/customers?limit=100&page=${page}`, { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Failed to load customers.");
+      allCustomers.push(...(json.data || []));
+      totalPages = Number(json.meta?.totalPages || 1);
+      page += 1;
+    } while (page <= totalPages);
 
-    if (res.ok && json.success) {
-      setCustomers(json.data || []);
-    }
+    setCustomers(allCustomers);
   }
 
   async function loadProducts() {
@@ -321,19 +321,7 @@ export function SaleGroceryPageClient() {
 
                 <div className="space-y-2">
                   <Label>Customer</Label>
-                  <Select value={customerId} onValueChange={setCustomerId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer._id} value={customer._id}>
-                          {customer.name}
-                          {customer.outletName ? ` — Outlet: ${customer.outletName}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CustomerPicker customers={customers} value={customerId} onChange={setCustomerId} />
                 </div>
 
                 <div className="space-y-2">
