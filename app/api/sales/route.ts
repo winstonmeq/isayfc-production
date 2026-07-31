@@ -254,9 +254,9 @@ async function handlePOST(req: NextRequest) {
   const saleDate = cleanString(body.saleDate);
   const receiptNumber = cleanString(body.receiptNumber);
   const remarks = cleanString(body.remarks);
+  const lateEntryReason = correctionReason(body.correctionReason);
   const items: SaleItemInput[] = Array.isArray(body.items) ? body.items : [];
   const isLateEntry = Boolean(saleDate && saleDate < manilaDateString());
-  const lateEntryReason = correctionReason(body.correctionReason) || "Backdated sale entry";
 
   if (!customerId || !isValidObjectId(customerId)) {
     return NextResponse.json(
@@ -275,6 +275,13 @@ async function handlePOST(req: NextRequest) {
   if (!receiptNumber) {
     return NextResponse.json(
       { success: false, message: "Receipt number is required." },
+      { status: 400 }
+    );
+  }
+
+  if (isLateEntry && lateEntryReason.length < 5) {
+    return NextResponse.json(
+      { success: false, message: "A reason of at least 5 characters is required for a backdated sale." },
       { status: 400 }
     );
   }
