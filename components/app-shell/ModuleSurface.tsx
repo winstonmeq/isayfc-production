@@ -112,6 +112,10 @@ const moduleComponents: Record<string, ComponentType> = {
     () => import("@/components/sales/SellChickenPageClient").then((m) => m.SellChickenPageClient),
     { loading: LoadingModule }
   ),
+  "/sales/all": dynamic(
+    () => import("@/components/sales/AllSalesPageClient").then((m) => m.AllSalesPageClient),
+    { loading: LoadingModule }
+  ),
   "/sales/grocery": dynamic(
     () => import("@/components/sales/SaleGroceryPageClient").then((m) => m.SaleGroceryPageClient),
     { loading: LoadingModule }
@@ -198,6 +202,13 @@ const moduleComponents: Record<string, ComponentType> = {
     () =>
       import("@/components/inventory/BodegaStockMovementPageClient").then(
         (m) => m.BodegaStockMovementPageClient
+      ),
+    { loading: LoadingModule }
+  ),
+  "/inventory/movements": dynamic(
+    () =>
+      import("@/components/inventory/InventoryMovementsByTypePageClient").then(
+        (m) => m.InventoryMovementsByTypePageClient
       ),
     { loading: LoadingModule }
   ),
