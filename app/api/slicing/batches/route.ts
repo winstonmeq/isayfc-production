@@ -10,7 +10,6 @@ import SlicingStandardModel from "@/models/SlicingStandard";
 
 const MIN_SLICING_YIELD_RATE = 0.7;
 const MAX_SLICING_YIELD_RATE = 1.2;
-const MAX_KILOS_PER_HEAD = 4;
 const MAX_HEADS_PER_ROW = 1_000;
 
 // A user-input problem, not a server fault: the catch returns these as 400
@@ -162,12 +161,6 @@ export async function POST(req: NextRequest) {
 
       if (!Number.isInteger(actualSlicedPcs)) {
         throw new ValidationError("Actual sliced PCS must be a whole number.");
-      }
-
-      if (kilos > 0 && kilos / heads > MAX_KILOS_PER_HEAD) {
-        throw new ValidationError(
-          `Kilos looks too high (${formatNumber(kilos / heads)} kg/head). Please check the kilos or heads entry.`
-        );
       }
 
       if (standardSlice <= 0 || standardPacking <= 0) {

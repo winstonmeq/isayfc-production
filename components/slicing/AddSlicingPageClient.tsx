@@ -21,7 +21,7 @@ import {
   ErpPageHeader,
   ErpSection,
 } from "@/components/erp/ErpShell";
-import { formatDecimal, formatWholeNumber, numberValue } from "@/components/erp/StockDisplay";
+import { formatWholeNumber, numberValue } from "@/components/erp/StockDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,10 +40,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  getSlicingKiloIssue,
-  getSlicingKiloRange,
-} from "@/lib/slicing-validation";
 
 type SlicingStandardOption = {
   _id: string;
@@ -76,7 +72,6 @@ type SlicingRow = {
 
 const MIN_SLICING_YIELD_RATE = 70;
 const MAX_SLICING_YIELD_RATE = 120;
-const MAX_KILOS_PER_HEAD = 4;
 const MAX_HEADS_PER_ROW = 1000;
 
 const emptyRow: SlicingRow = {
@@ -127,8 +122,6 @@ function getRowIssues(row: SlicingRow) {
   const issues: string[] = [];
   const heads = numberValue(row.heads);
   const bags = numberValue(row.bags);
-  const totalKilos = numberValue(row.kilos);
-  const kilosPerBag = bags > 0 ? totalKilos / bags : totalKilos;
   const actualSlicedPcs = numberValue(row.actualSlicedPcs);
   const computed = calculateRow(row);
 
@@ -150,33 +143,6 @@ function getRowIssues(row: SlicingRow) {
   if (bags > 0 && !Number.isInteger(bags)) {
     issues.push("Bags must be a whole number.");
   }
-  if ((row.minimumKilos > 0 || row.maximumKilos > 0) && bags <= 0) {
-    issues.push("Bags must be greater than zero for a kg/bag standard.");
-  }
-
-  if (computed.totalKilos > 0 && heads > 0 && computed.totalKilos / heads > MAX_KILOS_PER_HEAD) {
-    issues.push(`Total kilos looks too high (${(computed.totalKilos / heads).toFixed(2)} kg/head).`);
-  }
-
-  const kiloIssue = getSlicingKiloIssue({
-    bags,
-    kilosPerBag,
-    minimumKilosPerBag: row.minimumKilos,
-    maximumKilosPerBag: row.maximumKilos,
-  });
-  if (kiloIssue?.kind === "below-minimum") {
-    issues.push(
-      `Total kilos must be at least ${kiloIssue.minimumTotalKilos.toFixed(2)} kg ` +
-        `(${bags} bags × ${row.minimumKilos.toFixed(2)} kg/bag).`
-    );
-  }
-  if (kiloIssue?.kind === "above-maximum") {
-    issues.push(
-      `Total kilos must not exceed ${kiloIssue.maximumTotalKilos.toFixed(2)} kg ` +
-        `(${bags} bags × ${row.maximumKilos.toFixed(2)} kg/bag).`
-    );
-  }
-
   if (actualSlicedPcs <= 0) {
     issues.push("Actual sliced PCS must be greater than zero.");
   } else if (!Number.isInteger(actualSlicedPcs)) {
@@ -466,11 +432,6 @@ export function AddSlicingPageClient() {
           <div className="space-y-4">
 	            {rows.map((row, index) => {
 	              const computed = calculateRow(row);
-	              const kiloRange = getSlicingKiloRange(
-	                numberValue(row.bags),
-	                row.minimumKilos,
-	                row.maximumKilos
-	              );
 	              const rowIssues = hasRowEntry(row) ? getRowIssues(row) : [];
 	              return (
 	                <ErpMobileCard key={index} className="bg-slate-50/60">
@@ -492,14 +453,6 @@ export function AddSlicingPageClient() {
                       <p className="mt-2 text-xs text-slate-500">
                         Std Slice: {formatWholeNumber(row.standardSlice)} pcs/head • Pack Size: {formatWholeNumber(row.standardPacking)} pcs/pack
                       </p>
-                      {row.minimumKilos > 0 || row.maximumKilos > 0 ? (
-                        <p className="mt-1 text-xs font-semibold text-blue-700">
-                          Weight standard: {formatDecimal(row.minimumKilos, 2)}–{formatDecimal(row.maximumKilos, 2)} kg/bag
-                          {numberValue(row.bags) > 0
-                            ? ` • Allowed total: ${formatDecimal(kiloRange.minimumTotalKilos, 2)}–${formatDecimal(kiloRange.maximumTotalKilos, 2)} kg`
-                            : ""}
-                        </p>
-                      ) : null}
                     </div>
                     <ErpField label="Bags">
                       <Input type="number" min="0" value={row.bags} onChange={(event) => updateRow(index, "bags", event.target.value)} />

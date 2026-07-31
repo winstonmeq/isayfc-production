@@ -5,7 +5,7 @@ import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString, getPagination } from "@/lib/crud-utils";
-import { getSlicingKiloIssue, getSlicingVariance } from "@/lib/slicing-validation";
+import { getSlicingVariance } from "@/lib/slicing-validation";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import SlicingBatchModel from "@/models/SlicingBatch";
@@ -17,7 +17,6 @@ export const revalidate = 0;
 
 const MIN_SLICING_YIELD_RATE = 0.7;
 const MAX_SLICING_YIELD_RATE = 1.2;
-const MAX_KILOS_PER_HEAD = 4;
 const MAX_HEADS_PER_ROW = 1_000;
 
 type SlicingItemInput = {
@@ -464,7 +463,6 @@ async function handlePOST(req: NextRequest) {
 	    const bags = cleanNumber(item.bags);
 	    const heads = cleanNumber(item.heads || item.qtyToSlice);
 	    const kilos = cleanNumber(item.kilos);
-	    const kilosPerBag = bags > 0 ? kilos / bags : kilos;
 	    const actualSlicedPcs = cleanNumber(item.actualSlicedPcs);
 
 	    if (heads <= 0) {
@@ -511,16 +509,6 @@ async function handlePOST(req: NextRequest) {
 	      );
 	    }
 
-	    if (kilos > 0 && kilos / heads > MAX_KILOS_PER_HEAD) {
-	      return NextResponse.json(
-	        {
-	          success: false,
-	          message: `${(mainProduct as any).name} has ${formatNumber(kilos / heads)} kg/head. Please check the kilos or heads entry.`,
-	        },
-	        { status: 400 }
-	      );
-	    }
-
     const availableStock = toNumber((mainProduct as any).stockQty);
     if (heads > availableStock) {
       return NextResponse.json(
@@ -542,43 +530,6 @@ async function handlePOST(req: NextRequest) {
         {
           success: false,
           message: `Invalid standard values for ${(mainProduct as any).name} -> ${(slicedProduct as any).name}.`,
-        },
-        { status: 400 }
-      );
-    }
-
-    const kiloIssue = getSlicingKiloIssue({
-      bags,
-      kilosPerBag,
-      minimumKilosPerBag: minimumKilos,
-      maximumKilosPerBag: maximumKilos,
-    });
-
-    if ((minimumKilos > 0 || maximumKilos > 0) && bags <= 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Bags for ${(mainProduct as any).name} must be greater than zero for a kg/bag standard.`,
-        },
-        { status: 400 }
-      );
-    }
-
-    if (kiloIssue?.kind === "below-minimum") {
-      return NextResponse.json(
-        {
-          success: false,
-          message: `${(mainProduct as any).name} requires at least ${formatNumber(minimumKilos)} kg per bag (${bags} bags; minimum total ${formatNumber(kiloIssue.minimumTotalKilos)} kg).`,
-        },
-        { status: 400 }
-      );
-    }
-
-    if (kiloIssue?.kind === "above-maximum") {
-      return NextResponse.json(
-        {
-          success: false,
-          message: `${(mainProduct as any).name} allows up to ${formatNumber(maximumKilos)} kg per bag (${bags} bags; maximum total ${formatNumber(kiloIssue.maximumTotalKilos)} kg).`,
         },
         { status: 400 }
       );
