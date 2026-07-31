@@ -249,12 +249,6 @@ export const appNavItems: AppNavItem[] = [
     section: "Finance",
     children: [
       {
-        title: "Movements by Product Type",
-        href: "/inventory/movements",
-        icon: ArrowLeftRight,
-        permission: "inventory.view",
-      },
-      {
         title: "Bodega Stock Movement",
         href: "/inventory/bodega",
         icon: ArrowLeftRight,

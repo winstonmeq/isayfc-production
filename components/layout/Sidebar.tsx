@@ -94,12 +94,6 @@
 //   },  
   
 //   {
-//     title: "Inventory",
-//     href: "/inventory/movements",
-//     icon: ClipboardList,
-//   },
-
-//   {
 //   title: "Whole Chicken Movement",
 //   href: "/inventory/whole-chicken",
 //   icon: ArrowLeftRight,

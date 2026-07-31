@@ -205,13 +205,6 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
-  "/inventory/movements": dynamic(
-    () =>
-      import("@/components/inventory/InventoryMovementsByTypePageClient").then(
-        (m) => m.InventoryMovementsByTypePageClient
-      ),
-    { loading: LoadingModule }
-  ),
   "/reports/sales": dynamic(
     () =>
       import("@/components/reports/SalesReportPageClient").then(
