@@ -21,6 +21,19 @@ test("outlet sale creates exactly one linked draft stock transfer", () => {
   );
 });
 
+test("mixed web sales retain per-line inventory routing", () => {
+  const saleRoute = source("app/api/sales/route.ts");
+  const saleModel = source("models/Sale.ts");
+  const saleLineModel = source("models/SaleLine.ts");
+
+  assert.match(saleModel, /"CHICKEN"\s*\|\s*"BODEGA"\s*\|\s*"MIXED"/);
+  assert.match(saleRoute, /sourceInput\s*===\s*"MIXED"/);
+  assert.match(saleRoute, /itemSourceInput\s*===\s*"CHICKEN"/);
+  assert.match(saleRoute, /itemSourceInput\s*===\s*"BODEGA"/);
+  assert.match(saleRoute, /source:\s*item\.source/);
+  assert.match(saleLineModel, /enum:\s*\["CHICKEN",\s*"BODEGA"\]/);
+});
+
 test("dispatch, delivery, and confirmation retain atomic state guards", () => {
   const dispatch = source("lib/stock-transfers.ts");
   const deliver = source("app/api/stock-transfers/[id]/deliver/route.ts");

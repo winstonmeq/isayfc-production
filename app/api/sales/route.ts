@@ -30,9 +30,10 @@ import {
 import { correctionReason, recordCorrection } from "@/lib/corrections";
 import { manilaDateString } from "@/lib/date-utils";
 
-type SaleSource = "CHICKEN" | "BODEGA";
+type SaleSource = "CHICKEN" | "BODEGA" | "MIXED";
 
 type SaleItemInput = {
+  source?: string;
   productId?: string;
   bodegaProductId?: string;
   qty?: number;
@@ -48,6 +49,7 @@ type SaleItemInput = {
 };
 
 type PreparedSaleItem = {
+  source: "CHICKEN" | "BODEGA";
   productType: "BODEGA_PRODUCT" | "PRODUCT";
   productId?: mongoose.Types.ObjectId;
   bodegaProductId?: mongoose.Types.ObjectId;
@@ -249,7 +251,12 @@ async function handlePOST(req: NextRequest) {
 
   const body = await req.json();
   const sourceInput = cleanString(body.source).toUpperCase();
-  const source: SaleSource = sourceInput === "CHICKEN" ? "CHICKEN" : "BODEGA";
+  const source: SaleSource =
+    sourceInput === "CHICKEN"
+      ? "CHICKEN"
+      : sourceInput === "MIXED"
+        ? "MIXED"
+        : "BODEGA";
   const customerId = cleanString(body.customerId);
   const saleDate = cleanString(body.saleDate);
   const receiptNumber = cleanString(body.receiptNumber);
@@ -333,6 +340,15 @@ async function handlePOST(req: NextRequest) {
       for (const item of items) {
         const qty = cleanNumber(item.quantity || item.packs || item.qty);
         const itemRemarks = cleanString(item.remarks);
+        const itemSourceInput = cleanString(item.source).toUpperCase();
+        const itemSource: "CHICKEN" | "BODEGA" =
+          source === "MIXED"
+            ? itemSourceInput === "CHICKEN"
+              ? "CHICKEN"
+              : itemSourceInput === "BODEGA"
+                ? "BODEGA"
+                : fail(400, "Each mixed sale item must identify its product type.")
+            : source;
 
         if (qty <= 0) {
           fail(400, "Quantity must be greater than zero.");
@@ -341,7 +357,7 @@ async function handlePOST(req: NextRequest) {
         let product: any = null;
         let productType: "BODEGA_PRODUCT" | "PRODUCT" = "PRODUCT";
 
-        if (source === "CHICKEN") {
+        if (itemSource === "CHICKEN") {
           const bodegaProductId = cleanString(item.bodegaProductId || item.productId || "");
 
           if (!bodegaProductId || !isValidObjectId(bodegaProductId)) {
@@ -357,7 +373,7 @@ async function handlePOST(req: NextRequest) {
           productType = "BODEGA_PRODUCT";
         }
 
-        if (source === "BODEGA") {
+        if (itemSource === "BODEGA") {
           const productId = cleanString(item.productId || "");
 
           if (!productId || !isValidObjectId(productId)) {
@@ -374,12 +390,12 @@ async function handlePOST(req: NextRequest) {
           fail(404, "Selected product was not found.");
         }
 
-        const price = getDatabaseSalePrice(source, product);
+        const price = getDatabaseSalePrice(itemSource, product);
 
         if (price <= 0) {
           fail(
             400,
-            source === "CHICKEN"
+            itemSource === "CHICKEN"
               ? `Selling price must be set in Bodega Product for ${product.name}.`
               : `Unit price must be set in Product for ${product.name}.`
           );
@@ -391,7 +407,7 @@ async function handlePOST(req: NextRequest) {
             : Number(product.stockPcs || 0);
 
         const standardPackSize =
-          source === "CHICKEN"
+          itemSource === "CHICKEN"
             ? await getPackSizeForBodegaProduct(product._id.toString(), mongoSession)
             : 0;
 
@@ -399,15 +415,15 @@ async function handlePOST(req: NextRequest) {
         // active Standard PCS & Packs record, not from the browser request.
         // Products without an output pack standard are sold per head.
         const chickenUnit = standardPackSize > 0 ? "PACK" : "HEAD";
-        const packSize = source === "CHICKEN" ? standardPackSize : 1;
+        const packSize = itemSource === "CHICKEN" ? standardPackSize : 1;
         const stockOut =
-          source === "CHICKEN" && chickenUnit === "PACK" ? qty * packSize : qty;
+          itemSource === "CHICKEN" && chickenUnit === "PACK" ? qty * packSize : qty;
 
         if (previousStock < stockOut) {
           fail(400, `Not enough stock for ${product.name}. Available: ${previousStock}.`);
         }
         if (
-          source === "CHICKEN" &&
+          itemSource === "CHICKEN" &&
           chickenUnit === "HEAD" &&
           Number(product.stockHeads || 0) < qty
         ) {
@@ -415,14 +431,15 @@ async function handlePOST(req: NextRequest) {
         }
 
         const lineTotal = roundMoney(qty * price);
-        totalQty += source === "CHICKEN" ? stockOut : qty;
+        totalQty += itemSource === "CHICKEN" ? stockOut : qty;
         totalAmount = roundMoney(totalAmount + lineTotal);
 
-        if (source === "CHICKEN" && chickenUnit === "PACK") {
+        if (itemSource === "CHICKEN" && chickenUnit === "PACK") {
           totalPacks += qty;
         }
 
         preparedItems.push({
+          source: itemSource,
           productType,
           productId: productType === "PRODUCT" ? product._id : undefined,
           bodegaProductId: productType === "BODEGA_PRODUCT" ? product._id : undefined,
@@ -435,13 +452,13 @@ async function handlePOST(req: NextRequest) {
           unitCost: toBaseUnitCost(
             product.buyingPrice,
             packingSnapshot({
-              unit: source === "CHICKEN" && chickenUnit === "PACK" ? "PACK" : "QTY",
+              unit: itemSource === "CHICKEN" && chickenUnit === "PACK" ? "PACK" : "QTY",
               baseUnit: "PCS",
               multiplier: packSize,
             })
           ),
-          stockUnit: source === "CHICKEN" ? chickenUnit : "QTY",
-          packSize: source === "CHICKEN" ? packSize : 0,
+          stockUnit: itemSource === "CHICKEN" ? chickenUnit : "QTY",
+          packSize: itemSource === "CHICKEN" ? packSize : 0,
           stockPcsOut: stockOut,
           previousStock,
           remarks: itemRemarks,
@@ -608,7 +625,7 @@ async function handlePOST(req: NextRequest) {
 
         saleLinesToInsert.push({
           saleId: sale._id,
-          source,
+          source: item.source,
           productId: item.productId,
           bodegaProductId: item.bodegaProductId,
           categoryId: item.categoryId,
