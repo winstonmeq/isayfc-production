@@ -75,6 +75,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       title: "Sales",
       icon: ShoppingCart,
       routes: [
+        "/sales/all",
         "/sales",
         "/sales/grocery",
         "/sales/history",
@@ -108,6 +109,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       title: "Inventory",
       icon: PackageSearch,
       routes: [
+        "/inventory/movements",
         "/inventory/bodega",
         "/inventory/products",
         "/outlet-inventory",

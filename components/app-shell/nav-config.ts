@@ -113,12 +113,6 @@ export const appNavItems: AppNavItem[] = [
     section: "Operations",
     children: [
       {
-        title: "All Sales",
-        href: "/sales/all",
-        icon: ShoppingCart,
-        permission: "sales.manage",
-      },
-      {
         title: "Slice History",
         href: "/slicing",
         icon: Clock,
@@ -150,6 +144,12 @@ export const appNavItems: AppNavItem[] = [
     permission: "sales.view",
     section: "Operations",
     children: [
+      {
+        title: "All Sales",
+        href: "/sales/all",
+        icon: ShoppingCart,
+        permission: "sales.manage",
+      },
       {
         title: "Sell Chicken",
         href: "/sales",
