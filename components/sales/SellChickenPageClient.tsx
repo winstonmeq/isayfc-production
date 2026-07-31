@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Loader2, ShoppingCart, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronsUpDown, Loader2, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -15,12 +15,25 @@ import {
 import { formatWholeNumber, numberValue, PackStockDisplay, wholeNumber } from "@/components/erp/StockDisplay";
 import { Button } from "@/components/ui/button";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -36,7 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatPeso } from "@/lib/utils";
+import { cn, formatPeso } from "@/lib/utils";
 
 type CustomerOption = {
   _id: string;
@@ -76,6 +89,67 @@ type CartItem = {
   stockPcsOut: number;
 };
 
+function CustomerPicker({
+  customers,
+  value,
+  onChange,
+}: {
+  customers: CustomerOption[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = customers.find((customer) => customer._id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-10 w-full justify-between bg-white font-normal"
+        >
+          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+            {selected
+              ? `${selected.name}${selected.outletName ? ` — Outlet: ${selected.outletName}` : ""}`
+              : "Search customer..."}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[420px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search customer name..." />
+          <CommandList>
+            <CommandEmpty>No customer found.</CommandEmpty>
+            <CommandGroup>
+              {customers.map((customer) => (
+                <CommandItem
+                  key={customer._id}
+                  value={`${customer.name} ${customer.outletName || ""}`}
+                  onSelect={() => {
+                    onChange(customer._id);
+                    setOpen(false);
+                  }}
+                  className="cursor-pointer"
+                >
+                  <Check className={cn("mr-2 h-4 w-4", value === customer._id ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">
+                    {customer.name}
+                    {customer.outletName ? ` — Outlet: ${customer.outletName}` : ""}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function SellChickenPageClient() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [products, setProducts] = useState<ChickenProductOption[]>([]);
@@ -103,9 +177,22 @@ export function SellChickenPageClient() {
   }, [cart]);
 
   async function loadCustomers() {
-    const res = await fetch("/api/customers?limit=100", { cache: "no-store" });
-    const json = await res.json();
-    if (res.ok && json.success) setCustomers(json.data || []);
+    const allCustomers: CustomerOption[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const res = await fetch(`/api/customers?limit=100&page=${page}`, { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || "Failed to load customers.");
+      }
+      allCustomers.push(...(json.data || []));
+      totalPages = Number(json.meta?.totalPages || 1);
+      page += 1;
+    } while (page <= totalPages);
+
+    setCustomers(allCustomers);
   }
 
   async function loadProducts() {
@@ -293,19 +380,7 @@ export function SellChickenPageClient() {
             <ErpSection title="Sale Details" description="Choose customer, receipt, product, and quantity.">
               <div className="grid gap-4 md:grid-cols-3">
                 <ErpField label="Customer *">
-                  <Select value={customerId} onValueChange={setCustomerId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer._id} value={customer._id}>
-                          {customer.name}
-                          {customer.outletName ? ` — Outlet: ${customer.outletName}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CustomerPicker customers={customers} value={customerId} onChange={setCustomerId} />
                 </ErpField>
                 <ErpField label="Sale Date *">
                   <Input type="date" value={saleDate} onChange={(event) => setSaleDate(event.target.value)} />
