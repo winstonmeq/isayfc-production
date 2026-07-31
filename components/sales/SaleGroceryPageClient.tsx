@@ -1,22 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CustomerPicker, type CustomerOption } from "@/components/sales/CustomerPicker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { formatPeso } from "@/lib/utils";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn, formatPeso } from "@/lib/utils";
 
 type ProductOption = {
   _id: string;
@@ -73,6 +79,58 @@ function getCategoryName(product?: ProductOption) {
   return "NO CATEGORY";
 }
 
+function GroceryProductPicker({
+  products,
+  value,
+  onChange,
+}: {
+  products: ProductOption[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = products.find((product) => product._id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" role="combobox" aria-expanded={open} className="h-10 w-full justify-between bg-white font-normal">
+          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+            {selected ? selected.name : "Search grocery product..."}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[560px] max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search product name..." />
+          <CommandList>
+            <CommandEmpty>No grocery product found.</CommandEmpty>
+            <CommandGroup>
+              {products.map((product) => (
+                <CommandItem
+                  key={product._id}
+                  value={`${product.name} ${getCategoryName(product)}`}
+                  onSelect={() => {
+                    onChange(product._id);
+                    setOpen(false);
+                  }}
+                  className="cursor-pointer"
+                >
+                  <Check className={cn("mr-2 h-4 w-4", value === product._id ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">
+                    {product.name} — Stock: {getProductStock(product)} — {formatPeso(getProductPrice(product))}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function SaleGroceryPageClient() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -116,17 +174,20 @@ export function SaleGroceryPageClient() {
   }
 
   async function loadProducts() {
-    const res = await fetch("/api/products?limit=1000", {
-      cache: "no-store",
-    });
+    const allProducts: ProductOption[] = [];
+    let page = 1;
+    let totalPages = 1;
 
-    const json = await res.json();
+    do {
+      const res = await fetch(`/api/products?limit=100&page=${page}`, { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Failed to load products.");
+      allProducts.push(...(json.data || []));
+      totalPages = Number(json.meta?.totalPages || 1);
+      page += 1;
+    } while (page <= totalPages);
 
-    if (res.ok && json.success) {
-      setProducts(json.data || []);
-    } else {
-      toast.error(json.message || "Failed to load products.");
-    }
+    setProducts(allProducts);
   }
 
   async function loadInitialData() {
@@ -353,26 +414,11 @@ export function SaleGroceryPageClient() {
                       <div className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_1fr_auto]">
                         <div className="space-y-2">
                           <Label>Product</Label>
-                          <Select
+                          <GroceryProductPicker
+                            products={products}
                             value={row.productId}
-                            onValueChange={(value) =>
-                              updateRow(index, "productId", value)
-                            }
-                          >
-                            <SelectTrigger className="bg-white">
-                              <SelectValue placeholder="Select grocery product" />
-                            </SelectTrigger>
-
-                            <SelectContent>
-                              {products.map((product) => (
-                                <SelectItem key={product._id} value={product._id}>
-                                  {product.name} — Stock:{" "}
-                                  {getProductStock(product)} —{" "}
-                                  {formatPeso(getProductPrice(product))}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            onChange={(value) => updateRow(index, "productId", value)}
+                          />
 
                           {selectedProduct ? (
                             <p className="text-xs text-muted-foreground">
