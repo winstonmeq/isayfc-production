@@ -4,7 +4,6 @@ import { MasterDataPage } from "@/components/master-data/MasterDataPage";
 export default function CategoriesPage() {
   return (
     <MasterDataPage
-      title="Categories"
       cardTitle="All Category Info"
       apiPath="/api/categories"
       resourceName="Category"

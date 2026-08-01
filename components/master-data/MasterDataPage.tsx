@@ -78,7 +78,6 @@ type ApiResponse = {
 };
 
 export function MasterDataPage({
-  title,
   cardTitle,
   apiPath,
   resourceName,
@@ -86,7 +85,6 @@ export function MasterDataPage({
   fields,
   columns,
 }: {
-  title: string;
   cardTitle: string;
   apiPath: string;
   resourceName: string;
@@ -296,12 +294,6 @@ export function MasterDataPage({
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-          {title}
-        </h1>
-      </div>
-
       <div className="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-sm lg:flex-row lg:items-end">
         <div className="w-full lg:max-w-md">
           <Label>Filter by Name</Label>

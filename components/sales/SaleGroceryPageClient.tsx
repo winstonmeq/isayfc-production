@@ -358,10 +358,6 @@ export function SaleGroceryPageClient() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        New Grocery Sale
-      </h1>
-
       <Card>
         <CardContent className="space-y-5 p-5">
           {isLoading ? (

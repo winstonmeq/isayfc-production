@@ -10,7 +10,6 @@ import {
   ErpKeyValue,
   ErpMobileCard,
   ErpPage,
-  ErpPageHeader,
   ErpSection,
   ErpToolbar,
 } from "@/components/erp/ErpShell";
@@ -190,18 +189,6 @@ export function OutletsPageClient() {
 
   return (
     <ErpPage>
-      <ErpPageHeader
-        eyebrow="Outlet operations"
-        title="Outlets"
-        description="Manage every store/outlet where inventory, POS sales, deliveries, and expenses will be tracked separately."
-        actions={
-          <Button onClick={openCreateDialog} className="rounded-2xl">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Outlet
-          </Button>
-        }
-      />
-
       <ErpToolbar>
         <ErpField label="Search">
           <div className="flex gap-2">
@@ -268,7 +255,7 @@ export function OutletsPageClient() {
           </Select>
         </ErpField>
 
-        <ErpField label="Reset">
+        <div className="flex items-end gap-2 xl:col-span-2 xl:justify-end">
           <Button
             type="button"
             variant="outline"
@@ -282,7 +269,11 @@ export function OutletsPageClient() {
             <RefreshCcw className="mr-2 h-4 w-4" />
             Reset
           </Button>
-        </ErpField>
+          <Button onClick={openCreateDialog} className="rounded-2xl">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Outlet
+          </Button>
+        </div>
       </ErpToolbar>
 
       <ErpSection

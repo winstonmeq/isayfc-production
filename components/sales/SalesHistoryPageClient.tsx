@@ -63,11 +63,6 @@ type ApiMeta = {
   totalPages: number;
 };
 
-type Summary = {
-  rows: number;
-  filteredTotal: number;
-};
-
 export function SalesHistoryPageClient() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [sales, setSales] = useState<SaleItem[]>([]);
@@ -79,10 +74,6 @@ export function SalesHistoryPageClient() {
     totalPages: 1,
   });
 
-  const [summary, setSummary] = useState<Summary>({
-    rows: 0,
-    filteredTotal: 0,
-  });
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState("50");
@@ -144,7 +135,6 @@ export function SalesHistoryPageClient() {
       }
 
       setSales(json.data || []);
-      setSummary(json.summary || { rows: 0, filteredTotal: 0 });
       setMeta(
         json.meta || {
           page,
@@ -258,27 +248,6 @@ export function SalesHistoryPageClient() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-          Sales History
-        </h1>
-
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-md bg-blue-600 px-3 py-2 text-sm font-bold text-white">
-            Rows: {summary.rows.toLocaleString()}
-          </span>
-
-          <span className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-bold text-white">
-            Filtered Total: {formatPeso(summary.filteredTotal)}
-          </span>
-
-          <Button variant="secondary" onClick={() => window.print()}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print list
-          </Button>
-        </div>
-      </div>
-
       <Card>
         <CardContent className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-2">
@@ -354,6 +323,10 @@ export function SalesHistoryPageClient() {
             <Button variant="outline" onClick={resetFilters}>
               <RefreshCcw className="mr-2 h-4 w-4" />
               Reset
+            </Button>
+            <Button variant="secondary" onClick={() => window.print()}>
+              <Printer className="mr-2 h-4 w-4" />
+              Print list
             </Button>
           </div>
         </CardContent>

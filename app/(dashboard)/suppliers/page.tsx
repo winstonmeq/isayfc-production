@@ -4,7 +4,6 @@ import { MasterDataPage } from "@/components/master-data/MasterDataPage";
 export default function SuppliersPage() {
   return (
     <MasterDataPage
-      title="Suppliers"
       cardTitle="All Supplier Info"
       apiPath="/api/suppliers"
       resourceName="Supplier"

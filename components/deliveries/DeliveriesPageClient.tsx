@@ -7,7 +7,6 @@ import {
   Loader2,
   Pencil,
   Plus,
-  Printer,
   RefreshCcw,
   Search,
   Trash2,
@@ -18,8 +17,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -660,17 +657,9 @@ export function DeliveriesPageClient() {
     }
   }
 
-  function printPage() {
-    window.print();
-  }
-
   return (
     <div className="space-y-5">
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        Deliveries List
-      </h1>
-
-      <div className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_7rem_auto]">
         <div>
           <Label>Date From</Label>
           <Input
@@ -739,26 +728,15 @@ export function DeliveriesPageClient() {
             <RefreshCcw className="mr-2 h-4 w-4" />
             Reset
           </Button>
+
+          <Button onClick={openCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Delivery
+          </Button>
         </div>
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between border-b">
-          <CardTitle>All Deliveries</CardTitle>
-
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={printPage}>
-              <Printer className="mr-2 h-4 w-4" />
-              Print
-            </Button>
-
-            <Button onClick={openCreateDialog}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Delivery
-            </Button>
-          </div>
-        </CardHeader>
-
         <CardContent className="p-4">
           <div className="overflow-x-auto rounded-lg border">
             <Table>

@@ -6,7 +6,6 @@ import {
   PackagePlus,
   Pencil,
   Plus,
-  Printer,
   RefreshCcw,
   Search,
   Trash2,
@@ -19,7 +18,6 @@ import {
   ErpKeyValue,
   ErpMobileCard,
   ErpPage,
-  ErpPageHeader,
   ErpSection,
   ErpToolbar,
 } from "@/components/erp/ErpShell";
@@ -330,24 +328,6 @@ export function BodegaProductsPageClient() {
 
   return (
     <ErpPage>
-      <ErpPageHeader
-        eyebrow="Inventory Master"
-        title="Bodega Products"
-        description="Manage bodega products with owner-friendly pack and loose-piece stock display. Sliced products remain stored as PCS, then displayed as packs plus loose PCS."
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => window.print()}>
-              <Printer className="mr-2 h-4 w-4" />
-              Print
-            </Button>
-            <Button onClick={openCreateDialog}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Product
-            </Button>
-          </>
-        }
-      />
-
       <ErpToolbar>
         <ErpField label="Search Product">
           <Input
@@ -399,7 +379,7 @@ export function BodegaProductsPageClient() {
             </SelectContent>
           </Select>
         </ErpField>
-        <div className="flex items-end gap-2 xl:col-span-2">
+        <div className="flex items-end gap-2 xl:col-span-2 xl:justify-end">
           <Button onClick={applySearch} className="flex-1 md:flex-none">
             <Search className="mr-2 h-4 w-4" />
             Filter
@@ -407,6 +387,10 @@ export function BodegaProductsPageClient() {
           <Button variant="secondary" onClick={resetFilters} className="flex-1 md:flex-none">
             <RefreshCcw className="mr-2 h-4 w-4" />
             Reset
+          </Button>
+          <Button onClick={openCreateDialog} className="flex-1 md:flex-none">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Product
           </Button>
         </div>
       </ErpToolbar>

@@ -341,10 +341,6 @@ export function ProductsPageClient() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        Product List
-      </h1>
-
       <div className="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-sm lg:flex-row lg:items-end">
         <div className="w-full lg:max-w-sm">
           <Label>Search Product</Label>

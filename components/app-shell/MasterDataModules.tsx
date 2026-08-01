@@ -28,7 +28,6 @@ export function CustomersModule() {
 
   return (
     <MasterDataPage
-      title="Customers"
       cardTitle="All Customer Info"
       apiPath="/api/customers"
       resourceName="Customer"
@@ -93,7 +92,6 @@ export function CustomersModule() {
 export function SuppliersModule() {
   return (
     <MasterDataPage
-      title="Suppliers"
       cardTitle="All Supplier Info"
       apiPath="/api/suppliers"
       resourceName="Supplier"
@@ -137,7 +135,6 @@ export function SuppliersModule() {
 export function CategoriesModule() {
   return (
     <MasterDataPage
-      title="Categories"
       cardTitle="All Category Info"
       apiPath="/api/categories"
       resourceName="Category"

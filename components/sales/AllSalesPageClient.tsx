@@ -216,7 +216,6 @@ export function AllSalesPageClient() {
 
   return (
     <div className="space-y-5">
-      <div><h1 className="text-3xl font-bold tracking-tight">All Sales</h1><p className="text-sm text-muted-foreground">Sell chicken and grocery products on one receipt.</p></div>
       <Card><CardContent className="grid gap-4 p-5 lg:grid-cols-3">
         <div className="space-y-2"><Label>Customer *</Label><CustomerPicker customers={customers} value={customerId} onChange={setCustomerId} /></div>
         <div className="space-y-2"><Label>Sale Date *</Label><Input type="date" value={saleDate} onChange={(event) => setSaleDate(event.target.value)} /></div>

@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { ModuleHeader } from "@/components/app-shell/ModuleHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -98,12 +97,6 @@ type ApiMeta = {
   limit: number;
   total: number;
   totalPages: number;
-};
-
-type Summary = {
-  filteredBatches: number;
-  totalItems: number;
-  grandTotalAmount: number;
 };
 
 const emptyItem: PurchaseItemForm = {
@@ -198,12 +191,6 @@ function formatDate(value?: string) {
 export function PurchaseBatchesPageClient() {
   const [batches, setBatches] = useState<PurchaseBatch[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
-
-  const [summary, setSummary] = useState<Summary>({
-    filteredBatches: 0,
-    totalItems: 0,
-    grandTotalAmount: 0,
-  });
 
   const [meta, setMeta] = useState<ApiMeta>({
     page: 1,
@@ -333,13 +320,6 @@ export function PurchaseBatchesPageClient() {
         }
       );
 
-      setSummary(
-        json.summary || {
-          filteredBatches: json.data?.length || 0,
-          totalItems: 0,
-          grandTotalAmount: 0,
-        }
-      );
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -608,26 +588,10 @@ export function PurchaseBatchesPageClient() {
   }
 
   return (
-    <div className="space-y-6">
-      <ModuleHeader
-        title="Purchase Items"
-        description="Record product purchases and add stock to product inventory."
-        actions={
-          <Button onClick={openAddDialog} className="rounded-xl">
-            <PackagePlus className="mr-2 h-4 w-4" />
-            Add Purchase Batch
-          </Button>
-        }
-      />
-
+    <div className="space-y-5">
       <Card className="rounded-2xl border-slate-200 shadow-sm">
-        <CardContent className="space-y-4 p-5">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-            <Search className="h-4 w-4 text-red-500" />
-            Filter Purchase Batches
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        <CardContent className="p-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
             <div className="space-y-2">
               <Label>Date From</Label>
               <Input
@@ -668,55 +632,27 @@ export function PurchaseBatchesPageClient() {
               />
             </div>
 
-            <div className="flex items-end">
-              <Button onClick={applyFilters} className="w-full rounded-xl">
+            <div className="flex items-end gap-2">
+              <Button onClick={applyFilters} className="rounded-xl">
                 <Search className="mr-2 h-4 w-4" />
                 Search
               </Button>
-            </div>
-
-            <div className="flex items-end">
               <Button
                 variant="secondary"
                 onClick={resetFilters}
-                className="w-full rounded-xl"
+                className="rounded-xl"
               >
                 <RefreshCcw className="mr-2 h-4 w-4" />
                 Reset
+              </Button>
+              <Button onClick={openAddDialog} className="rounded-xl">
+                <PackagePlus className="mr-2 h-4 w-4" />
+                Add Purchase Batch
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
-            <p className="text-sm text-slate-500">Filtered Batches</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">
-              {summary.filteredBatches.toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
-            <p className="text-sm text-slate-500">Total Items</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">
-              {summary.totalItems.toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
-            <p className="text-sm text-slate-500">Grand Total Amount</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">
-              {formatPeso(summary.grandTotalAmount)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
 
       <Card className="rounded-2xl border-slate-200 shadow-sm">
         <CardContent className="p-5">

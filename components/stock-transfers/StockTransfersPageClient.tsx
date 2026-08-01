@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  Check,
+  ChevronsUpDown,
   Eye,
   Loader2,
   Pencil,
@@ -16,7 +18,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { ModuleHeader } from "@/components/app-shell/ModuleHeader";
 import {
   StatusBadge,
   TransferDetailDialog,
@@ -27,6 +28,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -36,6 +45,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -52,6 +66,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type OutletOption = { _id: string; name: string; code: string };
 
@@ -71,6 +86,85 @@ type ProductOption = {
 type ApiMeta = { page: number; limit: number; total: number; totalPages: number };
 
 type FormItem = { key: string; qty: string };
+
+function TransferProductPicker({
+  products,
+  value,
+  onSelect,
+}: {
+  products: ProductOption[];
+  value: string;
+  onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = products.find((product) => product.key === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between bg-white font-normal"
+        >
+          <span className="truncate">
+            {selected
+              ? `${selected.name} — ${selected.source === "BODEGA" ? "Bodega" : "Grocery"}`
+              : "Search product..."}
+          </span>
+          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[620px] max-w-[calc(100vw-2rem)] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput placeholder="Search bodega or grocery product..." />
+          <CommandList>
+            <CommandEmpty>No product found.</CommandEmpty>
+            <CommandGroup>
+              {products.map((product) => (
+                <CommandItem
+                  key={product.key}
+                  value={`${product.name} ${product.source} ${product.packingLabel || ""} ${product.stockDisplay}`}
+                  onSelect={() => {
+                    onSelect(product.key);
+                    setOpen(false);
+                  }}
+                  className="cursor-pointer"
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 size-4 shrink-0",
+                      value === product.key ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">{product.name}</span>
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">
+                        {product.source === "BODEGA" ? "Bodega" : "Grocery"}
+                      </span>
+                    </div>
+                    <p className="truncate text-xs text-slate-500">
+                      {product.unitLabel === "PACK" && product.packingLabel
+                        ? `${product.packingLabel}/pack · `
+                        : ""}
+                      {product.stockDisplay}
+                    </p>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const STATUS_OPTIONS = [
   "ALL",
@@ -461,34 +555,8 @@ export function StockTransfersPageClient() {
 
   return (
     <div>
-      <ModuleHeader
-        eyebrow="Outlets"
-        title="Stock Transfers"
-        description="Create delivery orders, dispatch stock from the bodega to your outlets, and track confirmations and discrepancies."
-        actions={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => void loadTransfers()}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RefreshCcw className="size-4" />
-              )}
-              Refresh
-            </Button>
-            <Button onClick={openCreate}>
-              <Plus className="size-4" />
-              New Delivery Order
-            </Button>
-          </>
-        }
-      />
-
       <Card className="mb-4">
-        <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
           <div className="space-y-1.5">
             <Label>Status</Label>
             <Select
@@ -565,7 +633,7 @@ export function StockTransfersPageClient() {
             </div>
           </div>
 
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <Button
               variant={discrepancyOnly ? "default" : "outline"}
               onClick={() => {
@@ -574,6 +642,22 @@ export function StockTransfersPageClient() {
               }}
             >
               Discrepancies only
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void loadTransfers()}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCcw className="size-4" />
+              )}
+              Refresh
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="size-4" />
+              New Delivery Order
             </Button>
           </div>
         </CardContent>
@@ -822,42 +906,13 @@ export function StockTransfersPageClient() {
                     className="grid gap-2 sm:grid-cols-[1fr_180px_40px]"
                   >
                     <div>
-                      <Select
+                      <TransferProductPicker
+                        products={products}
                         value={item.key}
-                        onValueChange={(value) =>
+                        onSelect={(value) =>
                           updateItem(index, { key: value })
                         }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select product" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="px-2 py-1 text-xs font-semibold text-slate-400">
-                            Bodega Products
-                          </div>
-                          {products
-                            .filter((product) => product.source === "BODEGA")
-                            .map((product) => (
-                              <SelectItem key={product.key} value={product.key}>
-                                {product.name}
-                                {product.unitLabel === "PACK"
-                                  ? ` (${product.packingLabel || `${product.packSize} pcs`}/pack)`
-                                  : ""}{" "}
-                                — {product.stockDisplay}
-                              </SelectItem>
-                            ))}
-                          <div className="px-2 py-1 text-xs font-semibold text-slate-400">
-                            Grocery Products
-                          </div>
-                          {products
-                            .filter((product) => product.source === "GROCERY")
-                            .map((product) => (
-                              <SelectItem key={product.key} value={product.key}>
-                                {product.name} — {product.stockDisplay}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                      />
                       {selected ? (
                         <p className="mt-1 text-xs text-slate-500">
                           Available: {selected.stockDisplay}

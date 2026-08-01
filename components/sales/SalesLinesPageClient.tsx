@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -380,32 +378,9 @@ export function SalesLinesPageClient() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        Sales Per Item
-      </h1>
-
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between border-b">
-          <CardTitle>Summary of Sales Per Item</CardTitle>
-
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={resetFilters}>
-              <RefreshCcw className="mr-2 h-4 w-4" />
-              Reset
-            </Button>
-
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700"
-              onClick={() => window.print()}
-            >
-              <Printer className="mr-2 h-4 w-4" />
-              Print
-            </Button>
-          </div>
-        </CardHeader>
-
         <CardContent className="space-y-5 p-5">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[repeat(5,minmax(0,1fr))_auto]">
             <div className="space-y-2">
               <Label>Date From</Label>
               <Input
@@ -454,6 +429,19 @@ export function SalesLinesPageClient() {
                   <SelectItem value="BODEGA">Bodega / Grocery</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-end gap-2">
+              <Button variant="outline" onClick={resetFilters}>
+                <RefreshCcw className="mr-2 h-4 w-4" />
+                Reset
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => window.print()}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
             </div>
           </div>
 
