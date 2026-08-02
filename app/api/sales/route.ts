@@ -164,6 +164,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const { page, limit, skip } = getPagination(searchParams);
   const source = cleanString(searchParams.get("source")).toUpperCase();
+  const customerId = cleanString(searchParams.get("customerId"));
   const customer = cleanString(searchParams.get("customer"));
   const receiptNumber = cleanString(searchParams.get("receiptNumber"));
   const dateFrom = cleanString(searchParams.get("dateFrom"));
@@ -189,6 +190,16 @@ export async function GET(req: NextRequest) {
     filter.status = status;
   }
 
+  if (customerId && customerId !== "ALL") {
+    if (!isValidObjectId(customerId)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid customer filter." },
+        { status: 400 }
+      );
+    }
+    filter.customerId = customerId;
+  }
+
   if (dateFrom || dateTo) {
     filter.saleDate = {};
 
@@ -201,7 +212,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (customer) {
+  if (!customerId && customer) {
     const customers = await CustomerModel.find({
       isActive: true,
       name: {

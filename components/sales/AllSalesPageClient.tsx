@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,7 +11,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn, formatPeso } from "@/lib/utils";
 
@@ -75,14 +74,12 @@ export function AllSalesPageClient() {
   const [customerId, setCustomerId] = useState("");
   const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
   const [receiptNumber, setReceiptNumber] = useState("");
-  const [productType, setProductType] = useState("ALL");
   const [selectedKey, setSelectedKey] = useState("");
   const [quantity, setQuantity] = useState("0");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const visibleProducts = useMemo(() => productType === "ALL" ? products : products.filter((product) => product.type === productType), [productType, products]);
   const selectedProduct = products.find((product) => product.key === selectedKey);
   const grandTotal = cart.reduce((sum, item) => sum + item.quantity * item.price, 0);
 
@@ -221,9 +218,8 @@ export function AllSalesPageClient() {
         <div className="space-y-2"><Label>Sale Date *</Label><Input type="date" value={saleDate} onChange={(event) => setSaleDate(event.target.value)} /></div>
         <div className="space-y-2"><Label>Receipt Number *</Label><Input value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="e.g. 0003801" /></div>
       </CardContent></Card>
-      <Card><CardHeader><CardTitle>Add Product</CardTitle></CardHeader><CardContent className="grid gap-3 lg:grid-cols-[180px_1fr_220px_auto]">
-        <Select value={productType} onValueChange={(value) => { setProductType(value); setSelectedKey(""); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All products</SelectItem><SelectItem value="CHICKEN">Chicken</SelectItem><SelectItem value="BODEGA">Grocery</SelectItem></SelectContent></Select>
-        <ProductPicker products={visibleProducts} value={selectedKey} onChange={setSelectedKey} />
+      <Card><CardHeader><CardTitle>Add Product</CardTitle></CardHeader><CardContent className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
+        <ProductPicker products={products} value={selectedKey} onChange={setSelectedKey} />
         <Input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Quantity" />
         <Button onClick={addItem}><Plus className="mr-2 h-4 w-4" />Add</Button>
       </CardContent></Card>

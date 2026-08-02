@@ -43,7 +43,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       pathname === route ||
       pathname.startsWith(`${route}/`)
   );
-  const isSalesModule = ["/sales", "/outlets", "/stock-transfers"].some(
+  const isSalesModule = ["/sales", "/stock-transfers"].some(
     (route) =>
       selectedModule === route ||
       selectedModule.startsWith(`${route}/`) ||
@@ -194,8 +194,10 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
             label: "Workspace",
             href: "/workspace",
             active:
-              pathname.startsWith("/workspace") &&
-              !selectedModule.startsWith("/reports/"),
+              (pathname.startsWith("/workspace") &&
+                !selectedModule.startsWith("/reports/")) ||
+              selectedModule.startsWith("/outlets") ||
+              pathname.startsWith("/outlets"),
           },
         ]
       : []),
@@ -217,11 +219,11 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           },
         ]
       : []),
-    ...(canAccessAnyRoute(["/sales", "/outlets", "/stock-transfers"])
+    ...(canAccessAnyRoute(["/sales", "/stock-transfers"])
       ? [
           {
             label: "Sales",
-            href: `/operations?module=${encodeURIComponent("/sales")}`,
+            href: `/operations?module=${encodeURIComponent("/sales/all")}`,
             active: isSalesModule,
           },
         ]

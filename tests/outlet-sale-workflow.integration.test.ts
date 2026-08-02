@@ -45,6 +45,10 @@ test("all-sales lookups and page use the sales permission", () => {
     /PRODUCT_LOOKUP_PERMISSIONS[\s\S]*"sales\.manage"/
   );
   assert.match(
+    permissions,
+    /PRODUCT_LOOKUP_PERMISSIONS[\s\S]*"stock-transfers\.view"[\s\S]*"stock-transfers\.manage"/
+  );
+  assert.match(
     proxy,
     /prefix:\s*"\/sales\/all",\s*permission:\s*"sales\.manage"/
   );
@@ -95,6 +99,9 @@ test("mobile cashier flow retains shift, cash, confirmation, and void guards", (
   assert.match(sale, /cashReceived\s*<\s*totalAmount/);
   assert.match(sale, /CashShiftModel\.findOneAndUpdate/);
   assert.match(sale, /status:\s*"OPEN"/);
+  assert.match(sale, /saleDate:\s*\{\s*\$gte:\s*dayStart,\s*\$lt:\s*dayEnd\s*\}/);
+  assert.match(sale, /\{\s*outletId:\s*user\.outlet\.id\s*\}/);
+  assert.match(sale, /\{\s*channel:\s*"MOBILE"\s*\}/);
   assert.match(closeShift, /status:\s*"CLOSING"/);
   assert.match(closeShift, /withTransaction/);
   assert.match(expense, /CashShiftModel\.findOneAndUpdate/);
@@ -103,7 +110,9 @@ test("mobile cashier flow retains shift, cash, confirmation, and void guards", (
   assert.match(voidSale, /status:\s*"VOIDED"/);
   assert.match(voidSale, /type:\s*"VOID"/);
   assert.match(voidSale, /stockQty:\s*Number\(movement\.quantity/);
-  assert.match(quickAdd, /does not match outlet inventory/);
+  assert.match(quickAdd, /components:\s*\[\]/);
+  assert.match(quickAdd, /stockLinked:\s*false/);
+  assert.doesNotMatch(quickAdd, /does not match outlet inventory/);
 });
 
 test("mobile access blocks inactive outlets and exposes movement history", () => {

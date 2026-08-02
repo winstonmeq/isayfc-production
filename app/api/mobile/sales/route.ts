@@ -13,7 +13,11 @@ import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requireMobileAuth } from "@/lib/mobile-auth";
-import { manilaDateString } from "@/lib/date-utils";
+import {
+  addDays,
+  manilaDateString,
+  startOfDayManila,
+} from "@/lib/date-utils";
 import OutletMenuItemModel from "@/models/OutletMenuItem";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
@@ -83,11 +87,26 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const limit = Math.min(Math.max(Number(searchParams.get("limit") || 30), 1), 100);
 
-  // Today's mobile sales for this outlet (by receipt prefix + remarks tag).
-  const datePart = manilaDateString().replaceAll("-", "");
+  // Today's mobile sales for this outlet. Use the first-class fields written
+  // by current clients, with legacy fallbacks for older rows.
+  const dayStart = startOfDayManila();
+  const dayEnd = addDays(dayStart, 1);
   const sales = await SaleModel.find({
-    receiptNumber: { $regex: `^MOB-${datePart}-` },
-    remarks: { $regex: `OUTLET:${user.outlet.id}` },
+    saleDate: { $gte: dayStart, $lt: dayEnd },
+    $and: [
+      {
+        $or: [
+          { outletId: user.outlet.id },
+          { remarks: { $regex: `OUTLET:${user.outlet.id}` } },
+        ],
+      },
+      {
+        $or: [
+          { channel: "MOBILE" },
+          { receiptNumber: { $regex: "^MOB-" } },
+        ],
+      },
+    ],
     isVoided: { $ne: true },
   })
     .sort({ createdAt: -1 })

@@ -20,13 +20,7 @@ type DeductionInput = {
 };
 
 const DEDUCTION_REASONS = {
-  DAMAGED: "DAMAGED",
-  EXPIRED: "EXPIRED",
-  STAFF_MEAL: "STAFF MEAL / INTERNAL USE",
-  COMPLIMENTARY: "COMPLIMENTARY",
-  COUNT_CORRECTION: "COUNT CORRECTION",
-  MISSING: "MISSING / UNACCOUNTED",
-  OTHER: "OTHER",
+  INVENTORY_DEDUCTION: "INVENTORY DEDUCTION",
 } as const;
 
 type DeductionReason = keyof typeof DEDUCTION_REASONS;
@@ -41,6 +35,7 @@ export async function GET(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
     "outlet-inventory.manage",
     "outlet-inventory.view",
+    "sales.manage",
   ]);
   if (response) return response;
 
@@ -79,10 +74,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, response } = await requireMobileAuth(
-    req,
-    "outlet-inventory.manage"
-  );
+  const { user, response } = await requireMobileAuth(req, [
+    "outlet-inventory.manage",
+    "sales.manage",
+  ]);
   if (response) return response;
 
   if (!user.outlet) {
@@ -116,15 +111,6 @@ export async function POST(req: NextRequest) {
   }
   const reason = DEDUCTION_REASONS[reasonCode as DeductionReason];
   const notes = String(body.remarks || "").trim().toUpperCase();
-  if (reasonCode === "OTHER" && notes.length < 5) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Enter a note of at least 5 characters for Other.",
-      },
-      { status: 400 }
-    );
-  }
   const remarks = notes ? `${reason}: ${notes}` : reason;
 
   if (rawItems.length === 0) {

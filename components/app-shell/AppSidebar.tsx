@@ -100,12 +100,12 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
       `/operations?module=${encodeURIComponent(module)}`;
 
     return [
-      canAccessAny(["/customers", "/suppliers", "/categories", "/products", "/bodega-products"])
+      canAccessAny(["/customers", "/suppliers", "/outlets", "/categories", "/products", "/bodega-products"])
         ? {
             label: "Workspace",
             href: "/workspace",
             icon: LayoutGrid,
-            active: pathname.startsWith("/workspace"),
+            active: pathname.startsWith("/workspace") || selectedModule.startsWith("/outlets"),
           }
         : null,
       canAccessAny(["/purchase-items", "/deliveries"])
@@ -124,12 +124,12 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             active: selectedModule.startsWith("/slicing"),
           }
         : null,
-      canAccessAny(["/sales", "/outlets", "/stock-transfers"])
+      canAccessAny(["/sales", "/stock-transfers"])
         ? {
             label: "Sales",
-            href: operationsHref("/sales"),
+            href: operationsHref("/sales/all"),
             icon: ShoppingCart,
-            active: ["/sales", "/outlets", "/stock-transfers"].some((route) => selectedModule.startsWith(route)),
+            active: ["/sales", "/stock-transfers"].some((route) => selectedModule.startsWith(route)),
           }
         : null,
       canAccessAny(["/payments"])

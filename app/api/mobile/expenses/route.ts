@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
     "expenses-bodega.view",
     "expenses-bodega.manage",
+    "sales.manage",
   ]);
   if (response) return response;
 
@@ -45,15 +46,19 @@ export async function GET(req: NextRequest) {
     status: "OPEN",
   })
     .select("_id")
-    .lean<{ _id: { toString: () => string } }>();
+    .lean<{ _id: mongoose.Types.ObjectId }>();
 
   if (!shift) {
     return NextResponse.json({ success: true, data: [], summary: { total: 0 } });
   }
 
+  const shiftId = shift._id.toString();
   const expenses = await ExpenseModel.find({
     isActive: true,
-    remarks: { $regex: `SHIFT:${shift._id.toString()}` },
+    $or: [
+      { shiftId: shift._id },
+      { remarks: { $regex: `SHIFT:${shiftId}` } },
+    ],
   })
     .sort({ createdAt: -1 })
     .lean<ExpenseListRow[]>();
@@ -74,7 +79,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, response } = await requireMobileAuth(req, "expenses-bodega.manage");
+  const { user, response } = await requireMobileAuth(req, [
+    "expenses-bodega.manage",
+    "sales.manage",
+  ]);
   if (response) return response;
 
   if (!user.outlet) {
@@ -86,7 +94,13 @@ export async function POST(req: NextRequest) {
 
   await connectDb();
 
-  let body: { name?: string; amount?: number; type?: string };
+  let body: {
+    name?: string;
+    amount?: number;
+    type?: string;
+    expenseDate?: string;
+    remarks?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -99,6 +113,11 @@ export async function POST(req: NextRequest) {
   const name = String(body?.name || "").trim();
   const amount = Number(body?.amount);
   const requestedType = String(body?.type);
+  const notes = String(body?.remarks || "").trim();
+  const expenseDateInput = String(body?.expenseDate || "").trim();
+  const expenseDate = expenseDateInput
+    ? new Date(`${expenseDateInput}T00:00:00.000Z`)
+    : new Date();
   const type: ExpenseType = EXPENSE_TYPES.includes(requestedType as ExpenseType)
     ? (requestedType as ExpenseType)
     : "OTHERS";
@@ -144,11 +163,16 @@ export async function POST(req: NextRequest) {
             name,
             expenseCategory: "BODEGA",
             type,
-            expenseDate: new Date(),
+            expenseDate,
             amount,
             outletId: user.outlet!.id,
             shiftId,
-            remarks: `MOBILE EXPENSE OUTLET:${user.outlet!.id} SHIFT:${shiftId}`,
+            remarks: [
+              `MOBILE EXPENSE OUTLET:${user.outlet!.id} SHIFT:${shiftId}`,
+              notes,
+            ]
+              .filter(Boolean)
+              .join(" | "),
             createdBy: user.id,
             isActive: true,
           },
@@ -180,5 +204,11 @@ export async function POST(req: NextRequest) {
     );
   } finally {
     await mongoSession.endSession();
+  }
+  if (Number.isNaN(expenseDate.getTime())) {
+    return NextResponse.json(
+      { success: false, message: "Enter a valid expense date." },
+      { status: 400 }
+    );
   }
 }

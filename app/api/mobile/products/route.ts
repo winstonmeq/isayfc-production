@@ -176,38 +176,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const linkedInventory = await OutletInventoryModel.findOne({
-    outletId: user.outlet.id,
-    productName: name.toUpperCase(),
-    isActive: true,
-  })
-    .select("productSource productId productName")
-    .lean<{
-      productSource?: "BODEGA" | "GROCERY";
-      productId?: Types.ObjectId;
-      productName?: string;
-    }>();
-
-  if (!linkedInventory?.productId) {
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          "This name does not match outlet inventory. Receive or create the stock item first so sales can deduct it.",
-      },
-      { status: 409 }
-    );
-  }
-
-  const components = [
-    {
-      productSource: linkedInventory.productSource || "BODEGA",
-      productId: linkedInventory.productId,
-      productName: linkedInventory.productName || name,
-      qtyPerSale: 1,
-    },
-  ];
-
   const item = await OutletMenuItemModel.create({
     outletId: user.outlet.id,
     name,
@@ -216,7 +184,9 @@ export async function POST(req: NextRequest) {
     imageUrl,
     sortOrder: 0,
     isAvailable: true,
-    components,
+    // Quick-added menu items are independent retail products. Inventory
+    // mappings are optional and can be configured separately when needed.
+    components: [],
     createdBy: user.id,
   });
 
@@ -230,7 +200,7 @@ export async function POST(req: NextRequest) {
         category: item.category,
         price: Number(item.price || 0),
         imageUrl: item.imageUrl || "",
-        stockLinked: true,
+        stockLinked: false,
       },
     },
     { status: 201 }

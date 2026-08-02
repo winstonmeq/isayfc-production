@@ -49,6 +49,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       routes: [
         "/customers",
         "/suppliers",
+        "/outlets",
         "/categories",
         "/products",
         "/bodega-products",
@@ -80,7 +81,6 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
         "/sales/grocery",
         "/sales/history",
         "/sales/lines",
-        "/outlets",
         "/stock-transfers",
       ],
     },

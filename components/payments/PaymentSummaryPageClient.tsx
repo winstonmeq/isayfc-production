@@ -113,17 +113,6 @@ export function PaymentSummaryPageClient() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-          Customer Payment Summary
-        </h1>
-
-        <Button variant="outline" onClick={() => window.print()}>
-          <Printer className="mr-2 h-4 w-4" />
-          Print list
-        </Button>
-      </div>
-
       <div className="flex flex-wrap gap-2">
         <Button
           variant={group === "ALL" ? "default" : "outline"}
@@ -147,8 +136,9 @@ export function PaymentSummaryPageClient() {
         </Button>
       </div>
 
-      <div className="flex max-w-xl gap-2">
+      <div className="flex flex-wrap gap-2">
         <Input
+          className="min-w-64 flex-1"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search customer name..."
@@ -165,6 +155,11 @@ export function PaymentSummaryPageClient() {
         <Button variant="secondary" onClick={resetSearch}>
           <RefreshCcw className="mr-2 h-4 w-4" />
           Reset
+        </Button>
+
+        <Button variant="outline" onClick={() => window.print()}>
+          <Printer className="mr-2 h-4 w-4" />
+          Print list
         </Button>
       </div>
 

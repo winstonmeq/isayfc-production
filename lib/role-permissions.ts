@@ -174,6 +174,8 @@ export const BODEGA_PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
 export const PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
   "products.view",
   "products.manage",
+  "stock-transfers.view",
+  "stock-transfers.manage",
   "purchase-items.view",
   "purchase-items.manage",
   "inventory.view",

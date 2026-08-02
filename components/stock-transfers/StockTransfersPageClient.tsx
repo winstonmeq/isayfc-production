@@ -266,71 +266,65 @@ export function StockTransfersPageClient() {
 
   async function loadProducts() {
     try {
-      const [bodegaRes, groceryRes] = await Promise.all([
-        fetch("/api/bodega-products?limit=200", { cache: "no-store" }),
-        fetch("/api/products?limit=200", { cache: "no-store" }),
-      ]);
+      async function loadAllPages(endpoint: string) {
+        const loadPage = async (page: number) => {
+          const separator = endpoint.includes("?") ? "&" : "?";
+          const response = await fetch(
+            `${endpoint}${separator}page=${page}&limit=100`,
+            { cache: "no-store" }
+          );
+          const json = await response.json();
 
-      const bodegaJson = await bodegaRes.json();
-      const groceryJson = await groceryRes.json();
+          if (!response.ok || !json.success) {
+            throw new Error(json.message || "Unable to load products.");
+          }
+
+          return json;
+        };
+
+        const firstPage = await loadPage(1);
+        const totalPages = Math.max(Number(firstPage.meta?.totalPages || 1), 1);
+        const remainingPages = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, index) =>
+            loadPage(index + 2)
+          )
+        );
+
+        return [
+          ...(Array.isArray(firstPage.data) ? firstPage.data : []),
+          ...remainingPages.flatMap((page) =>
+            Array.isArray(page.data) ? page.data : []
+          ),
+        ];
+      }
+
+      const [bodegaProducts, groceryProducts] = await Promise.all([
+        loadAllPages("/api/bodega-products"),
+        loadAllPages("/api/products"),
+      ]);
 
       const options: ProductOption[] = [];
 
-      if (bodegaRes.ok && bodegaJson.success) {
-        for (const p of bodegaJson.data as Array<{
+      for (const p of bodegaProducts as Array<{
           _id: string;
           name: string;
           stockQty?: number;
-          packSize?: number;
-          stockDisplay?: string;
-          packingOptions?: Array<{
-            _id: string;
-            packSize: number;
-            chickenSizeType?: string;
-            wholeChickenName?: string;
-          }>;
         }>) {
           const stock = Number(p.stockQty || 0);
-          const packingOptions = p.packingOptions || [];
 
-          if (packingOptions.length > 0) {
-            for (const packing of packingOptions) {
-              const packSize = Number(packing.packSize || 0);
-              const packingLabel =
-                packing.chickenSizeType ||
-                packing.wholeChickenName ||
-                `${packSize} pcs`;
-
-              options.push({
-                key: `BODEGA:${p._id}:${packing._id}`,
-                source: "BODEGA",
-                id: p._id,
-                name: p.name,
-                stock,
-                standardPackingId: packing._id,
-                packingLabel,
-                packSize,
-                unitLabel: "PACK",
-                stockDisplay: `${Math.floor(stock / packSize)} pack(s) + ${stock % packSize} pcs (${packSize}/pack)`,
-              });
-            }
-          } else {
-            options.push({
-              key: `BODEGA:${p._id}`,
-              source: "BODEGA",
-              id: p._id,
-              name: p.name,
-              stock,
-              packSize: 0,
-              unitLabel: "PCS",
-              stockDisplay: `${stock} pcs`,
-            });
-          }
-        }
+          options.push({
+            key: `BODEGA:${p._id}`,
+            source: "BODEGA",
+            id: p._id,
+            name: p.name,
+            stock,
+            packSize: 0,
+            unitLabel: "PCS",
+            stockDisplay: `${stock} pcs`,
+          });
       }
 
-      if (groceryRes.ok && groceryJson.success) {
-        for (const p of groceryJson.data as Array<{
+      for (const p of groceryProducts as Array<{
           _id: string;
           name: string;
           stockPcs?: number;
@@ -347,7 +341,6 @@ export function StockTransfersPageClient() {
             unitLabel: "QTY",
             stockDisplay: `${stock} in stock`,
           });
-        }
       }
 
       setProducts(options);
@@ -847,10 +840,9 @@ export function StockTransfersPageClient() {
               {editingId ? "Edit Delivery Order" : "New Delivery Order"}
             </DialogTitle>
             <DialogDescription>
-              Select the outlet and the products to transfer. Bodega pack
-              products (like C10) are sent in packs; grocery products are sent
-              by quantity. Stock is only deducted when the transfer is
-              dispatched.
+              Select the outlet and products to transfer. Products come directly
+              from the Bodega and Grocery product masters and are entered by
+              inventory quantity. Stock is only deducted when dispatched.
             </DialogDescription>
           </DialogHeader>
 

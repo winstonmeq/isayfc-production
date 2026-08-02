@@ -355,38 +355,21 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       transferFail(400, "Invalid packing configuration in transfer items.");
     }
 
-    const standardFilter = {
-      isActive: true,
-      productId: new Types.ObjectId(productKey),
-      ...(standardPackingId
-        ? { _id: new Types.ObjectId(standardPackingId) }
-        : {}),
-      standardPacking: { $gt: 0 },
-    };
-    const standards = await StandardPackingModel.find(standardFilter)
-      .sort({ updatedAt: -1, _id: -1 })
-      .select("standardPacking")
-      .lean<Array<{ _id: Types.ObjectId; standardPacking?: number }>>();
-    const standard = standards[0];
+    const standard = standardPackingId
+      ? await StandardPackingModel.findOne({
+          _id: new Types.ObjectId(standardPackingId),
+          isActive: true,
+          productId: new Types.ObjectId(productKey),
+          standardPacking: { $gt: 0 },
+        })
+          .select("standardPacking")
+          .lean<{ _id: Types.ObjectId; standardPacking?: number }>()
+      : null;
 
     if (standardPackingId && !standard) {
       transferFail(
         400,
         "The selected packing configuration is no longer active for this product."
-      );
-    }
-
-    if (
-      !standardPackingId &&
-      new Set(
-        standards.map((item) =>
-          Math.max(0, Math.trunc(Number(item.standardPacking || 0)))
-        )
-      ).size > 1
-    ) {
-      transferFail(
-        400,
-        `Please select a packing configuration for ${product.name}.`
       );
     }
 

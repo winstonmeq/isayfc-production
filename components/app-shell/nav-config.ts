@@ -66,6 +66,13 @@ export const appNavItems: AppNavItem[] = [
     section: "Workspace",
   },
   {
+    title: "Outlets",
+    href: "/outlets",
+    icon: Building2,
+    permission: "outlets.view",
+    section: "Workspace",
+  },
+  {
     title: "Categories",
     href: "/categories",
     icon: Tags,
@@ -173,12 +180,6 @@ export const appNavItems: AppNavItem[] = [
         href: "/sales/lines",
         icon: ReceiptText,
         permission: "sales-lines.view",
-      },
-      {
-        title: "Outlets",
-        href: "/outlets",
-        icon: Building2,
-        permission: "outlets.view",
       },
       {
         title: "Stock Transfers",

@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   ReportShell,
@@ -59,6 +67,8 @@ const quantity = (value: number) =>
     maximumFractionDigits: 2,
   });
 
+const roundAmount = (value: number) => Math.round(value * 100) / 100;
+
 const expenseLabel: Record<string, string> = {
   DELIVERY_EXPENSES: "Delivery Expenses",
   CLEANING_SUPPLIES: "Cleaning Supplies",
@@ -77,6 +87,7 @@ export function GrossSalesProfitabilityReportPageClient() {
   const [to, setTo] = useState("");
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [category, setCategory] = useState("ALL");
 
   const load = useCallback(async () => {
     if (preset === "custom" && (!from || !to)) {
@@ -112,6 +123,57 @@ export function GrossSalesProfitabilityReportPageClient() {
     return () => clearTimeout(timer);
   }, [preset, load]);
 
+  const categories = useMemo(
+    () =>
+      [...new Set((data?.products || []).map((product) => product.categoryName))]
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [data]
+  );
+
+  useEffect(() => {
+    if (category !== "ALL" && !categories.includes(category)) {
+      setCategory("ALL");
+    }
+  }, [categories, category]);
+
+  const visibleProducts = useMemo(
+    () =>
+      category === "ALL"
+        ? data?.products || []
+        : (data?.products || []).filter(
+            (product) => product.categoryName === category
+          ),
+    [category, data]
+  );
+
+  const visibleTotals = useMemo(() => {
+    if (!data || category === "ALL") return data?.totals;
+    const packUnits = visibleProducts.reduce((sum, product) => sum + product.packUnits, 0);
+    const packSales = roundAmount(visibleProducts.reduce((sum, product) => sum + product.packRevenue, 0));
+    const pieceUnits = visibleProducts.reduce((sum, product) => sum + product.pieceUnits, 0);
+    const pieceSales = roundAmount(visibleProducts.reduce((sum, product) => sum + product.pieceRevenue, 0));
+    const grossSales = roundAmount(packSales + pieceSales);
+    const productCogs = roundAmount(visibleProducts.reduce((sum, product) => sum + product.cogs, 0));
+    const grossProfit = roundAmount(grossSales - productCogs);
+    const netIncome = roundAmount(grossProfit - data.totals.totalOperatingExpenses);
+    return {
+      ...data.totals,
+      packUnits,
+      packSales,
+      pieceUnits,
+      pieceSales,
+      grossSales,
+      productCogs,
+      outletCogs: 0,
+      totalCogs: productCogs,
+      grossProfit,
+      netIncome,
+      profitabilityRatio:
+        grossSales > 0 ? Math.round((netIncome / grossSales) * 10000) / 100 : 0,
+    };
+  }, [category, data, visibleProducts]);
+
   const periodLabel = data
     ? `${new Date(data.range.start).toLocaleDateString("en-PH")} – ${new Date(
         new Date(data.range.end).getTime() - 1
@@ -131,6 +193,21 @@ export function GrossSalesProfitabilityReportPageClient() {
       onFrom={setFrom}
       onTo={setTo}
       onApply={load}
+      extraFilters={
+        <Select value={category} onValueChange={setCategory}>
+          <SelectTrigger className="w-52">
+            <SelectValue placeholder="All Categories" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Categories</SelectItem>
+            {categories.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      }
     >
       <style>{`
         @media print {
@@ -146,100 +223,100 @@ export function GrossSalesProfitabilityReportPageClient() {
         <div className="flex justify-center py-20 text-slate-400">
           <Loader2 className="size-7 animate-spin" />
         </div>
-      ) : !data ? null : (
+      ) : !data || !visibleTotals ? null : (
         <div className="gross-sales-sheet overflow-x-auto rounded-xl border border-slate-300 bg-white p-3 print:overflow-visible print:rounded-none print:p-0">
-          <div className="min-w-max space-y-5">
-            <ReportTable products={data.products}>
-              <SectionTitle title="Gross Sales" products={data.products} />
-              <GroupLabel label="In Packs" products={data.products} />
+          <div className="space-y-5">
+            <ReportTable products={visibleProducts}>
+              <SectionTitle title="Gross Sales" products={visibleProducts} />
+              <GroupLabel label="In Packs" products={visibleProducts} />
               <DataRow
                 label="No. of Units Sold (packs)"
-                total={quantity(data.totals.packUnits)}
-                values={data.products.map((product) => quantity(product.packUnits))}
+                total={quantity(visibleTotals.packUnits)}
+                values={visibleProducts.map((product) => quantity(product.packUnits))}
               />
               <DataRow
                 label="Average Price"
                 total=""
-                values={data.products.map((product) =>
+                values={visibleProducts.map((product) =>
                   product.packUnits ? money(product.packPrice) : "—"
                 )}
               />
               <DataRow
                 label="Total Sales"
-                total={money(data.totals.packSales)}
-                values={data.products.map((product) => money(product.packRevenue))}
+                total={money(visibleTotals.packSales)}
+                values={visibleProducts.map((product) => money(product.packRevenue))}
                 bold
                 rule
               />
 
-              <SpacerRow products={data.products} />
-              <GroupLabel label="In Pieces / Quantity" products={data.products} />
+              <SpacerRow products={visibleProducts} />
+              <GroupLabel label="In Pieces / Quantity" products={visibleProducts} />
               <DataRow
                 label="No. of Units Sold"
-                total={quantity(data.totals.pieceUnits)}
-                values={data.products.map((product) => quantity(product.pieceUnits))}
+                total={quantity(visibleTotals.pieceUnits)}
+                values={visibleProducts.map((product) => quantity(product.pieceUnits))}
               />
               <DataRow
                 label="Average Price"
                 total=""
-                values={data.products.map((product) =>
+                values={visibleProducts.map((product) =>
                   product.pieceUnits ? money(product.piecePrice) : "—"
                 )}
               />
               <DataRow
                 label="Total Sales"
-                total={money(data.totals.pieceSales)}
-                values={data.products.map((product) => money(product.pieceRevenue))}
+                total={money(visibleTotals.pieceSales)}
+                values={visibleProducts.map((product) => money(product.pieceRevenue))}
                 bold
               />
               <TotalBand
                 label="OVERALL GROSS SALES"
-                total={money(data.totals.grossSales)}
-                products={data.products}
+                total={money(visibleTotals.grossSales)}
+                products={visibleProducts}
               />
             </ReportTable>
 
-            <ReportTable products={data.products}>
-              <SectionTitle title="Cost of Sales" products={data.products} />
-              <GroupLabel label="In Stock Units" products={data.products} />
+            <ReportTable products={visibleProducts}>
+              <SectionTitle title="Cost of Sales" products={visibleProducts} />
+              <GroupLabel label="In Stock Units" products={visibleProducts} />
               <DataRow
                 label="Units Released from Inventory"
                 total={quantity(
-                  data.products.reduce(
+                  visibleProducts.reduce(
                     (sum, product) => sum + product.stockUnitsOut,
                     0
                   )
                 )}
-                values={data.products.map((product) =>
+                values={visibleProducts.map((product) =>
                   quantity(product.stockUnitsOut)
                 )}
               />
-              <SpacerRow products={data.products} />
-              <GroupLabel label="In Peso" products={data.products} />
+              <SpacerRow products={visibleProducts} />
+              <GroupLabel label="In Peso" products={visibleProducts} />
               <DataRow
                 label="Historical Product Cost"
-                total={money(data.totals.productCogs)}
-                values={data.products.map((product) => money(product.cogs))}
+                total={money(visibleTotals.productCogs)}
+                values={visibleProducts.map((product) => money(product.cogs))}
                 bold
               />
-              {data.totals.outletCogs > 0 ? (
+              {visibleTotals.outletCogs > 0 ? (
                 <DataRow
                   label="Outlet POS Component Cost"
-                  total={money(data.totals.outletCogs)}
-                  values={data.products.map(() => "—")}
+                  total={money(visibleTotals.outletCogs)}
+                  values={visibleProducts.map(() => "—")}
                 />
               ) : null}
               <DataRow
                 label="TOTAL COST OF SALES"
-                total={money(data.totals.totalCogs)}
-                values={data.products.map((product) => money(product.cogs))}
+                total={money(visibleTotals.totalCogs)}
+                values={visibleProducts.map((product) => money(product.cogs))}
                 bold
                 rule
               />
               <ProfitRow
                 label="GROSS PROFIT"
-                total={data.totals.grossProfit}
-                values={data.products.map((product) => product.grossProfit)}
+                total={visibleTotals.grossProfit}
+                values={visibleProducts.map((product) => product.grossProfit)}
               />
             </ReportTable>
 
@@ -261,19 +338,19 @@ export function GrossSalesProfitabilityReportPageClient() {
                 <tr className="border-t border-black font-bold">
                   <td className="px-1 py-1">Total Operating Expenses</td>
                   <td className="px-1 py-1 text-right">
-                    {money(data.totals.totalOperatingExpenses)}
+                    {money(visibleTotals.totalOperatingExpenses)}
                   </td>
                 </tr>
                 <tr className="border-t border-black font-black">
                   <td className="px-1 py-1">NET INCOME</td>
-                  <td className={valueClass(data.totals.netIncome)}>
-                    {signedMoney(data.totals.netIncome)}
+                  <td className={summaryValueClass(visibleTotals.netIncome)}>
+                    {signedMoney(visibleTotals.netIncome)}
                   </td>
                 </tr>
                 <tr className="border-t border-black font-black">
                   <td className="px-1 py-1">PROFITABILITY RATIO</td>
-                  <td className={valueClass(data.totals.profitabilityRatio)}>
-                    {data.totals.profitabilityRatio.toFixed(2)}%
+                  <td className={summaryValueClass(visibleTotals.profitabilityRatio)}>
+                    {visibleTotals.profitabilityRatio.toFixed(2)}%
                   </td>
                 </tr>
               </tbody>
@@ -293,12 +370,12 @@ function ReportTable({
   children: React.ReactNode;
 }) {
   return (
-    <table className="w-full table-fixed border-collapse border border-black text-xs">
+    <table className="w-max min-w-full table-fixed border-collapse border border-black text-xs">
       <colgroup>
-        <col className="w-64" />
-        <col className="w-28" />
+        <col className="w-52" />
+        <col className="w-24" />
         {products.map((product) => (
-          <col key={product.key} className="w-28" />
+          <col key={product.key} className="w-24" />
         ))}
       </colgroup>
       <tbody>{children}</tbody>
@@ -310,10 +387,14 @@ function SectionTitle({ title, products }: { title: string; products: ProductCol
   return (
     <>
       <tr>
-        <th className="px-1 py-1 text-left text-sm" colSpan={2}>{title}</th>
-        <th className="px-1 py-1 text-center text-sm" colSpan={Math.max(products.length, 1)}>
-          PRODUCT
+        <th className="px-1 py-1 text-left text-sm" colSpan={2}>
+          {title}
         </th>
+        {products.length > 0 ? (
+          <th className="px-1 py-1 text-center text-sm" colSpan={products.length}>
+            PRODUCT
+          </th>
+        ) : null}
       </tr>
       <tr className="border-b border-black">
         <th className="px-1 py-1 text-left" />
@@ -355,9 +436,9 @@ function DataRow({
   return (
     <tr className={`${bold ? "font-bold" : ""} ${rule ? "border-b border-black" : ""}`}>
       <td className="px-1 py-1">{label}</td>
-      <td className="px-1 py-1 text-right">{total}</td>
+      <td className="px-1 py-1 text-center tabular-nums">{total}</td>
       {values.map((value, index) => (
-        <td key={index} className="px-1 py-1 text-right">{value}</td>
+        <td key={index} className="px-1 py-1 text-center tabular-nums">{value}</td>
       ))}
     </tr>
   );
@@ -371,8 +452,8 @@ function TotalBand({ label, total, products }: { label: string; total: string; p
   return (
     <tr className="bg-black font-black text-white">
       <td className="px-1 py-2">{label}</td>
-      <td className="px-1 py-2 text-right">{total}</td>
-      <td colSpan={products.length} />
+      <td className="px-1 py-2 text-center tabular-nums">{total}</td>
+      {products.length > 0 ? <td colSpan={products.length} /> : null}
     </tr>
   );
 }
@@ -382,7 +463,11 @@ function signedMoney(value: number) {
 }
 
 function valueClass(value: number) {
-  return `px-1 py-1 text-right ${value < 0 ? "text-red-600" : "text-slate-950"}`;
+  return `px-1 py-1 text-center tabular-nums ${value < 0 ? "text-red-600" : "text-slate-950"}`;
+}
+
+function summaryValueClass(value: number) {
+  return `px-1 py-1 text-right tabular-nums ${value < 0 ? "text-red-600" : "text-slate-950"}`;
 }
 
 function ProfitRow({ label, total, values }: { label: string; total: number; values: number[] }) {
