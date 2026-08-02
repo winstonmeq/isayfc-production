@@ -212,6 +212,13 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/reports/gross-sales": dynamic(
+    () =>
+      import("@/components/reports/GrossSalesProfitabilityReportPageClient").then(
+        (m) => m.GrossSalesProfitabilityReportPageClient
+      ),
+    { loading: LoadingModule }
+  ),
   "/reports/inventory": dynamic(
     () =>
       import("@/components/reports/InventoryReportPageClient").then(

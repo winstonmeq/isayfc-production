@@ -275,6 +275,12 @@ export const appNavItems: AppNavItem[] = [
     section: "Finance",
     children: [
       {
+        title: "Gross Sales & Profitability",
+        href: "/reports/gross-sales",
+        icon: BarChart3,
+        permission: "reports.profit",
+      },
+      {
         title: "Sales Report",
         href: "/reports/sales",
         icon: BarChart3,

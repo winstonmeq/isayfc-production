@@ -34,6 +34,22 @@ test("mixed web sales retain per-line inventory routing", () => {
   assert.match(saleLineModel, /enum:\s*\["CHICKEN",\s*"BODEGA"\]/);
 });
 
+test("all-sales lookups and page use the sales permission", () => {
+  const products = source("app/api/products/route.ts");
+  const permissions = source("lib/role-permissions.ts");
+  const proxy = source("proxy.ts");
+
+  assert.match(products, /requirePermission\(PRODUCT_LOOKUP_PERMISSIONS\)/);
+  assert.match(
+    permissions,
+    /PRODUCT_LOOKUP_PERMISSIONS[\s\S]*"sales\.manage"/
+  );
+  assert.match(
+    proxy,
+    /prefix:\s*"\/sales\/all",\s*permission:\s*"sales\.manage"/
+  );
+});
+
 test("dispatch, delivery, and confirmation retain atomic state guards", () => {
   const dispatch = source("lib/stock-transfers.ts");
   const deliver = source("app/api/stock-transfers/[id]/deliver/route.ts");
@@ -88,4 +104,16 @@ test("mobile cashier flow retains shift, cash, confirmation, and void guards", (
   assert.match(voidSale, /type:\s*"VOID"/);
   assert.match(voidSale, /stockQty:\s*Number\(movement\.quantity/);
   assert.match(quickAdd, /does not match outlet inventory/);
+});
+
+test("mobile access blocks inactive outlets and exposes movement history", () => {
+  const mobileAuth = source("lib/mobile-auth.ts");
+  const movements = source(
+    "app/api/mobile/inventory/[id]/movements/route.ts"
+  );
+
+  assert.match(mobileAuth, /assignedOutlet\?\.isActive\s*!==\s*false/);
+  assert.match(mobileAuth, /assignedOutlet\?\.status\s*===\s*"ACTIVE"/);
+  assert.match(movements, /outletInventoryId:\s*id/);
+  assert.match(movements, /sort\(\{\s*transactionDate:\s*-1/);
 });

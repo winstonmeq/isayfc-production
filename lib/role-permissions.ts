@@ -54,7 +54,10 @@ export const ROLE_PERMISSION_GROUPS = [
     group: "Sales / Customer Deliveries",
     permissions: [
       { key: "sales.view", label: "View Sales" },
-      { key: "sales.manage", label: "Manage Sales" },
+      {
+        key: "sales.manage",
+        label: "Create Sales (All, Chicken, and Grocery)",
+      },
       { key: "sales-lines.view", label: "View Sales Per Item" },
       { key: "customer-deliveries.view", label: "View Customer Deliveries" },
       { key: "customer-deliveries.manage", label: "Manage Customer Deliveries" },
@@ -164,6 +167,17 @@ export const BODEGA_PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
   "outlet-inventory.view",
   "outlet-inventory.manage",
   "sales-lines.view",
+  "sales.view",
+  "sales.manage",
+];
+
+export const PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
+  "products.view",
+  "products.manage",
+  "purchase-items.view",
+  "purchase-items.manage",
+  "inventory.view",
+  "inventory.manage",
   "sales.view",
   "sales.manage",
 ];

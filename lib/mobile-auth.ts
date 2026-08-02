@@ -71,6 +71,7 @@ export type MobileUser = {
   roleName: string;
   permissions: string[];
   outlet: { id: string; name: string; code: string } | null;
+  outletInactive: boolean;
 };
 
 function unauthorized(message = "Unauthorized.") {
@@ -112,7 +113,11 @@ export async function loadMobileUser(userId: string): Promise<MobileUser | null>
 
   const role = user.roleId;
   const roleActive = role ? role.isActive !== false : true;
-  const outlet = user.outletId;
+  const assignedOutlet = user.outletId;
+  const outlet =
+    assignedOutlet?.isActive !== false && assignedOutlet?.status === "ACTIVE"
+      ? assignedOutlet
+      : null;
 
   return {
     id: user._id.toString(),
@@ -123,6 +128,7 @@ export async function loadMobileUser(userId: string): Promise<MobileUser | null>
     roleName: String(role?.name || ""),
     permissions:
       roleActive && Array.isArray(role?.permissions) ? role.permissions : [],
+    outletInactive: Boolean(assignedOutlet && !outlet),
     outlet: outlet
       ? {
           id: outlet._id.toString(),

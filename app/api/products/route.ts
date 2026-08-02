@@ -3,6 +3,7 @@ import { isValidObjectId, type QueryFilter } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
+import { PRODUCT_LOOKUP_PERMISSIONS } from "@/lib/role-permissions";
 import { withAuditLog } from "@/lib/audit-log";
 import {
   cleanNumber,
@@ -31,7 +32,7 @@ function serializeProduct(product: any) {
 }
 
 export async function GET(req: NextRequest) {
-  const { response } = await requirePermission("products.view");
+  const { response } = await requirePermission(PRODUCT_LOOKUP_PERMISSIONS);
   if (response) return response;
 
   await dbConnect();

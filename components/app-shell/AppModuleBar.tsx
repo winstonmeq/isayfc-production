@@ -118,6 +118,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       title: "Reports",
       icon: FileChartColumn,
       routes: [
+        "/reports/gross-sales",
         "/reports/sales",
         "/reports/inventory",
         "/reports/inventory-movements",
