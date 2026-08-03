@@ -309,18 +309,43 @@ export function StockTransfersPageClient() {
           _id: string;
           name: string;
           stockQty?: number;
+          packSize?: number;
+          stockDisplay?: string;
+          packingOptions?: Array<{
+            _id: string;
+            packSize?: number;
+            chickenSizeType?: string;
+            wholeChickenName?: string;
+          }>;
         }>) {
           const stock = Number(p.stockQty || 0);
+          const packing = Array.isArray(p.packingOptions)
+            ? p.packingOptions.find(
+                (option) => Number(option.packSize || 0) > 0
+              )
+            : undefined;
+          const packSize = Math.max(
+            0,
+            Math.trunc(Number(packing?.packSize || p.packSize || 0))
+          );
+          const packingLabel =
+            packing?.wholeChickenName || packing?.chickenSizeType || undefined;
 
           options.push({
             key: `BODEGA:${p._id}`,
             source: "BODEGA",
             id: p._id,
             name: p.name,
+            standardPackingId: packing?._id,
+            packingLabel,
             stock,
-            packSize: 0,
-            unitLabel: "PCS",
-            stockDisplay: `${stock} pcs`,
+            packSize,
+            unitLabel: packSize > 0 ? "PACK" : "PCS",
+            stockDisplay:
+              p.stockDisplay ||
+              (packSize > 0
+                ? `${Math.floor(stock / packSize)} pack(s) + ${stock % packSize} pcs`
+                : `${stock} pcs`),
           });
       }
 
@@ -383,7 +408,7 @@ export function StockTransfersPageClient() {
           key:
             item.source === "GROCERY"
               ? `GROCERY:${item.productId}`
-              : `BODEGA:${item.bodegaProductId}${item.standardPackingId ? `:${item.standardPackingId}` : ""}`,
+              : `BODEGA:${item.bodegaProductId}`,
           qty: String(item.qty),
         }))
       );
@@ -841,8 +866,9 @@ export function StockTransfersPageClient() {
             </DialogTitle>
             <DialogDescription>
               Select the outlet and products to transfer. Products come directly
-              from the Bodega and Grocery product masters and are entered by
-              inventory quantity. Stock is only deducted when dispatched.
+              from the Bodega and Grocery product masters. Pack products are
+              entered in packs; other products use their inventory quantity.
+              Stock is only deducted when dispatched.
             </DialogDescription>
           </DialogHeader>
 
@@ -924,7 +950,13 @@ export function StockTransfersPageClient() {
                           }
                         />
                         <span className="w-12 shrink-0 text-sm text-slate-500">
-                          {isPack ? "packs" : selected ? "pcs" : ""}
+                          {isPack
+                            ? "packs"
+                            : selected?.unitLabel === "QTY"
+                              ? "units"
+                              : selected
+                                ? "pcs"
+                                : ""}
                         </span>
                       </div>
                       {pcsPreview > 0 ? (
