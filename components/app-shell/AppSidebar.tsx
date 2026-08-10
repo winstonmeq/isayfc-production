@@ -94,6 +94,8 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
       );
     const firstChild = (title: string, fallback: string) =>
       visibleNavItems.find((item) => item.title === title)?.children?.[0]?.href || fallback;
+    const firstVisibleRoute = (targets: string[], fallback: string) =>
+      targets.find((target) => routes.includes(target)) || fallback;
     const financeHref = (module: string) =>
       `/finance?module=${encodeURIComponent(module)}`;
     const operationsHref = (module: string) =>
@@ -172,12 +174,12 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             active: selectedModule.startsWith("/reports/"),
           }
         : null,
-      canAccessAny(["/users", "/roles"])
+      canAccessAny(["/users", "/roles", "/audit-logs", "/corrections"])
         ? {
             label: "Users",
-            href: `/admin?module=${encodeURIComponent(firstChild("User Management", "/users"))}`,
+            href: `/admin?module=${encodeURIComponent(firstVisibleRoute(["/users", "/roles", "/audit-logs", "/corrections"], "/users"))}`,
             icon: Users,
-            active: selectedModule === "/users" || selectedModule === "/roles",
+            active: ["/users", "/roles", "/audit-logs", "/corrections"].includes(selectedModule),
           }
         : null,
     ].filter(Boolean) as Array<{

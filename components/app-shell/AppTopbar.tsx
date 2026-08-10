@@ -83,7 +83,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
   );
   const currentArea = selectedModule.startsWith("/reports/")
     ? "Reports"
-    : selectedModule === "/users" || selectedModule === "/roles"
+    : ["/users", "/roles", "/audit-logs", "/corrections"].includes(selectedModule)
       ? "Users"
       : isPurchasingModule
         ? "Purchasing"
@@ -116,7 +116,9 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
   const canManageUsers =
     isAdmin ||
     permissions.includes("users.view") ||
-    permissions.includes("roles.view");
+    permissions.includes("roles.view") ||
+    permissions.includes("audit-logs.view") ||
+    permissions.includes("activity-logs.view");
   const firstReport =
     [
       ["reports.sales", "/reports/sales"],
@@ -125,8 +127,11 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       ["reports.profit", "/reports/profit"],
     ].find(([permission]) => isAdmin || permissions.includes(permission))?.[1] ||
     "/reports/sales";
-  const firstUserModule =
-    isAdmin || permissions.includes("users.view") ? "/users" : "/roles";
+  const firstUserModule = isAdmin || permissions.includes("users.view")
+    ? "/users"
+    : permissions.includes("roles.view")
+      ? "/roles"
+      : "/audit-logs";
   function canAccessSection(section: SectionName) {
     if (isAdmin) return true;
     return appNavItems
@@ -286,7 +291,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           {
             label: "Users",
             href: `/admin?module=${encodeURIComponent(firstUserModule)}`,
-            active: selectedModule === "/users" || selectedModule === "/roles",
+            active: ["/users", "/roles", "/audit-logs", "/corrections"].includes(selectedModule),
           },
         ]
       : []),

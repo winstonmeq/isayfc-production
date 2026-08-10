@@ -7,7 +7,6 @@ import {
   CircleDollarSign,
   Factory,
   FileChartColumn,
-  FolderCog,
   PackageSearch,
   ReceiptText,
   ShieldCheck,
@@ -132,12 +131,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
     {
       title: "Users & Access",
       icon: ShieldCheck,
-      routes: ["/users", "/roles"],
-    },
-    {
-      title: "Governance",
-      icon: FolderCog,
-      routes: ["/audit-logs", "/corrections"],
+      routes: ["/users", "/roles", "/audit-logs", "/corrections"],
     },
   ],
 };
