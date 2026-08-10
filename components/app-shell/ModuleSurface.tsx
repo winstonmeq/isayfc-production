@@ -233,6 +233,13 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/reports/inventory-reconciliation": dynamic(
+    () =>
+      import("@/components/reports/InventoryReconciliationReportPageClient").then(
+        (m) => m.InventoryReconciliationReportPageClient
+      ),
+    { loading: LoadingModule }
+  ),
   "/reports/payments": dynamic(
     () =>
       import("@/components/reports/PaymentsReportPageClient").then(

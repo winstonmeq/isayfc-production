@@ -121,6 +121,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
         "/reports/sales",
         "/reports/inventory",
         "/reports/inventory-movements",
+        "/reports/inventory-reconciliation",
         "/reports/payments",
         "/reports/profit",
         "/reports/product-profits",

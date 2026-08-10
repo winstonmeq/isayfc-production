@@ -46,7 +46,7 @@ function result(
   const ledgerStock = latest ? number(latest.newStock) : null;
   const difference = ledgerStock === null ? null : base.masterStock - ledgerStock;
   const status = ledgerStock === null
-    ? "NO_LEDGER"
+    ? equal(base.masterStock, 0) ? "OK" : "NO_LEDGER"
     : !equal(difference || 0, 0)
       ? "MISMATCH"
       : chainBreaks > 0
@@ -167,7 +167,10 @@ export async function GET() {
     success: true,
     reconciledAt: new Date().toISOString(),
     summary: { total: rows.length, ...summary },
-    balanced: summary.MISMATCH === 0 && summary.BROKEN_CHAIN === 0,
+    balanced:
+      summary.MISMATCH === 0 &&
+      summary.BROKEN_CHAIN === 0 &&
+      summary.NO_LEDGER === 0,
     data: rows,
   });
 }

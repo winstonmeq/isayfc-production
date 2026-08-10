@@ -300,6 +300,12 @@ export const appNavItems: AppNavItem[] = [
         permission: "reports.inventory",
       },
       {
+        title: "Inventory Reconciliation",
+        href: "/reports/inventory-reconciliation",
+        icon: ShieldCheck,
+        permission: "reports.inventory",
+      },
+      {
         title: "Payment Report",
         href: "/reports/payments",
         icon: CreditCard,
