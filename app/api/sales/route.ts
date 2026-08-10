@@ -588,6 +588,7 @@ async function handlePOST(req: NextRequest) {
 
           bodegaStockTransactions.push({
             bodegaProductId: item.bodegaProductId,
+            transactionDate: new Date(saleDate),
             type: "STOCK_OUT",
             quantity: item.stockPcsOut,
             heads: isHeadSale ? item.qty : 0,
@@ -622,6 +623,7 @@ async function handlePOST(req: NextRequest) {
           previousStock = newStock + item.stockPcsOut;
           inventoryTransactions.push({
             productId: item.productId,
+            transactionDate: new Date(saleDate),
             type: "SALE",
             unit: "PCS",
             quantity: item.stockPcsOut,

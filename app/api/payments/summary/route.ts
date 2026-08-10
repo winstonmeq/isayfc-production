@@ -86,6 +86,12 @@ export async function GET(req: NextRequest) {
         $group: {
           _id: "$customerId",
           paid: {
+            $sum: "$appliedAmount",
+          },
+          unappliedCredit: {
+            $sum: "$unappliedAmount",
+          },
+          received: {
             $sum: "$amount",
           },
         },
@@ -108,6 +114,8 @@ export async function GET(req: NextRequest) {
       item._id.toString(),
       {
         paid: item.paid || 0,
+        unappliedCredit: item.unappliedCredit || 0,
+        received: item.received || 0,
       },
     ])
   );
@@ -116,6 +124,8 @@ export async function GET(req: NextRequest) {
     const id = customer._id.toString();
     const sales = salesMap.get(id)?.sales || 0;
     const paid = paymentsMap.get(id)?.paid || 0;
+    const unappliedCredit = paymentsMap.get(id)?.unappliedCredit || 0;
+    const received = paymentsMap.get(id)?.received || 0;
     const packs = salesMap.get(id)?.packs || 0;
 
     return {
@@ -124,7 +134,10 @@ export async function GET(req: NextRequest) {
       type: customer.type,
       sales,
       paid,
-      balance: sales - paid,
+      balance: Math.max(sales - paid, 0),
+      unappliedCredit,
+      received,
+      netPosition: sales - received,
       packs,
     };
   });

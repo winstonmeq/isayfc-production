@@ -6,6 +6,7 @@ export interface ICustomerInventoryTransaction extends Document {
   _id: Types.ObjectId;
   customerInventoryId: Types.ObjectId;
   customerId: Types.ObjectId;
+  transactionDate: Date;
   type: CustomerInventoryTransactionType;
   quantity: number;
   previousStock: number;
@@ -30,6 +31,12 @@ const CustomerInventoryTransactionSchema = new Schema<ICustomerInventoryTransact
       type: Schema.Types.ObjectId,
       ref: "Customer",
       required: true,
+    },
+
+    transactionDate: {
+      type: Date,
+      required: true,
+      default: Date.now,
     },
 
     type: {
@@ -84,6 +91,7 @@ const CustomerInventoryTransactionSchema = new Schema<ICustomerInventoryTransact
 CustomerInventoryTransactionSchema.index({ customerInventoryId: 1 });
 CustomerInventoryTransactionSchema.index({ customerId: 1 });
 CustomerInventoryTransactionSchema.index({ createdAt: -1 });
+CustomerInventoryTransactionSchema.index({ transactionDate: -1 });
 
 const CustomerInventoryTransactionModel: Model<ICustomerInventoryTransaction> =
   mongoose.models.CustomerInventoryTransaction ||

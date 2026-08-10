@@ -1,6 +1,6 @@
 // app/api/purchase-batches/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
@@ -11,6 +11,7 @@ import {
   getPagination,
 } from "@/lib/crud-utils";
 import ProductModel from "@/models/Product";
+import InventoryTransactionModel from "@/models/InventoryTransaction";
 import PurchaseBatchModel from "@/models/PurchaseBatch";
 import PurchaseItemModel from "@/models/PurchaseItem";
 
@@ -177,7 +178,14 @@ async function handlePOST(req: NextRequest) {
   let totalItems = 0;
   let totalAmount = 0;
 
-  const preparedItems = [];
+  const preparedItems: Array<{
+    product: any;
+    productId: any;
+    productName: string;
+    buyingPrice: number;
+    quantity: number;
+    subtotal: number;
+  }> = [];
 
   for (const item of items) {
     const productId = cleanString(item.productId);
@@ -245,39 +253,73 @@ async function handlePOST(req: NextRequest) {
     });
   }
 
-  const batch = await PurchaseBatchModel.create({
-    datePurchased: new Date(datePurchased),
-    totalItems,
-    totalAmount,
-    remarks,
-    createdBy: session?.user?.id,
-  });
+  const transactionDate = new Date(datePurchased);
+  const mongoSession = await mongoose.startSession();
+  let batch: any;
 
-  const purchaseItemsToInsert = [];
+  try {
+    await mongoSession.withTransaction(async () => {
+      [batch] = await PurchaseBatchModel.create(
+        [{
+          datePurchased: transactionDate,
+          totalItems,
+          totalAmount,
+          remarks,
+          createdBy: session?.user?.id,
+        }],
+        { session: mongoSession }
+      );
 
-  for (const item of preparedItems) {
-    const product = item.product;
+      const purchaseItemsToInsert = [];
+      const inventoryTransactions = [];
 
-    purchaseItemsToInsert.push({
-      purchaseBatchId: batch._id,
+      for (const item of preparedItems) {
+        const product = await ProductModel.findOne({
+          _id: item.productId,
+          isActive: true,
+        }).session(mongoSession);
+        if (!product) throw new Error(`Product ${item.productName} is no longer available.`);
 
-      productId: item.productId,
-      productName: item.productName,
+        const previousStock = Number(product.stockPcs || 0);
+        const previousCost = Number(product.buyingPrice || 0);
+        const newStock = previousStock + item.quantity;
+        const weightedCost = newStock > 0
+          ? ((previousStock * previousCost) + (item.quantity * item.buyingPrice)) / newStock
+          : item.buyingPrice;
 
-      buyingPrice: item.buyingPrice,
-      quantity: item.quantity,
-      subtotal: item.subtotal,
+        product.stockPcs = newStock;
+        product.buyingPrice = Math.round(weightedCost * 10000) / 10000;
+        await product.save({ session: mongoSession });
+
+        purchaseItemsToInsert.push({
+          purchaseBatchId: batch._id,
+          productId: item.productId,
+          productName: item.productName,
+          buyingPrice: item.buyingPrice,
+          quantity: item.quantity,
+          subtotal: item.subtotal,
+        });
+        inventoryTransactions.push({
+          productId: item.productId,
+          transactionDate,
+          type: "STOCK_IN",
+          unit: "PCS",
+          quantity: item.quantity,
+          previousStock,
+          newStock,
+          remarks: `PURCHASE BATCH ${batch._id}`,
+          referenceType: "PURCHASE_BATCH",
+          referenceId: batch._id,
+          createdBy: session?.user?.id,
+        });
+      }
+
+      await PurchaseItemModel.insertMany(purchaseItemsToInsert, { session: mongoSession });
+      await InventoryTransactionModel.insertMany(inventoryTransactions, { session: mongoSession });
     });
-
-    const previousStock = Number(product.stockPcs || 0);
-
-    product.stockPcs = previousStock + item.quantity;
-    product.buyingPrice = item.buyingPrice;
-
-    await product.save();
+  } finally {
+    await mongoSession.endSession();
   }
-
-  await PurchaseItemModel.insertMany(purchaseItemsToInsert);
 
   return NextResponse.json(
     {

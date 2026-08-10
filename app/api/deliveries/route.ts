@@ -345,6 +345,7 @@ async function handlePOST(req: NextRequest) {
 
         bodegaStockTransactions.push({
           bodegaProductId: item.bodegaProductId,
+          transactionDate: new Date(effectiveDeliveryDate),
           type: "STOCK_IN",
           quantity: item.stockQtyToAdd,
           bags: item.isWholeChicken ? item.bags : 0,

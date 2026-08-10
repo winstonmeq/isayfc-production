@@ -561,6 +561,7 @@ async function handlePATCH(
 
         bodegaStockTransactions.push({
           bodegaProductId: updatedProduct._id,
+          transactionDate: delivery.deliveryDate,
           type: "STOCK_IN",
           quantity: item.stockQtyToAdd,
           bags: item.isWholeChicken ? item.bags : 0,

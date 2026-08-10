@@ -16,6 +16,7 @@ export type InventoryUnit = "PCS" | "BAGS" | "KILOS";
 export interface IInventoryTransaction extends Document {
   _id: Types.ObjectId;
   productId: Types.ObjectId;
+  transactionDate: Date;
   type: InventoryTransactionType;
   unit: InventoryUnit;
   quantity: number;
@@ -35,6 +36,12 @@ const InventoryTransactionSchema = new Schema<IInventoryTransaction>(
       type: Schema.Types.ObjectId,
       ref: "Product",
       required: true,
+    },
+
+    transactionDate: {
+      type: Date,
+      required: true,
+      default: Date.now,
     },
 
     type: {
@@ -104,6 +111,7 @@ const InventoryTransactionSchema = new Schema<IInventoryTransaction>(
 InventoryTransactionSchema.index({ productId: 1 });
 InventoryTransactionSchema.index({ type: 1 });
 InventoryTransactionSchema.index({ createdAt: -1 });
+InventoryTransactionSchema.index({ transactionDate: -1 });
 
 const InventoryTransactionModel: Model<IInventoryTransaction> =
   mongoose.models.InventoryTransaction ||

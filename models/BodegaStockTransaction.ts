@@ -14,6 +14,7 @@ export type BodegaStockTransactionType =
 export interface IBodegaStockTransaction extends Document {
   _id: Types.ObjectId;
   bodegaProductId: Types.ObjectId;
+  transactionDate: Date;
   type: BodegaStockTransactionType;
   quantity: number;
   bags: number;
@@ -36,6 +37,12 @@ const BodegaStockTransactionSchema = new Schema<IBodegaStockTransaction>(
       type: Schema.Types.ObjectId,
       ref: "BodegaProduct",
       required: true,
+    },
+
+    transactionDate: {
+      type: Date,
+      required: true,
+      default: Date.now,
     },
 
     type: {
@@ -104,6 +111,7 @@ const BodegaStockTransactionSchema = new Schema<IBodegaStockTransaction>(
 BodegaStockTransactionSchema.index({ bodegaProductId: 1 });
 BodegaStockTransactionSchema.index({ type: 1 });
 BodegaStockTransactionSchema.index({ createdAt: -1 });
+BodegaStockTransactionSchema.index({ transactionDate: -1 });
 
 const BodegaStockTransactionModel: Model<IBodegaStockTransaction> =
   mongoose.models.BodegaStockTransaction ||

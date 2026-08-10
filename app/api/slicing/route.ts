@@ -706,6 +706,7 @@ async function handlePOST(req: NextRequest) {
         stockTransactions.push(
           {
             bodegaProductId: item.mainProductId,
+            transactionDate: new Date(slicingDate),
             type: "STOCK_OUT",
             quantity: item.heads,
             bags: item.bags,
@@ -721,6 +722,7 @@ async function handlePOST(req: NextRequest) {
           },
           {
             bodegaProductId: item.slicedProductId,
+            transactionDate: new Date(slicingDate),
             type: "STOCK_IN",
             quantity: item.actualSlicedPcs,
             bags: 0,

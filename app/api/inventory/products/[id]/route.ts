@@ -130,9 +130,6 @@ async function handlePATCH(
       categoryId,
       buyingPrice: cleanNumber(body.buyingPrice),
       unitPrice: cleanNumber(body.unitPrice),
-      stockPcs: cleanNumber(body.stockPcs),
-      stockBags: cleanNumber(body.stockBags),
-      stockKilos: cleanNumber(body.stockKilos),
       lowStockAlert: cleanNumber(body.lowStockAlert),
     },
     { new: true }

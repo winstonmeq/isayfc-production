@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
@@ -76,59 +76,59 @@ async function handlePOST(
     );
   }
 
-  const product = await ProductModel.findOne({ _id: id, isActive: true });
-  if (!product) {
-    return NextResponse.json(
-      { success: false, message: "Product not found." },
-      { status: 404 }
-    );
-  }
-
-  const field = STOCK_FIELD_BY_UNIT[unit];
-  const previousStock = Number(product[field] || 0);
-  let newStock = previousStock;
+  const transactionDate = body.transactionDate
+    ? new Date(cleanString(body.transactionDate))
+    : new Date();
+  const mongoSession = await mongoose.startSession();
+  let product: any;
+  let previousStock = 0;
+  let newStock = 0;
   let transactionQuantity = quantity;
 
-  if (action === "STOCK_IN") {
-    newStock = previousStock + quantity;
-  }
+  try {
+    await mongoSession.withTransaction(async () => {
+      product = await ProductModel.findOne({ _id: id, isActive: true }).session(mongoSession);
+      if (!product) throw new Error("Product not found.");
 
-  if (action === "STOCK_OUT") {
-    if (quantity > previousStock) {
-      return NextResponse.json(
-        { success: false, message: "Stock out quantity is greater than current stock." },
-        { status: 400 }
+      const field = STOCK_FIELD_BY_UNIT[unit];
+      previousStock = Number(product[field] || 0);
+      newStock = previousStock;
+
+      if (action === "STOCK_IN") newStock = previousStock + quantity;
+      if (action === "STOCK_OUT") {
+        if (quantity > previousStock) {
+          throw new Error("Stock out quantity is greater than current stock.");
+        }
+        newStock = previousStock - quantity;
+      }
+      if (action === "ADJUSTMENT") {
+        newStock = newStockInput;
+        transactionQuantity = Math.abs(newStock - previousStock);
+      }
+      if (newStock < 0) throw new Error("New stock cannot be negative.");
+
+      product[field] = newStock;
+      await product.save({ session: mongoSession });
+
+      await InventoryTransactionModel.create(
+        [{
+          productId: product._id,
+          transactionDate,
+          type: action,
+          unit,
+          quantity: transactionQuantity,
+          previousStock,
+          newStock,
+          remarks,
+          referenceType: "PRODUCT_INVENTORY_CRUD",
+          createdBy: session?.user?.id,
+        }],
+        { session: mongoSession }
       );
-    }
-    newStock = previousStock - quantity;
+    });
+  } finally {
+    await mongoSession.endSession();
   }
-
-  if (action === "ADJUSTMENT") {
-    newStock = newStockInput;
-    transactionQuantity = Math.abs(newStock - previousStock);
-  }
-
-  if (newStock < 0) {
-    return NextResponse.json(
-      { success: false, message: "New stock cannot be negative." },
-      { status: 400 }
-    );
-  }
-
-  product[field] = newStock;
-  await product.save();
-
-  await InventoryTransactionModel.create({
-    productId: product._id,
-    type: action,
-    unit,
-    quantity: transactionQuantity,
-    previousStock,
-    newStock,
-    remarks,
-    referenceType: "PRODUCT_INVENTORY_CRUD",
-    createdBy: session?.user?.id,
-  });
 
   return NextResponse.json({
     success: true,

@@ -138,7 +138,6 @@ async function handlePATCH(
     {
       name,
       categoryId: categoryId || undefined,
-      stockQty: cleanNumber(body.stockQty),
       buyingPrice: cleanNumber(body.buyingPrice),
       sellingPrice: cleanNumber(body.sellingPrice),
     },

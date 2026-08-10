@@ -168,6 +168,7 @@ export async function POST(
       const bodegaStockTransactions = [];
       const productInventoryTransactions = [];
       const auditLogs = [];
+      const transactionDate = new Date();
 
       for (const item of items) {
         const stockQtyOut = Number(item.stockPcsOut || 0);
@@ -201,6 +202,7 @@ export async function POST(
 
           bodegaStockTransactions.push({
             bodegaProductId: item.bodegaProductId,
+            transactionDate,
             type: "CUSTOMER_DELIVERY",
             quantity: stockQtyOut,
             previousStock,
@@ -235,6 +237,7 @@ export async function POST(
 
           productInventoryTransactions.push({
             productId: item.productId,
+            transactionDate,
             type: "CUSTOMER_DELIVERY",
             unit: "PCS",
             quantity: stockQtyOut,
@@ -302,6 +305,7 @@ export async function POST(
         customerInventoryTransactions.push({
           customerInventoryId: customerInventory._id,
           customerId: delivery.customerId,
+          transactionDate,
           type: "DELIVERY_IN",
           quantity: stockQtyOut,
           previousStock: previousCustomerStock,

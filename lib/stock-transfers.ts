@@ -148,6 +148,7 @@ export async function dispatchTransferInTransaction({
 
       groceryLedger.push({
         productId: product._id,
+        transactionDate: transfer.transferDate || new Date(),
         type: "STOCK_OUT",
         unit: "PCS",
         quantity: pcs,
@@ -213,6 +214,7 @@ export async function dispatchTransferInTransaction({
 
     bodegaLedger.push({
       bodegaProductId: product._id,
+      transactionDate: transfer.transferDate || new Date(),
       type: "STOCK_OUT",
       quantity: pcs,
       heads: isHeadTransfer ? Number(item.qty) : 0,

@@ -1,6 +1,6 @@
 // app/api/bodega-products/[id]/stock-in/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
@@ -46,36 +46,41 @@ async function handlePOST(
     );
   }
 
-  const product = await BodegaProductModel.findOne({
-    _id: id,
-    isActive: true,
-  });
+  const transactionDate = body.transactionDate
+    ? new Date(cleanString(body.transactionDate))
+    : new Date();
+  const mongoSession = await mongoose.startSession();
+  let product: any;
 
-  if (!product) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Bodega product not found.",
-      },
-      { status: 404 }
-    );
+  try {
+    await mongoSession.withTransaction(async () => {
+      product = await BodegaProductModel.findOneAndUpdate(
+        { _id: id, isActive: true },
+        { $inc: { stockQty: quantity } },
+        { new: true, session: mongoSession }
+      );
+
+      if (!product) throw new Error("Bodega product not found.");
+
+      const newStock = Number(product.stockQty || 0);
+      await BodegaStockTransactionModel.create(
+        [{
+          bodegaProductId: product._id,
+          transactionDate,
+          type: "STOCK_IN",
+          quantity,
+          previousStock: newStock - quantity,
+          newStock,
+          remarks,
+          referenceType: "MANUAL_BODEGA_STOCK_IN",
+          createdBy: session?.user?.id,
+        }],
+        { session: mongoSession }
+      );
+    });
+  } finally {
+    await mongoSession.endSession();
   }
-
-  const previousStock = product.stockQty;
-  product.stockQty += quantity;
-
-  await product.save();
-
-  await BodegaStockTransactionModel.create({
-    bodegaProductId: product._id,
-    type: "STOCK_IN",
-    quantity,
-    previousStock,
-    newStock: product.stockQty,
-    remarks,
-    referenceType: "MANUAL_BODEGA_STOCK_IN",
-    createdBy: session?.user?.id,
-  });
 
   return NextResponse.json({
     success: true,

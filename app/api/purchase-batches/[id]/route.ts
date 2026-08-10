@@ -1,12 +1,13 @@
 // app/api/purchase-batches/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import ProductModel from "@/models/Product";
+import InventoryTransactionModel from "@/models/InventoryTransaction";
 import PurchaseBatchModel from "@/models/PurchaseBatch";
 import PurchaseItemModel from "@/models/PurchaseItem";
 
@@ -53,29 +54,68 @@ function serializePurchaseBatch(batch: any, items: any[] = []) {
   };
 }
 
-async function reversePurchaseStock(purchaseBatchId: string) {
+async function reversePurchaseStock(
+  purchaseBatchId: string,
+  mongoSession: mongoose.ClientSession,
+  transactionDate: Date,
+  userId?: string
+) {
   const oldItems = await PurchaseItemModel.find({
     purchaseBatchId,
-  });
+  }).session(mongoSession);
+
+  const inventoryTransactions = [];
 
   for (const item of oldItems) {
     const productId = cleanString(String((item as any).productId || ""));
 
     if (!productId || !isValidObjectId(productId)) continue;
 
+    const quantity = Number((item as any).quantity || 0);
+
     const product = await ProductModel.findOne({
       _id: productId,
       isActive: true,
-    });
+      stockPcs: { $gte: quantity },
+    }).session(mongoSession);
 
-    if (!product) continue;
+    if (!product) {
+      throw new Error(
+        `Cannot reverse purchase stock for ${item.productName}. Some of this stock has already been consumed or sold.`
+      );
+    }
 
-    const quantity = Number((item as any).quantity || 0);
     const previousStock = Number(product.stockPcs || 0);
+    const previousCost = Number(product.buyingPrice || 0);
+    const purchaseCost = Number((item as any).buyingPrice || 0);
+    const newStock = previousStock - quantity;
+    const remainingValue = (previousStock * previousCost) - (quantity * purchaseCost);
 
-    product.stockPcs = Math.max(previousStock - quantity, 0);
+    product.stockPcs = newStock;
+    product.buyingPrice = newStock > 0
+      ? Math.max(0, Math.round((remainingValue / newStock) * 10000) / 10000)
+      : 0;
+    await product.save({ session: mongoSession });
 
-    await product.save();
+    inventoryTransactions.push({
+      productId: product._id,
+      transactionDate,
+      type: "VOID_REVERSAL",
+      unit: "PCS",
+      quantity,
+      previousStock,
+      newStock,
+      remarks: `PURCHASE BATCH ${purchaseBatchId} REVERSAL`,
+      referenceType: "PURCHASE_BATCH_VOID",
+      referenceId: purchaseBatchId,
+      createdBy: userId,
+    });
+  }
+
+  if (inventoryTransactions.length > 0) {
+    await InventoryTransactionModel.insertMany(inventoryTransactions, {
+      session: mongoSession,
+    });
   }
 }
 
@@ -288,44 +328,76 @@ async function handlePATCH(
     return prepared.error;
   }
 
-  await reversePurchaseStock(id);
+  const transactionDate = new Date(datePurchased);
+  const mongoSession = await mongoose.startSession();
 
-  await PurchaseItemModel.deleteMany({
-    purchaseBatchId: id,
-  });
+  try {
+    await mongoSession.withTransaction(async () => {
+      await reversePurchaseStock(
+        id,
+        mongoSession,
+        transactionDate,
+        session?.user?.id
+      );
 
-  batch.datePurchased = new Date(datePurchased);
-  batch.totalItems = prepared.totalItems || 0;
-  batch.totalAmount = prepared.totalAmount || 0;
-  batch.remarks = remarks;
+      await PurchaseItemModel.deleteMany({ purchaseBatchId: id }).session(mongoSession);
 
-  if ("updatedBy" in batch) {
-    (batch as any).updatedBy = session?.user?.id;
-  }
+      batch.datePurchased = transactionDate;
+      batch.totalItems = prepared.totalItems || 0;
+      batch.totalAmount = prepared.totalAmount || 0;
+      batch.remarks = remarks;
+      await batch.save({ session: mongoSession });
 
-  await batch.save();
+      const purchaseItemsToInsert = [];
+      const inventoryTransactions = [];
 
-  const purchaseItemsToInsert = [];
+      for (const item of prepared.preparedItems || []) {
+        const product = await ProductModel.findOne({
+          _id: item.productId,
+          isActive: true,
+        }).session(mongoSession);
+        if (!product) throw new Error(`Product ${item.productName} is no longer available.`);
 
-  for (const item of prepared.preparedItems || []) {
-    purchaseItemsToInsert.push({
-      purchaseBatchId: batch._id,
-      productId: item.productId,
-      productName: item.productName,
-      buyingPrice: item.buyingPrice,
-      quantity: item.quantity,
-      subtotal: item.subtotal,
+        const previousStock = Number(product.stockPcs || 0);
+        const previousCost = Number(product.buyingPrice || 0);
+        const newStock = previousStock + item.quantity;
+        const weightedCost = newStock > 0
+          ? ((previousStock * previousCost) + (item.quantity * item.buyingPrice)) / newStock
+          : item.buyingPrice;
+
+        product.stockPcs = newStock;
+        product.buyingPrice = Math.round(weightedCost * 10000) / 10000;
+        await product.save({ session: mongoSession });
+
+        purchaseItemsToInsert.push({
+          purchaseBatchId: batch._id,
+          productId: item.productId,
+          productName: item.productName,
+          buyingPrice: item.buyingPrice,
+          quantity: item.quantity,
+          subtotal: item.subtotal,
+        });
+        inventoryTransactions.push({
+          productId: item.productId,
+          transactionDate,
+          type: "STOCK_IN",
+          unit: "PCS",
+          quantity: item.quantity,
+          previousStock,
+          newStock,
+          remarks: `PURCHASE BATCH ${batch._id} UPDATED`,
+          referenceType: "PURCHASE_BATCH",
+          referenceId: batch._id,
+          createdBy: session?.user?.id,
+        });
+      }
+
+      await PurchaseItemModel.insertMany(purchaseItemsToInsert, { session: mongoSession });
+      await InventoryTransactionModel.insertMany(inventoryTransactions, { session: mongoSession });
     });
-
-    const previousStock = Number(item.product.stockPcs || 0);
-
-    item.product.stockPcs = previousStock + item.quantity;
-    item.product.buyingPrice = item.buyingPrice;
-
-    await item.product.save();
+  } finally {
+    await mongoSession.endSession();
   }
-
-  await PurchaseItemModel.insertMany(purchaseItemsToInsert);
 
   const updatedItems = await PurchaseItemModel.find({
     purchaseBatchId: batch._id,
@@ -345,7 +417,7 @@ async function handleDELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { response } = await requirePermission("purchase-items.manage");
+  const { response, session } = await requirePermission("purchase-items.manage");
 
   if (response) return response;
 
@@ -378,10 +450,21 @@ async function handleDELETE(
     );
   }
 
-  await reversePurchaseStock(id);
-
-  batch.isVoided = true;
-  await batch.save();
+  const mongoSession = await mongoose.startSession();
+  try {
+    await mongoSession.withTransaction(async () => {
+      await reversePurchaseStock(
+        id,
+        mongoSession,
+        new Date(),
+        session?.user?.id
+      );
+      batch.isVoided = true;
+      await batch.save({ session: mongoSession });
+    });
+  } finally {
+    await mongoSession.endSession();
+  }
 
   return NextResponse.json({
     success: true,

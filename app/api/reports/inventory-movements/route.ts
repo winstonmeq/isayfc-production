@@ -156,14 +156,24 @@ export async function GET(req: NextRequest) {
       .select("productId standardPacking")
       .sort({ updatedAt: -1, _id: -1 })
       .lean(),
-    InventoryTransactionModel.find({ createdAt: { $gte: start } })
+    InventoryTransactionModel.find({
+      $or: [
+        { transactionDate: { $gte: start } },
+        { transactionDate: { $exists: false }, createdAt: { $gte: start } },
+      ],
+    })
       .select(
-        "productId unit type previousStock newStock referenceType createdAt"
+        "productId unit type previousStock newStock referenceType transactionDate createdAt"
       )
       .lean(),
-    BodegaStockTransactionModel.find({ createdAt: { $gte: start } })
+    BodegaStockTransactionModel.find({
+      $or: [
+        { transactionDate: { $gte: start } },
+        { transactionDate: { $exists: false }, createdAt: { $gte: start } },
+      ],
+    })
       .select(
-        "bodegaProductId type previousStock newStock referenceType createdAt"
+        "bodegaProductId type previousStock newStock referenceType transactionDate createdAt"
       )
       .lean(),
     OutletStockTransactionModel.find({
@@ -289,14 +299,14 @@ export async function GET(req: NextRequest) {
   const movements: LedgerMovement[] = [
     ...(groceryTransactions as any[]).map((transaction) => ({
       key: `GROCERY:${idString(transaction.productId)}:${transaction.unit}`,
-      at: new Date(transaction.createdAt),
+      at: new Date(transaction.transactionDate || transaction.createdAt),
       type: String(transaction.type || ""),
       referenceType: String(transaction.referenceType || ""),
       delta: movementDelta(transaction.previousStock, transaction.newStock),
     })),
     ...(bodegaTransactions as any[]).map((transaction) => ({
       key: `BODEGA:${idString(transaction.bodegaProductId)}`,
-      at: new Date(transaction.createdAt),
+      at: new Date(transaction.transactionDate || transaction.createdAt),
       type: String(transaction.type || ""),
       referenceType: String(transaction.referenceType || ""),
       delta: movementDelta(transaction.previousStock, transaction.newStock),
