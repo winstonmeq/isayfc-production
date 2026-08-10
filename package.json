@@ -10,19 +10,9 @@
     "typecheck": "tsc --noEmit --pretty false",
     "test": "tsx --test tests/*.test.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
-    "seed:test": "tsx scripts/seed-test-data.ts --confirm",
-    "seed:grocery-products": "tsx scripts/seed-grocery-products.ts --confirm",
-    "seed:slicing-standards": "tsx scripts/seed-slicing-standards.ts --confirm",
-    "encode:delivery-388": "tsx scripts/encode-delivery-388.ts --confirm",
-    "encode:slicing-2026-07-25": "tsx scripts/encode-slicing-2026-07-25.ts --confirm",
-    "encode:slicing-2026-07-28": "tsx scripts/encode-slicing-2026-07-25.ts --confirm --july-28",
-    "sync:outlet-customers": "tsx scripts/sync-outlet-customers.ts --confirm",
-    "db:sync-indexes": "tsx scripts/sync-indexes.ts",
-    "test:workflow": "tsx --test tests/outlet-sale-workflow.integration.test.ts",
     "cleanup:test": "tsx scripts/cleanup-test-data.ts --confirm",
     "reset:test-data": "tsx scripts/reset-development-data.ts --confirm",
-    "create:cashier": "tsx scripts/create-cashier.ts",
-    "seed:menu": "tsx scripts/seed-outlet-menu.ts"
+    "create:cashier": "tsx scripts/create-cashier.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
