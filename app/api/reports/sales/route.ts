@@ -16,6 +16,8 @@ import { addDays, manilaDateString } from "@/lib/date-utils";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import CustomerModel from "@/models/Customer";
+import OutletModel from "@/models/Outlet";
+import { getSaleOrigin, getSaleSourceLabel } from "@/lib/sale-origin";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,6 +28,7 @@ export async function GET(req: NextRequest) {
 
   await dbConnect();
   void CustomerModel; // register for populate
+  void OutletModel; // register for populate
 
   const { searchParams } = new URL(req.url);
   const { start, end } = parseReportRange(searchParams);
@@ -46,20 +49,22 @@ export async function GET(req: NextRequest) {
       { channel: "MOBILE" },
       { receiptNumber: { $regex: "^MOB-" } },
     ];
-  } else if (source === "BODEGA") {
-    saleFilter.source = "BODEGA";
+  } else if (source === "BODEGA" || source === "CHICKEN") {
+    // A mixed receipt belongs in both product-type reports. The line-level
+    // filtering below limits its quantities and peso values to the selected
+    // product type.
+    saleFilter.source = { $in: [source, "MIXED"] };
     saleFilter.$nor = [
       { channel: "MOBILE" },
       { receiptNumber: { $regex: "^MOB-" } },
     ];
-  } else if (source) {
-    saleFilter.source = source;
   }
 
   const sales = await SaleModel.find(saleFilter)
     .populate("customerId", "name")
+    .populate("outletId", "name code")
     .select(
-      "receiptNumber saleDate source totalQty totalAmount paidAmount balance status customerId channel paymentMethod"
+      "receiptNumber saleDate source totalQty totalAmount paidAmount balance status customerId outletId channel paymentMethod"
     )
     .sort({ saleDate: 1, createdAt: 1 })
     .lean<
@@ -74,6 +79,7 @@ export async function GET(req: NextRequest) {
         balance?: number;
         status?: string;
         channel?: string;
+        outletId?: { name?: string; code?: string } | null;
         paymentMethod?: string;
         customerId?: { name?: string } | null;
       }>
@@ -85,8 +91,11 @@ export async function GET(req: NextRequest) {
       ? []
       : await SaleLineModel.find({
           saleId: { $in: saleIds.map((id) => id.toString()) },
+          ...(source === "CHICKEN" || source === "BODEGA"
+            ? { source }
+            : {}),
         })
-          .select("saleId source qty stockUnit stockPcsOut")
+          .select("saleId source qty stockUnit stockPcsOut lineTotal")
           .lean<
             Array<{
               saleId: { toString: () => string };
@@ -94,18 +103,35 @@ export async function GET(req: NextRequest) {
               qty?: number;
               stockUnit?: string;
               stockPcsOut?: number;
+              lineTotal?: number;
             }>
           >();
-  const quantityBySale = new Map<
-    string,
-    { packs: number; pcsOut: number; quantity: number }
-  >();
+  type SoldBreakdown = {
+    source: "CHICKEN" | "GROCERY" | "OUTLET";
+    packs: number;
+    pcsOut: number;
+    quantity: number;
+    totalAmount: number;
+  };
+  const saleById = new Map(sales.map((sale) => [sale._id.toString(), sale]));
+  const quantityBySale = new Map<string, Map<string, SoldBreakdown>>();
   for (const line of registerLines) {
     const saleId = line.saleId.toString();
-    const current = quantityBySale.get(saleId) || {
+    const sale = saleById.get(saleId);
+    const origin = sale ? getSaleOrigin(sale) : "GROCERY";
+    const displaySource: SoldBreakdown["source"] =
+      origin === "OUTLET"
+        ? "OUTLET"
+        : line.source === "CHICKEN"
+          ? "CHICKEN"
+          : "GROCERY";
+    const saleBreakdown = quantityBySale.get(saleId) || new Map();
+    const current = saleBreakdown.get(displaySource) || {
+      source: displaySource,
       packs: 0,
       pcsOut: 0,
       quantity: 0,
+      totalAmount: 0,
     };
     if (line.source === "CHICKEN" || line.stockUnit === "PACK") {
       current.packs += Number(line.qty || 0);
@@ -113,7 +139,11 @@ export async function GET(req: NextRequest) {
     } else {
       current.quantity += Number(line.qty || 0);
     }
-    quantityBySale.set(saleId, current);
+    current.totalAmount = roundMoney(
+      current.totalAmount + Number(line.lineTotal || 0)
+    );
+    saleBreakdown.set(displaySource, current);
+    quantityBySale.set(saleId, saleBreakdown);
   }
   const formatSoldQuantity = (value: {
     packs: number;
@@ -133,6 +163,7 @@ export async function GET(req: NextRequest) {
   // --- Register rows + daily subtotals ---
   type RegisterRow = {
     id: string;
+    saleId: string;
     receiptNumber: string;
     saleDate: string;
     day: string;
@@ -149,32 +180,53 @@ export async function GET(req: NextRequest) {
     status: string;
   };
 
-  const rows: RegisterRow[] = sales.map((s) => {
+  const rows: RegisterRow[] = sales.flatMap((s) => {
     const date = s.saleDate ? new Date(s.saleDate) : null;
-    const sold = quantityBySale.get(s._id.toString()) || {
-      packs: 0,
-      pcsOut: 0,
-      quantity: Number(s.totalQty || 0),
-    };
-    return {
-      id: s._id.toString(),
-      receiptNumber: String(s.receiptNumber || ""),
-      saleDate: date ? date.toISOString() : "",
-      day: date ? manilaDateString(date) : "",
-      source:
-        s.channel === "MOBILE" ||
-        String(s.receiptNumber || "").startsWith("MOB-")
-          ? "OUTLET"
-          : String(s.source || ""),
-      customerName: s.customerId?.name || "Walk-in",
-      qty: Number(s.totalQty || 0),
-      ...sold,
-      qtyDisplay: formatSoldQuantity(sold),
-      totalAmount: roundMoney(Number(s.totalAmount || 0)),
-      paidAmount: roundMoney(Number(s.paidAmount || 0)),
-      balance: roundMoney(Number(s.balance || 0)),
-      status: String(s.status || ""),
-    };
+    const saleId = s._id.toString();
+    const origin = getSaleOrigin(s);
+    const saleTotal = roundMoney(Number(s.totalAmount || 0));
+    const breakdown = quantityBySale.get(saleId);
+    const parts = breakdown
+      ? [...breakdown.values()]
+      : [
+          {
+            source:
+              origin === "OUTLET"
+                ? ("OUTLET" as const)
+                : origin === "CHICKEN"
+                  ? ("CHICKEN" as const)
+                  : ("GROCERY" as const),
+            packs: 0,
+            pcsOut: 0,
+            quantity: Number(s.totalQty || 0),
+            totalAmount: saleTotal,
+          },
+        ];
+
+    return parts.map((sold) => {
+      const filteredTotal = roundMoney(sold.totalAmount);
+      const allocationRatio = saleTotal > 0 ? filteredTotal / saleTotal : 0;
+      const filteredPaid = roundMoney(
+        Math.min(filteredTotal, Number(s.paidAmount || 0) * allocationRatio)
+      );
+      return {
+        id: `${saleId}-${sold.source}`,
+        saleId,
+        receiptNumber: String(s.receiptNumber || ""),
+        saleDate: date ? date.toISOString() : "",
+        day: date ? manilaDateString(date) : "",
+        customerName: s.customerId?.name || "Walk-in",
+        qty: sold.packs + sold.quantity,
+        ...sold,
+        source:
+          sold.source === "OUTLET" ? getSaleSourceLabel(s) : sold.source,
+        qtyDisplay: formatSoldQuantity(sold),
+        totalAmount: filteredTotal,
+        paidAmount: filteredPaid,
+        balance: roundMoney(Math.max(filteredTotal - filteredPaid, 0)),
+        status: String(s.status || ""),
+      };
+    });
   });
 
   const dailyMap = new Map<
@@ -207,7 +259,9 @@ export async function GET(req: NextRequest) {
         paid: 0,
         balance: 0,
       };
-    cur.count += 1;
+    cur.count = new Set(
+      rows.filter((row) => row.day === r.day).map((row) => row.saleId)
+    ).size;
     cur.qty += r.qty;
     cur.packs += r.packs;
     cur.pcsOut += r.pcsOut;
@@ -246,6 +300,7 @@ export async function GET(req: NextRequest) {
       balance: 0,
     }
   );
+  grand.count = new Set(rows.map((row) => row.saleId)).size;
 
   // Cash sales = fully paid (balance 0); credit = has an outstanding balance.
   const split = rows.reduce(
@@ -270,12 +325,17 @@ export async function GET(req: NextRequest) {
     count?: number;
   };
 
+  const selectedLineMatch = {
+    saleId: { $in: saleIds },
+    ...(source === "CHICKEN" || source === "BODEGA" ? { source } : {}),
+  };
+
   const [byProduct, byCategory, chickenLines] =
     saleIds.length === 0
       ? [[] as LineAgg[], [] as LineAgg[], []]
       : await Promise.all([
           SaleLineModel.aggregate<LineAgg>([
-            { $match: { saleId: { $in: saleIds } } },
+            { $match: selectedLineMatch },
             {
               $group: {
                 _id: { name: "$productName", unit: "$stockUnit" },
@@ -288,7 +348,7 @@ export async function GET(req: NextRequest) {
             { $limit: 200 },
           ]),
           SaleLineModel.aggregate<LineAgg>([
-            { $match: { saleId: { $in: saleIds } } },
+            { $match: selectedLineMatch },
             {
               $group: {
                 _id: { name: "$categoryName", unit: "$stockUnit" },
@@ -324,7 +384,7 @@ export async function GET(req: NextRequest) {
 
   // Daily chicken-cut sales matrix. Product columns are dynamic so a newly
   // created cut automatically appears without a report code change.
-  const saleDayById = new Map(rows.map((row) => [row.id, row.day]));
+  const saleDayById = new Map(rows.map((row) => [row.saleId, row.day]));
   const productSet = new Set<string>();
   const matrixValues = new Map<string, Map<string, number>>();
 

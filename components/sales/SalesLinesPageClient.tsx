@@ -46,7 +46,10 @@ type SaleLineItem = {
   receiptNumber?: string;
   saleDate?: string;
   customerName?: string;
-  source?: "CHICKEN" | "BODEGA" | string;
+  source?: "OUTLET" | "CHICKEN" | "GROCERY" | "CHICKEN + GROCERY" | string;
+  outletCode?: string;
+  outletName?: string;
+  inventorySource?: "CHICKEN" | "BODEGA" | string;
   categoryName?: string;
   productName?: string;
   qty?: number;
@@ -418,15 +421,17 @@ export function SalesLinesPageClient() {
             </div>
 
             <div className="space-y-2">
-              <Label>Source</Label>
+              <Label>Sale Source</Label>
               <Select value={source} onValueChange={setSource}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select source" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All</SelectItem>
+                  <SelectItem value="OUTLET">Outlet</SelectItem>
                   <SelectItem value="CHICKEN">Chicken</SelectItem>
-                  <SelectItem value="BODEGA">Bodega / Grocery</SelectItem>
+                  <SelectItem value="GROCERY">Grocery</SelectItem>
+                  <SelectItem value="MIXED">Chicken + Grocery</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -544,7 +549,9 @@ export function SalesLinesPageClient() {
                   <TableHead className="text-white">Receipt #</TableHead>
                   <TableHead className="text-white">Date</TableHead>
                   <TableHead className="text-white">Customer</TableHead>
-                  <TableHead className="text-white">Source</TableHead>
+                  <TableHead className="text-white">Sale Source</TableHead>
+                  <TableHead className="text-white">Outlet</TableHead>
+                  <TableHead className="text-white">Inventory Source</TableHead>
                   <TableHead className="text-white">Category</TableHead>
                   <TableHead className="text-white">Product</TableHead>
                   <TableHead className="text-right text-white">Qty</TableHead>
@@ -559,14 +566,14 @@ export function SalesLinesPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="h-32 text-center">
+                    <TableCell colSpan={13} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : lines.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={11}
+                      colSpan={13}
                       className="h-32 text-center text-muted-foreground"
                     >
                       No sales lines found.
@@ -583,6 +590,14 @@ export function SalesLinesPageClient() {
                         <span className="rounded bg-emerald-700 px-2 py-1 text-xs font-bold text-white">
                           {line.source || "—"}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        {line.outletCode || line.outletName || "—"}
+                      </TableCell>
+                      <TableCell>
+                        {line.inventorySource === "BODEGA"
+                          ? "GROCERY"
+                          : line.inventorySource || "—"}
                       </TableCell>
                       <TableCell>{line.categoryName || "—"}</TableCell>
                       <TableCell>{line.productName || "—"}</TableCell>

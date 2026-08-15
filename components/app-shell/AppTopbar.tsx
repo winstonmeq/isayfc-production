@@ -228,7 +228,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       ? [
           {
             label: "Sales",
-            href: `/operations?module=${encodeURIComponent("/sales/all")}`,
+            href: `/operations?module=${encodeURIComponent("/sales/history")}`,
             active: isSalesModule,
           },
         ]

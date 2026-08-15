@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Eye,
   Loader2,
@@ -50,10 +50,18 @@ type SaleItem = {
   _id: string;
   receiptNumber: string;
   customerName: string;
+  outletCode?: string;
+  outletName?: string;
+  saleSource: "OUTLET" | "CHICKEN" | "GROCERY" | "CHICKEN + GROCERY";
   saleDate?: string;
   totalAmount: number;
   remarks: string;
   createdByName: string;
+  sourceBreakdown: Array<{
+    source: "CHICKEN" | "GROCERY";
+    totalAmount: number;
+    totalQty: number;
+  }>;
 };
 
 type ApiMeta = {
@@ -62,6 +70,8 @@ type ApiMeta = {
   total: number;
   totalPages: number;
 };
+
+type DisplaySaleSource = "CHICKEN" | "GROCERY" | "OUTLET";
 
 export function SalesHistoryPageClient() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -81,18 +91,65 @@ export function SalesHistoryPageClient() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [customerId, setCustomerId] = useState("ALL");
+  const [source, setSource] = useState("ALL");
   const [receiptNumber, setReceiptNumber] = useState("");
 
   const [appliedFilters, setAppliedFilters] = useState({
     dateFrom: "",
     dateTo: "",
     customerId: "ALL",
+    source: "ALL",
     receiptNumber: "",
   });
 
   const [isLoading, setIsLoading] = useState(true);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewData, setViewData] = useState<any>(null);
+  const [viewSource, setViewSource] =
+    useState<DisplaySaleSource>("OUTLET");
+
+  const displayRows = useMemo<
+    Array<{
+      sale: SaleItem;
+      key: string;
+      source: DisplaySaleSource;
+      totalAmount: number;
+    }>
+  >(
+    () =>
+      sales.flatMap((sale) => {
+        if (sale.saleSource === "OUTLET" || sale.sourceBreakdown.length === 0) {
+          const fallbackSource: DisplaySaleSource =
+            sale.saleSource === "OUTLET"
+              ? "OUTLET"
+              : sale.saleSource === "CHICKEN"
+                ? "CHICKEN"
+                : "GROCERY";
+          return [
+            {
+              sale,
+              key: `${sale._id}-${fallbackSource}`,
+              source: fallbackSource,
+              totalAmount: sale.totalAmount,
+            },
+          ];
+        }
+
+        return sale.sourceBreakdown
+          .filter(
+            (part) =>
+              appliedFilters.source === "ALL" ||
+              appliedFilters.source === part.source
+          )
+          .map((part) => ({
+            sale,
+            key: `${sale._id}-${part.source}`,
+            source: part.source,
+            totalAmount: part.totalAmount,
+          }));
+      }),
+    [appliedFilters.source, sales]
+  );
 
   async function loadCustomers() {
     const res = await fetch("/api/customers?limit=100", {
@@ -118,6 +175,9 @@ export function SalesHistoryPageClient() {
     if (appliedFilters.dateTo) params.set("dateTo", appliedFilters.dateTo);
     if (appliedFilters.customerId !== "ALL") {
       params.set("customerId", appliedFilters.customerId);
+    }
+    if (appliedFilters.source !== "ALL") {
+      params.set("source", appliedFilters.source);
     }
     if (appliedFilters.receiptNumber) {
       params.set("receiptNumber", appliedFilters.receiptNumber);
@@ -166,6 +226,7 @@ export function SalesHistoryPageClient() {
       dateFrom,
       dateTo,
       customerId,
+      source,
       receiptNumber: receiptNumber.trim(),
     });
     setPage(1);
@@ -175,17 +236,22 @@ export function SalesHistoryPageClient() {
     setDateFrom("");
     setDateTo("");
     setCustomerId("ALL");
+    setSource("ALL");
     setReceiptNumber("");
     setAppliedFilters({
       dateFrom: "",
       dateTo: "",
       customerId: "ALL",
+      source: "ALL",
       receiptNumber: "",
     });
     setPage(1);
   }
 
-  async function viewSale(sale: SaleItem) {
+  async function viewSale(
+    sale: SaleItem,
+    source: DisplaySaleSource
+  ) {
     try {
       const res = await fetch(`/api/sales/${sale._id}`, {
         cache: "no-store",
@@ -197,6 +263,7 @@ export function SalesHistoryPageClient() {
         throw new Error(json.message || "Failed to load sale details.");
       }
 
+      setViewSource(source);
       setViewData(json.data);
       setViewDialogOpen(true);
     } catch (error) {
@@ -249,7 +316,7 @@ export function SalesHistoryPageClient() {
   return (
     <div className="space-y-5">
       <Card>
-        <CardContent className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
+        <CardContent className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-5">
           <div className="space-y-2">
             <Label>Date From</Label>
             <Input
@@ -294,6 +361,21 @@ export function SalesHistoryPageClient() {
           </div>
 
           <div className="space-y-2">
+            <Label>Sale Type</Label>
+            <Select value={source} onValueChange={setSource}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Sales</SelectItem>
+                <SelectItem value="CHICKEN">Chicken</SelectItem>
+                <SelectItem value="GROCERY">Grocery</SelectItem>
+                <SelectItem value="OUTLET">Outlet</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label>Show</Label>
             <Select
               value={limit}
@@ -314,7 +396,7 @@ export function SalesHistoryPageClient() {
             </Select>
           </div>
 
-          <div className="flex items-end gap-2 xl:col-span-3 xl:justify-end">
+          <div className="flex items-end gap-2 xl:col-span-4 xl:justify-end">
             <Button onClick={applyFilters}>
               <Search className="mr-2 h-4 w-4" />
               Apply
@@ -344,6 +426,7 @@ export function SalesHistoryPageClient() {
                     Receipt #
                   </TableHead>
                   <TableHead className="text-center text-white">Customer</TableHead>
+                  <TableHead className="text-center text-white">Source</TableHead>
                   <TableHead className="text-center text-white">Total (₱)</TableHead>
                   <TableHead className="text-center text-white">Remarks</TableHead>
                   <TableHead className="text-center text-white">Created By</TableHead>
@@ -354,22 +437,22 @@ export function SalesHistoryPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center">
+                    <TableCell colSpan={9} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
-                ) : sales.length === 0 ? (
+                ) : displayRows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="h-32 text-center text-muted-foreground"
                     >
                       No sales found.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sales.map((sale, index) => (
-                    <TableRow key={sale._id}>
+                  displayRows.map(({ sale, key, source, totalAmount }, index) => (
+                    <TableRow key={key}>
                       <TableCell className="text-center">
                         {(meta.page - 1) * meta.limit + index + 1}
                       </TableCell>
@@ -379,9 +462,16 @@ export function SalesHistoryPageClient() {
                       <TableCell className="text-center">
                         {sale.receiptNumber}
                       </TableCell>
-                      <TableCell>{sale.customerName}</TableCell>
+                      <TableCell>{sale.customerName || "Walk-in"}</TableCell>
+                      <TableCell className="text-center">
+                        <span className="rounded bg-emerald-700 px-2 py-1 text-xs font-bold text-white">
+                          {source === "OUTLET" && sale.outletCode
+                            ? `OUTLET-${sale.outletCode}`
+                            : source}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-right">
-                        {sale.totalAmount.toLocaleString(undefined, {
+                        {totalAmount.toLocaleString(undefined, {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
@@ -396,7 +486,7 @@ export function SalesHistoryPageClient() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => viewSale(sale)}
+                          onClick={() => viewSale(sale, source)}
                         >
                           <Eye className="mr-1 h-4 w-4" />
                           View
@@ -419,6 +509,31 @@ export function SalesHistoryPageClient() {
 
           {viewData ? (
             <div className="space-y-4">
+              {(() => {
+                const visibleLines = (viewData.lines || []).filter((line: any) => {
+                  if (viewSource === "OUTLET") return true;
+                  const lineSource =
+                    (line.inventorySource || line.source) === "BODEGA"
+                      ? "GROCERY"
+                      : line.inventorySource || line.source;
+                  return lineSource === viewSource;
+                });
+                const visibleTotal =
+                  viewSource === "OUTLET"
+                    ? Number(viewData.totalAmount || 0)
+                    : visibleLines.reduce(
+                        (sum: number, line: any) =>
+                          sum + Number(line.lineTotal || 0),
+                        0
+                      );
+                const fullTotal = Number(viewData.totalAmount || 0);
+                const visibleBalance =
+                  viewSource === "OUTLET" || fullTotal <= 0
+                    ? Number(viewData.balance || 0)
+                    : (Number(viewData.balance || 0) * visibleTotal) / fullTotal;
+
+                return (
+                  <>
               <div className="grid gap-3 rounded-lg bg-slate-100 p-4 text-sm md:grid-cols-2">
                 <p>
                   <strong>Receipt #:</strong> {viewData.receiptNumber}
@@ -430,13 +545,13 @@ export function SalesHistoryPageClient() {
                   <strong>Customer:</strong> {viewData.customerName}
                 </p>
                 <p>
-                  <strong>Source:</strong> {viewData.source}
+                  <strong>Sale Source:</strong> {viewSource}
                 </p>
                 <p>
-                  <strong>Total:</strong> {formatPeso(viewData.totalAmount)}
+                  <strong>Total:</strong> {formatPeso(visibleTotal)}
                 </p>
                 <p>
-                  <strong>Balance:</strong> {formatPeso(viewData.balance)}
+                  <strong>Balance:</strong> {formatPeso(visibleBalance)}
                 </p>
               </div>
 
@@ -448,7 +563,7 @@ export function SalesHistoryPageClient() {
                         Product
                       </TableHead>
                       <TableHead className="text-center text-white">
-                        Source
+                        Inventory Source
                       </TableHead>
                       <TableHead className="text-center text-white">
                         Qty
@@ -463,13 +578,15 @@ export function SalesHistoryPageClient() {
                   </TableHeader>
 
                   <TableBody>
-                    {viewData.lines?.map((line: any) => (
+                    {visibleLines.map((line: any) => (
                       <TableRow key={line._id}>
                         <TableCell className="text-center">
                           {line.productName}
                         </TableCell>
                         <TableCell className="text-center">
-                          {line.source}
+                          {(line.inventorySource || line.source) === "BODEGA"
+                            ? "GROCERY"
+                            : line.inventorySource || line.source}
                         </TableCell>
                         <TableCell className="text-center">{line.qty}</TableCell>
                         <TableCell className="text-center">
@@ -483,6 +600,9 @@ export function SalesHistoryPageClient() {
                   </TableBody>
                 </Table>
               </div>
+                  </>
+                );
+              })()}
 
               <div className="flex justify-end">
                 <Button variant="destructive" onClick={voidSale}>

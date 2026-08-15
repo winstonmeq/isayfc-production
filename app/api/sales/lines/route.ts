@@ -11,6 +11,12 @@ import CustomerModel from "@/models/Customer";
 import ProductModel from "@/models/Product";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
+import {
+  getOutletCode,
+  getSaleOrigin,
+  getSaleSourceLabel,
+} from "@/lib/sale-origin";
+import OutletModel from "@/models/Outlet";
 
 function splitValues(value: string) {
   return value
@@ -58,6 +64,7 @@ export async function GET(req: NextRequest) {
   if (response) return response;
 
   await dbConnect();
+  void OutletModel;
 
   const { searchParams } = new URL(req.url);
   const { page, limit } = getPagination(searchParams);
@@ -74,6 +81,27 @@ export async function GET(req: NextRequest) {
   const saleFilter: Record<string, any> = {
     isVoided: false,
   };
+
+  if (source === "OUTLET") {
+    saleFilter.$or = [
+      { outletId: { $exists: true, $ne: null } },
+      { channel: "MOBILE" },
+      { receiptNumber: { $regex: "^MOB-", $options: "i" } },
+      { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
+    ];
+  } else if (
+    source === "CHICKEN" ||
+    source === "GROCERY" ||
+    source === "MIXED"
+  ) {
+    saleFilter.source = source === "GROCERY" ? "BODEGA" : source;
+    saleFilter.$nor = [
+      { outletId: { $exists: true, $ne: null } },
+      { channel: "MOBILE" },
+      { receiptNumber: { $regex: "^MOB-", $options: "i" } },
+      { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
+    ];
+  }
 
   if (dateFrom || dateTo) {
     saleFilter.saleDate = {};
@@ -112,6 +140,7 @@ export async function GET(req: NextRequest) {
 
   const sales = await SaleModel.find(saleFilter)
     .populate("customerId", "name")
+    .populate("outletId", "name code")
     .sort({ saleDate: -1, createdAt: -1 })
     .lean();
 
@@ -145,10 +174,8 @@ export async function GET(req: NextRequest) {
       $in: saleIds,
     },
   };
-
-  if (source === "CHICKEN" || source === "BODEGA") {
-    lineFilter.source = source;
-  }
+  if (source === "CHICKEN") lineFilter.source = "CHICKEN";
+  if (source === "GROCERY") lineFilter.source = "BODEGA";
 
   const saleLines = await SaleLineModel.find(lineFilter)
     .sort({ createdAt: -1 })
@@ -228,6 +255,13 @@ export async function GET(req: NextRequest) {
       const qty = getQty(line);
       const price = getPrice(line);
       const lineTotal = getLineTotal(line);
+      const saleOrigin = getSaleOrigin(sale);
+      const displaySource =
+        saleOrigin === "OUTLET"
+          ? getSaleSourceLabel(sale)
+          : line.source === "CHICKEN"
+            ? "CHICKEN"
+            : "GROCERY";
 
       return {
         _id: line._id.toString(),
@@ -236,8 +270,11 @@ export async function GET(req: NextRequest) {
         saleDate: sale.saleDate
           ? new Date(sale.saleDate).toISOString()
           : undefined,
-        customerName: sale.customerId?.name || "",
-        source: line.source || sale.source || "",
+        customerName: sale.customerId?.name || "Walk-in",
+        source: displaySource,
+        outletCode: getOutletCode(sale),
+        outletName: sale.outletId?.name || "",
+        inventorySource: line.source || sale.source || "",
         categoryName,
         productName,
         qty,

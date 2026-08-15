@@ -152,10 +152,10 @@ export const appNavItems: AppNavItem[] = [
     section: "Operations",
     children: [
       {
-        title: "All Sales",
-        href: "/sales/all",
-        icon: ShoppingCart,
-        permission: "sales.manage",
+        title: "Sales History",
+        href: "/sales/history",
+        icon: Clock,
+        permission: "sales.view",
       },
       {
         title: "Sell Chicken",
@@ -170,10 +170,10 @@ export const appNavItems: AppNavItem[] = [
         permission: "sales.manage",
       },
       {
-        title: "Sales History",
-        href: "/sales/history",
-        icon: Clock,
-        permission: "sales.view",
+        title: "All Sales",
+        href: "/sales/all",
+        icon: ShoppingCart,
+        permission: "sales.manage",
       },
       {
         title: "Sale Per Item",

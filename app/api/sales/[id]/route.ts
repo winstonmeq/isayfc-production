@@ -11,6 +11,7 @@ import ProductModel from "@/models/Product";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import StockTransferModel from "@/models/StockTransfer";
+import { getSaleOrigin } from "@/lib/sale-origin";
 import {
   correctionReason,
   recordCorrection,
@@ -31,9 +32,10 @@ function serializeSale(sale: any, lines: any[] = []) {
     _id: sale._id.toString(),
     receiptNumber: sale.receiptNumber,
     customerId: sale.customerId?._id?.toString?.() || sale.customerId?.toString?.(),
-    customerName: sale.customerId?.name || "",
+    customerName: sale.customerId?.name || "Walk-in",
     saleDate: sale.saleDate ? new Date(sale.saleDate).toISOString() : undefined,
     source: sale.source,
+    saleSource: getSaleOrigin(sale),
     totalAmount: sale.totalAmount || 0,
     paidAmount: sale.paidAmount || 0,
     balance: sale.balance || 0,
@@ -45,6 +47,7 @@ function serializeSale(sale: any, lines: any[] = []) {
     lines: lines.map((line) => ({
       _id: line._id.toString(),
       source: line.source,
+      inventorySource: line.source,
       categoryName: line.categoryName,
       productName: line.productName,
       qty: line.qty || 0,

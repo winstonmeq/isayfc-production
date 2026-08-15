@@ -75,10 +75,10 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       title: "Sales",
       icon: ShoppingCart,
       routes: [
-        "/sales/all",
+        "/sales/history",
         "/sales",
         "/sales/grocery",
-        "/sales/history",
+        "/sales/all",
         "/sales/lines",
         "/stock-transfers",
       ],

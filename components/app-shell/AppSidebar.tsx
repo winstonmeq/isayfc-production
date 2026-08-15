@@ -129,7 +129,7 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
       canAccessAny(["/sales", "/stock-transfers"])
         ? {
             label: "Sales",
-            href: operationsHref("/sales/all"),
+            href: operationsHref("/sales/history"),
             icon: ShoppingCart,
             active: ["/sales", "/stock-transfers"].some((route) => selectedModule.startsWith(route)),
           }

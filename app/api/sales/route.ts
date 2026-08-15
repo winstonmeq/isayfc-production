@@ -29,6 +29,7 @@ import {
 } from "@/lib/inventory-units";
 import { correctionReason, recordCorrection } from "@/lib/corrections";
 import { manilaDateString } from "@/lib/date-utils";
+import { getOutletCode, getSaleOrigin } from "@/lib/sale-origin";
 
 type SaleSource = "CHICKEN" | "BODEGA" | "MIXED";
 
@@ -77,16 +78,20 @@ function fail(status: number, message: string): never {
   throw new ApiError(status, message);
 }
 
-function serializeSale(sale: any) {
+function serializeSale(sale: any, sourceBreakdown: any[] = []) {
   return {
     _id: sale._id.toString(),
     customerId: sale.customerId?._id?.toString?.() || sale.customerId?.toString?.(),
-    customerName: sale.customerId?.name || "",
+    customerName: sale.customerId?.name || "Walk-in",
+    outletCode: getOutletCode(sale),
+    outletName: sale.outletId?.name || "",
     stockTransferId:
       sale.stockTransferId?._id?.toString?.() ||
       sale.stockTransferId?.toString?.() ||
       "",
     source: sale.source || "BODEGA",
+    saleSource: getSaleOrigin(sale),
+    channel: sale.channel || "WEB",
     receiptNumber: sale.receiptNumber || "",
     saleDate: sale.saleDate ? new Date(sale.saleDate).toISOString() : undefined,
     totalPacks: Number(sale.totalPacks || 0),
@@ -95,7 +100,14 @@ function serializeSale(sale: any) {
     paidAmount: Number(sale.paidAmount || 0),
     balance: Number(sale.balance || 0),
     status: sale.status || "UNPAID",
+    paymentMethod: sale.paymentMethod || "CASH",
     remarks: sale.remarks || "",
+    createdByName: sale.createdBy?.name || sale.createdBy?.username || "",
+    sourceBreakdown: sourceBreakdown.map((item) => ({
+      source: item.source === "CHICKEN" ? "CHICKEN" : "GROCERY",
+      totalAmount: Number(item.totalAmount || 0),
+      totalQty: Number(item.totalQty || 0),
+    })),
     createdAt: sale.createdAt ? new Date(sale.createdAt).toISOString() : undefined,
     updatedAt: sale.updatedAt ? new Date(sale.updatedAt).toISOString() : undefined,
   };
@@ -175,8 +187,25 @@ export async function GET(req: NextRequest) {
     isVoided: false,
   };
 
-  if (source === "CHICKEN" || source === "BODEGA") {
-    filter.source = source;
+  if (source === "OUTLET") {
+    filter.$or = [
+      { outletId: { $exists: true, $ne: null } },
+      { channel: "MOBILE" },
+      { receiptNumber: { $regex: "^MOB-", $options: "i" } },
+      { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
+    ];
+  } else if (
+    source === "CHICKEN" ||
+    source === "GROCERY" ||
+    source === "MIXED"
+  ) {
+    filter.source = source === "GROCERY" ? "BODEGA" : source;
+    filter.$nor = [
+      { outletId: { $exists: true, $ne: null } },
+      { channel: "MOBILE" },
+      { receiptNumber: { $regex: "^MOB-", $options: "i" } },
+      { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
+    ];
   }
 
   if (receiptNumber) {
@@ -231,6 +260,8 @@ export async function GET(req: NextRequest) {
   const [items, total] = await Promise.all([
     SaleModel.find(filter)
       .populate("customerId", "name")
+      .populate("outletId", "name code")
+      .populate("createdBy", "name username")
       .sort({ saleDate: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -238,9 +269,41 @@ export async function GET(req: NextRequest) {
     SaleModel.countDocuments(filter),
   ]);
 
+  const saleIds = items.map((item) => item._id);
+  const breakdownRows =
+    saleIds.length === 0
+      ? []
+      : await SaleLineModel.aggregate<{
+          _id: { saleId: mongoose.Types.ObjectId; source: string };
+          totalAmount: number;
+          totalQty: number;
+        }>([
+          { $match: { saleId: { $in: saleIds } } },
+          {
+            $group: {
+              _id: { saleId: "$saleId", source: "$source" },
+              totalAmount: { $sum: "$lineTotal" },
+              totalQty: { $sum: "$qty" },
+            },
+          },
+        ]);
+  const breakdownBySale = new Map<string, any[]>();
+  for (const row of breakdownRows) {
+    const saleId = row._id.saleId.toString();
+    const current = breakdownBySale.get(saleId) || [];
+    current.push({
+      source: row._id.source,
+      totalAmount: row.totalAmount,
+      totalQty: row.totalQty,
+    });
+    breakdownBySale.set(saleId, current);
+  }
+
   return NextResponse.json({
     success: true,
-    data: items.map(serializeSale),
+    data: items.map((item) =>
+      serializeSale(item, breakdownBySale.get(item._id.toString()) || [])
+    ),
     meta: {
       page,
       limit,
@@ -686,6 +749,7 @@ async function handlePOST(req: NextRequest) {
 
     const populatedSale = await SaleModel.findById(saleId)
       .populate("customerId", "name")
+      .populate("outletId", "name code")
       .lean();
 
     return NextResponse.json(
