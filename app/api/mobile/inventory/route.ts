@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
     productName: it.productName || "",
     categoryName: it.categoryName || "",
     productSource: it.productSource,
+    buyingPrice: Number(it.buyingPrice || 0),
+    sellingPrice: Number(it.sellingPrice || 0),
     stockQty: Number(it.stockQty || 0),
     unitLabel: it.unitLabel || "QTY",
     packSize: Number(it.packSize || 0),

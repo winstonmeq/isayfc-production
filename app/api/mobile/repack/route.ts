@@ -27,6 +27,7 @@ import { requireMobileAuth } from "@/lib/mobile-auth";
 import { startOfDayManila, addDays } from "@/lib/date-utils";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
+import { packingSnapshot, toBaseUnitCost } from "@/lib/inventory-units";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,26 @@ type TargetInput = {
   buyingPrice?: number;
   qty?: number;
 };
+
+type SourceInput = {
+  inventoryId?: string;
+  qty?: number;
+};
+
+function inventoryPacking(item: any) {
+  const packSize = Math.max(0, Math.trunc(Number(item.packSize || 0)));
+  const baseUnit =
+    item.productSource === "GROCERY"
+      ? "QTY"
+      : String(item.unitLabel || "").toUpperCase() === "HEAD"
+        ? "HEAD"
+        : "PCS";
+  return packingSnapshot({
+    unit: packSize > 0 ? "PACK" : baseUnit,
+    baseUnit,
+    multiplier: packSize || 1,
+  });
+}
 
 const VALID_UNITS = ["PCS", "PACK", "QTY", "KG", "BAG"] as const;
 function normalizeUnit(value: unknown): (typeof VALID_UNITS)[number] {
@@ -117,6 +138,7 @@ export async function GET(req: NextRequest) {
       referenceId: string;
       transactionDate?: string;
       source: { productName: string; quantity: number } | null;
+      sources: { productName: string; quantity: number }[];
       targets: { productName: string; quantity: number }[];
     }
   >();
@@ -130,12 +152,16 @@ export async function GET(req: NextRequest) {
           ? new Date(r.transactionDate).toISOString()
           : undefined,
         source: null,
+        sources: [],
         targets: [],
       });
     }
     const entry = byRef.get(ref)!;
     const cell = { productName: r.productName || "", quantity: Number(r.quantity || 0) };
-    if (r.type === "REPACK_OUT") entry.source = cell;
+    if (r.type === "REPACK_OUT") {
+      entry.sources.push(cell);
+      entry.source ??= cell;
+    }
     else entry.targets.push(cell);
   }
 
@@ -163,6 +189,7 @@ export async function POST(req: NextRequest) {
   let body: {
     sourceInventoryId?: string;
     sourceQty?: number;
+    sources?: SourceInput[];
     targets?: TargetInput[];
     remarks?: string;
     idempotencyKey?: string;
@@ -177,22 +204,28 @@ export async function POST(req: NextRequest) {
   }
 
   const outletId = user.outlet.id;
-  const sourceInventoryId = String(body?.sourceInventoryId || "").trim();
-  const sourceQty = Math.trunc(Number(body?.sourceQty || 0));
+  const sources: SourceInput[] = Array.isArray(body?.sources)
+    ? body.sources
+    : [{ inventoryId: body?.sourceInventoryId, qty: body?.sourceQty }];
   const targets = Array.isArray(body?.targets) ? body.targets : [];
   const idempotencyKey = String(body?.idempotencyKey || "").trim();
+  const remarks = String(body?.remarks || "").trim().toUpperCase();
 
-  if (!isValidObjectId(sourceInventoryId)) {
+  if (sources.length === 0 || sources.length > 50) {
     return NextResponse.json(
-      { success: false, message: "Select a valid source product to repack." },
+      { success: false, message: "Add between 1 and 50 ingredients." },
       { status: 400 }
     );
   }
-  if (!Number.isFinite(sourceQty) || sourceQty < 1) {
-    return NextResponse.json(
-      { success: false, message: "Source quantity must be a whole number of at least 1." },
-      { status: 400 }
-    );
+  for (const source of sources) {
+    const id = String(source?.inventoryId || "").trim();
+    const qty = Math.trunc(Number(source?.qty || 0));
+    if (!isValidObjectId(id) || !Number.isFinite(qty) || qty < 1) {
+      return NextResponse.json(
+        { success: false, message: "Each ingredient needs a product and a whole quantity of at least 1." },
+        { status: 400 }
+      );
+    }
   }
   if (targets.length === 0) {
     return NextResponse.json(
@@ -226,34 +259,39 @@ export async function POST(req: NextRequest) {
       const referenceId = new Types.ObjectId();
       const now = new Date();
 
-      // 1) Load + deduct the source. Negative stock is allowed (warned), so the
-      //    cashier is never blocked by an out-of-sync count mid-repack.
-      const source = await OutletInventoryModel.findOne({
-        _id: sourceInventoryId,
-        outletId,
-        isActive: true,
-      }).session(mongoSession);
+      // 1) Consume every ingredient and combine their historical inventory
+      // cost. Stock quantities are base units, while buyingPrice for a pack
+      // product is a pack price, so convert it to cost per PCS first.
+      const consumed: {
+        inv: any;
+        qty: number;
+        before: number;
+        after: number;
+        unitCost: number;
+      }[] = [];
+      let totalSourceCost = 0;
+      for (const input of sources) {
+        const inventoryId = String(input.inventoryId || "");
+        const qty = Math.trunc(Number(input.qty || 0));
+        const inv = await OutletInventoryModel.findOne({
+          _id: inventoryId,
+          outletId,
+          isActive: true,
+        }).session(mongoSession);
+        if (!inv) throw new ApiError(404, "An ingredient is not stocked at this outlet.");
 
-      if (!source) {
-        throw new ApiError(404, "The source product is not stocked at this outlet.");
+        const before = Number(inv.stockQty || 0);
+        const after = before - qty;
+        if (after < 0) {
+          warnings.push(`${inv.productName}: used ${qty} but only ${before} in stock (now ${after}).`);
+        }
+        const unitCost = toBaseUnitCost(inv.buyingPrice, inventoryPacking(inv));
+        totalSourceCost += unitCost * qty;
+        inv.stockQty = after;
+        inv.updatedBy = new Types.ObjectId(user.id);
+        await inv.save({ session: mongoSession });
+        consumed.push({ inv, qty, before, after, unitCost });
       }
-
-      const sourceBefore = Number(source.stockQty || 0);
-      const sourceAfter = sourceBefore - sourceQty;
-      if (sourceAfter < 0) {
-        warnings.push(
-          `${source.productName}: repacked ${sourceQty} but only ${sourceBefore} in stock (now ${sourceAfter}).`
-        );
-      }
-
-      source.stockQty = sourceAfter;
-      source.updatedBy = new Types.ObjectId(user.id);
-      await source.save({ session: mongoSession });
-
-      // Total cost being moved out of the source, to spread across targets so
-      // stock value is conserved across the conversion.
-      const sourceUnitCost = Number(source.buyingPrice || 0);
-      const totalSourceCost = sourceUnitCost * sourceQty;
 
       // Validate targets + compute total produced units for cost spreading.
       const prepared: {
@@ -309,7 +347,7 @@ export async function POST(req: NextRequest) {
                   productSource,
                   productId,
                   productName,
-                  categoryName: String(t.categoryName || source.categoryName || "")
+                  categoryName: String(t.categoryName || consumed[0]?.inv.categoryName || "")
                     .trim()
                     .toUpperCase(),
                   stockQty: 0,
@@ -345,28 +383,35 @@ export async function POST(req: NextRequest) {
 
       const ledger: any[] = [];
 
-      // 2) Source side: one REPACK_OUT row. Snapshots record TRUE values (can
+      // 2) Ingredient side: one REPACK_OUT row per ingredient.
       //    be negative) so newStock - previousStock always equals quantity.
       //    The idempotencyKey lives on this row only — one per repack — and the
       //    partial unique index makes a concurrent duplicate abort here.
-      ledger.push({
+      consumed.forEach((p, index) => ledger.push({
         outletId,
-        outletInventoryId: source._id,
-        productSource: source.productSource,
-        productId: source.productId,
-        productName: source.productName,
+        outletInventoryId: p.inv._id,
+        productSource: p.inv.productSource,
+        productId: p.inv.productId,
+        productName: p.inv.productName,
         transactionDate: now,
         type: "REPACK_OUT",
-        quantity: sourceQty,
-        previousStock: sourceBefore,
-        newStock: sourceAfter,
+        quantity: p.qty,
+        unitCost: p.unitCost,
+        entryUnit: inventoryPacking(p.inv).baseUnit,
+        entryQty: p.qty,
+        multiplier: 1,
+        baseUnit: inventoryPacking(p.inv).baseUnit,
+        previousStock: p.before,
+        newStock: p.after,
         referenceType: "REPACK",
         referenceId,
         sourceChannel: "FLUTTER",
-        idempotencyKey: idempotencyKey || undefined,
-        remarks: "REPACK OUT",
+        idempotencyKey: index === 0 ? idempotencyKey || undefined : undefined,
+        remarks: remarks
+          ? `PRODUCTION INGREDIENT - ${remarks}`
+          : "PRODUCTION INGREDIENT",
         createdBy: user.id,
-      });
+      }));
 
       // 3) Target side: add stock + one REPACK_IN row each.
       for (const p of prepared) {
@@ -382,13 +427,20 @@ export async function POST(req: NextRequest) {
         const incomingUnitCost =
           p.unitCostOverride > 0 ? p.unitCostOverride : unitCost;
         const existingUnits = Math.max(before, 0);
-        const existingUnitCost = Number(p.inv.buyingPrice || 0);
+        const existingUnitCost = toBaseUnitCost(
+          p.inv.buyingPrice,
+          inventoryPacking(p.inv)
+        );
         const newUnitCost =
           existingUnits > 0 && existingUnitCost > 0
             ? (existingUnits * existingUnitCost + p.qty * incomingUnitCost) /
               (existingUnits + p.qty)
             : incomingUnitCost;
-        p.inv.buyingPrice = Math.round(newUnitCost * 100) / 100;
+        const targetPacking = inventoryPacking(p.inv);
+        const storedCost = targetPacking.unit === "PACK"
+          ? newUnitCost * targetPacking.multiplier
+          : newUnitCost;
+        p.inv.buyingPrice = Math.round(storedCost * 100) / 100;
         p.inv.updatedBy = new Types.ObjectId(user.id);
         await p.inv.save({ session: mongoSession });
 
@@ -401,12 +453,17 @@ export async function POST(req: NextRequest) {
           transactionDate: now,
           type: "REPACK_IN",
           quantity: p.qty,
+          unitCost: incomingUnitCost,
+          entryUnit: targetPacking.baseUnit,
+          entryQty: p.qty,
+          multiplier: 1,
+          baseUnit: targetPacking.baseUnit,
           previousStock: before,
           newStock: after,
           referenceType: "REPACK",
           referenceId,
           sourceChannel: "FLUTTER",
-          remarks: `REPACK IN FROM ${source.productName}`.trim(),
+          remarks: `PRODUCED FROM ${consumed.map((s) => s.inv.productName).join(", ")}${remarks ? ` - ${remarks}` : ""}`,
           createdBy: user.id,
         });
       }
@@ -417,12 +474,19 @@ export async function POST(req: NextRequest) {
 
       result = {
         referenceId: referenceId.toString(),
-        source: {
-          inventoryId: source._id.toString(),
-          productName: source.productName,
-          quantity: sourceQty,
-          newStock: sourceAfter,
-        },
+        source: consumed.length ? {
+          inventoryId: consumed[0].inv._id.toString(),
+          productName: consumed[0].inv.productName,
+          quantity: consumed[0].qty,
+          newStock: consumed[0].after,
+        } : null,
+        sources: consumed.map((p) => ({
+          inventoryId: p.inv._id.toString(),
+          productName: p.inv.productName,
+          quantity: p.qty,
+          newStock: p.after,
+          unitCost: p.unitCost,
+        })),
         targets: prepared.map((p) => ({
           inventoryId: p.inv._id.toString(),
           productName: p.productName,
