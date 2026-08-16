@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   ReportShell,
   buildRangeParams,
@@ -87,7 +87,8 @@ export function GrossSalesProfitabilityReportPageClient() {
   const [to, setTo] = useState("");
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [category, setCategory] = useState("ALL");
+  const [selectedProductKeys, setSelectedProductKeys] = useState<string[]>([]);
+  const [productSearch, setProductSearch] = useState("");
 
   const load = useCallback(async () => {
     if (preset === "custom" && (!from || !to)) {
@@ -105,7 +106,18 @@ export function GrossSalesProfitabilityReportPageClient() {
       if (!response.ok || !json.success) {
         throw new Error(json.message || "Failed to load gross sales report.");
       }
-      setData(json as ReportData);
+      const nextData = json as ReportData;
+      setData(nextData);
+      setSelectedProductKeys(
+        nextData.products
+          .filter(
+            (product) =>
+              product.grossSales !== 0 ||
+              product.cogs !== 0 ||
+              product.stockUnitsOut !== 0
+          )
+          .map((product) => product.key)
+      );
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -123,32 +135,28 @@ export function GrossSalesProfitabilityReportPageClient() {
     return () => clearTimeout(timer);
   }, [preset, load]);
 
-  const categories = useMemo(
-    () =>
-      [...new Set((data?.products || []).map((product) => product.categoryName))]
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b)),
-    [data]
-  );
+  const availableProducts = useMemo(() => data?.products || [], [data]);
 
-  useEffect(() => {
-    if (category !== "ALL" && !categories.includes(category)) {
-      setCategory("ALL");
-    }
-  }, [categories, category]);
+  const searchableProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase();
+    if (!query) return availableProducts;
+    return availableProducts.filter((product) =>
+      `${product.productName} ${product.categoryName} ${product.source}`
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [availableProducts, productSearch]);
 
   const visibleProducts = useMemo(
     () =>
-      category === "ALL"
-        ? data?.products || []
-        : (data?.products || []).filter(
-            (product) => product.categoryName === category
-          ),
-    [category, data]
+      availableProducts.filter((product) =>
+        selectedProductKeys.includes(product.key)
+      ),
+    [availableProducts, selectedProductKeys]
   );
 
   const visibleTotals = useMemo(() => {
-    if (!data || category === "ALL") return data?.totals;
+    if (!data) return undefined;
     const packUnits = visibleProducts.reduce((sum, product) => sum + product.packUnits, 0);
     const packSales = roundAmount(visibleProducts.reduce((sum, product) => sum + product.packRevenue, 0));
     const pieceUnits = visibleProducts.reduce((sum, product) => sum + product.pieceUnits, 0);
@@ -172,7 +180,15 @@ export function GrossSalesProfitabilityReportPageClient() {
       profitabilityRatio:
         grossSales > 0 ? Math.round((netIncome / grossSales) * 10000) / 100 : 0,
     };
-  }, [category, data, visibleProducts]);
+  }, [data, visibleProducts]);
+
+  function toggleProduct(key: string, checked: boolean) {
+    setSelectedProductKeys((current) =>
+      checked
+        ? [...new Set([...current, key])]
+        : current.filter((item) => item !== key)
+    );
+  }
 
   const periodLabel = data
     ? `${new Date(data.range.start).toLocaleDateString("en-PH")} – ${new Date(
@@ -194,19 +210,94 @@ export function GrossSalesProfitabilityReportPageClient() {
       onTo={setTo}
       onApply={load}
       extraFilters={
-        <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="w-52">
-            <SelectValue placeholder="All Categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Categories</SelectItem>
-            {categories.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-56 justify-between font-normal">
+                <span className="truncate">
+                  Products ({visibleProducts.length}/{availableProducts.length})
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-80 p-0">
+              <div className="border-b p-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={productSearch}
+                    onChange={(event) => setProductSearch(event.target.value)}
+                    placeholder="Search products..."
+                    className="pl-9"
+                  />
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      setSelectedProductKeys((current) => [
+                        ...new Set([
+                          ...current,
+                          ...availableProducts.map((product) => product.key),
+                        ]),
+                      ])
+                    }
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const productKeys = new Set(
+                        availableProducts.map((product) => product.key)
+                      );
+                      setSelectedProductKeys((current) =>
+                        current.filter((key) => !productKeys.has(key))
+                      );
+                    }}
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </div>
+              <div className="max-h-72 overflow-y-auto p-2">
+                {searchableProducts.length === 0 ? (
+                  <p className="p-4 text-center text-sm text-slate-500">
+                    No products found.
+                  </p>
+                ) : (
+                  searchableProducts.map((product) => (
+                    <label
+                      key={product.key}
+                      className="flex cursor-pointer items-start gap-3 rounded-md px-2 py-2 hover:bg-slate-50"
+                    >
+                      <Checkbox
+                        checked={selectedProductKeys.includes(product.key)}
+                        onCheckedChange={(checked) =>
+                          toggleProduct(product.key, checked === true)
+                        }
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {product.productName}
+                        </span>
+                        <span className="block truncate text-xs text-slate-500">
+                          {product.source === "CHICKEN"
+                            ? "Chicken"
+                            : product.categoryName}
+                        </span>
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       }
     >
       <style>{`

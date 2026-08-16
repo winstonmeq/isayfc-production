@@ -33,15 +33,14 @@ export async function GET(req: NextRequest) {
   }
 
   if (group === "SALE") {
-    customerFilter.type = {
-      $in: ["SALE", "BOTH"],
-    };
+    customerFilter.$or = [
+      { outletId: { $exists: false } },
+      { outletId: null },
+    ];
   }
 
   if (group === "OUTLET") {
-    customerFilter.type = {
-      $in: ["DELIVERY", "BOTH"],
-    };
+    customerFilter.outletId = { $exists: true, $ne: null };
   }
 
   const customers = await CustomerModel.find(customerFilter)

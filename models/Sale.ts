@@ -20,6 +20,8 @@ export interface ISale extends Document {
   shiftId?: Types.ObjectId;
   channel: SaleChannel;
   paymentMethod: PaymentMethod;
+  cashReceived?: number;
+  change?: number;
   // Client-supplied dedupe key for mobile sales. A cashier's app generates one
   // per cart-confirm and resends it on retry, so a timed-out-then-retried
   // request can't create a duplicate sale. Sparse: web sales omit it.
@@ -91,6 +93,18 @@ const SaleSchema = new Schema<ISale>(
       type: String,
       enum: ["CASH", "GCASH", "CREDIT"],
       default: "CASH",
+    },
+
+    cashReceived: {
+      type: Number,
+      required: false,
+      min: 0,
+    },
+
+    change: {
+      type: Number,
+      required: false,
+      min: 0,
     },
 
     idempotencyKey: {

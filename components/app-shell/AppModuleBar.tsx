@@ -88,7 +88,12 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
     {
       title: "Collections",
       icon: CircleDollarSign,
-      routes: ["/payments", "/payments/add", "/payments/history"],
+      routes: [
+        "/payments",
+        "/payments/pos-collections",
+        "/payments/add",
+        "/payments/history",
+      ],
     },
     {
       title: "Profitability",

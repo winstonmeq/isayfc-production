@@ -202,6 +202,12 @@ export const appNavItems: AppNavItem[] = [
         permission: "payments.view",
       },
       {
+        title: "POS Collections",
+        href: "/payments/pos-collections",
+        icon: ReceiptText,
+        permission: "payments.view",
+      },
+      {
         title: "Add Payment",
         href: "/payments/add",
         icon: CreditCard,

@@ -322,6 +322,8 @@ export async function POST(req: NextRequest) {
                 shiftId,
                 channel: "MOBILE",
                 paymentMethod: "CASH",
+                cashReceived,
+                change: cashReceived - totalAmount,
                 idempotencyKey: idempotencyKey || undefined,
                 totalAmount,
                 paidAmount: totalAmount, // cash, fully paid

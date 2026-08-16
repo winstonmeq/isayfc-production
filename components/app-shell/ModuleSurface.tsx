@@ -135,6 +135,13 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/payments/pos-collections": dynamic(
+    () =>
+      import("@/components/payments/PosCollectionsPageClient").then(
+        (m) => m.PosCollectionsPageClient
+      ),
+    { loading: LoadingModule }
+  ),
   "/payments/add": dynamic(
     () =>
       import("@/components/payments/RecordPaymentPageClient").then(
