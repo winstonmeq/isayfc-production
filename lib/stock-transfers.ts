@@ -111,15 +111,15 @@ export async function dispatchTransferInTransaction({
   const groceryLedger = [];
 
   for (const item of items) {
-    // qtyPcs is the true base-unit amount (pack products already expanded).
-    const pcs = Number(item.qtyPcs || item.qty || 0);
+    // New rows use baseQty; qtyPcs remains a legacy compatibility field.
+    const baseQty = Number(item.baseQty ?? item.qtyPcs ?? item.qty ?? 0);
 
-    if (pcs <= 0) continue;
+    if (baseQty <= 0) continue;
 
     if (item.source === "GROCERY") {
       const product = await ProductModel.findOneAndUpdate(
-        { _id: item.productId, isActive: true, stockPcs: { $gte: pcs } },
-        { $inc: { stockPcs: -pcs } },
+        { _id: item.productId, isActive: true, stockPcs: { $gte: baseQty } },
+        { $inc: { stockPcs: -baseQty } },
         { new: true, session: mongoSession }
       );
 
@@ -140,7 +140,7 @@ export async function dispatchTransferInTransaction({
           400,
           `Insufficient stock for ${item.productName}: only ${Number(
             current.stockPcs ?? 0
-          )} available but the transfer needs ${pcs}.`
+          )} available but the transfer needs ${baseQty}.`
         );
       }
 
@@ -151,8 +151,8 @@ export async function dispatchTransferInTransaction({
         transactionDate: transfer.transferDate || new Date(),
         type: "STOCK_OUT",
         unit: "PCS",
-        quantity: pcs,
-        previousStock: newStock + pcs,
+        quantity: baseQty,
+        previousStock: newStock + baseQty,
         newStock,
         remarks: `STOCK TRANSFER ${transfer.transferNumber}`,
         referenceType: "STOCK_TRANSFER",
@@ -163,18 +163,18 @@ export async function dispatchTransferInTransaction({
       continue;
     }
 
-    // BODEGA (pcs already accounts for packs via qtyPcs)
+    // BODEGA stock is held in its explicit base unit (HEAD or PCS).
     const isHeadTransfer = item.unitLabel === "HEAD";
     const product = await BodegaProductModel.findOneAndUpdate(
       {
         _id: item.bodegaProductId,
         isActive: true,
-        stockQty: { $gte: pcs },
+        stockQty: { $gte: baseQty },
         ...(isHeadTransfer ? { stockHeads: { $gte: Number(item.qty) } } : {}),
       },
       {
         $inc: {
-          stockQty: -pcs,
+          stockQty: -baseQty,
           ...(isHeadTransfer ? { stockHeads: -Number(item.qty) } : {}),
         },
       },
@@ -197,8 +197,8 @@ export async function dispatchTransferInTransaction({
       const available = Number(current.stockQty ?? 0);
       const need =
         item.unitLabel === "PACK" && item.packSize > 0
-          ? `${item.qty} pack(s) (${pcs} pcs)`
-          : `${pcs}`;
+          ? `${item.qty} pack(s) (${baseQty} pcs)`
+          : `${baseQty} ${isHeadTransfer ? "head(s)" : "pcs"}`;
       const have =
         item.unitLabel === "PACK" && item.packSize > 0
           ? `${Math.floor(available / item.packSize)} pack(s) (${available} pcs)`
@@ -216,10 +216,10 @@ export async function dispatchTransferInTransaction({
       bodegaProductId: product._id,
       transactionDate: transfer.transferDate || new Date(),
       type: "STOCK_OUT",
-      quantity: pcs,
+      quantity: baseQty,
       heads: isHeadTransfer ? Number(item.qty) : 0,
-      pieces: isHeadTransfer ? 0 : pcs,
-      previousStock: newStock + pcs,
+      pieces: isHeadTransfer ? 0 : baseQty,
+      previousStock: newStock + baseQty,
       newStock,
       remarks: `STOCK TRANSFER ${transfer.transferNumber}`,
       referenceType: "STOCK_TRANSFER",
@@ -324,6 +324,8 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
         sellingPrice: Number(product.sellingPrice || 0),
         qty,
         qtyPcs: qty,
+        baseUnit: "QTY" as const,
+        baseQty: qty,
         receivedQty: 0,
         receivedPcs: 0,
         varianceQty: 0,
@@ -377,10 +379,17 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
 
     const packSize = Math.max(0, Math.trunc(Number(standard?.standardPacking || 0)));
     const isPack = packSize > 0;
+    const isWholeChicken = !isPack && Boolean(
+      await StandardPackingModel.exists({
+        isActive: true,
+        wholeChickenId: new Types.ObjectId(productKey),
+      })
+    );
+    const baseUnit = isWholeChicken ? "HEAD" as const : "PCS" as const;
     const packing = packingSnapshot({
       packingId: standard?._id.toString(),
-      unit: isPack ? "PACK" : "PCS",
-      baseUnit: "PCS",
+      unit: isPack ? "PACK" : baseUnit,
+      baseUnit,
       multiplier: packSize,
     });
 
@@ -393,11 +402,13 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       categoryName: categoryNameOf(product.categoryId),
       packSize,
       // Pack products are entered/counted in PACKS; others in PCS.
-      unitLabel: (isPack ? "PACK" : "PCS") as "PACK" | "PCS",
+      unitLabel: (isPack ? "PACK" : baseUnit) as "PACK" | "HEAD" | "PCS",
       buyingPrice: Number(product.buyingPrice || 0),
       sellingPrice: Number(product.sellingPrice || 0),
       qty,
       qtyPcs: toBaseQuantity(qty, packing),
+      baseUnit,
+      baseQty: toBaseQuantity(qty, packing),
       receivedQty: 0,
       receivedPcs: 0,
       varianceQty: 0,

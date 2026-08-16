@@ -32,6 +32,8 @@ type LeanItem = {
   productName?: string;
   unitLabel?: string;
   qtyPcs?: number;
+  baseUnit?: string;
+  baseQty?: number;
   receivedPcs?: number;
   categoryName?: string;
   packSize?: number;
@@ -53,6 +55,8 @@ function serializeItem(item: LeanItem) {
     standardPackingId: item.standardPackingId?.toString?.() || "",
     unitLabel: item.unitLabel || "PCS",
     qtyPcs: Number(item.qtyPcs || 0),
+    baseUnit: item.baseUnit || (item.unitLabel === "HEAD" ? "HEAD" : item.source === "GROCERY" ? "QTY" : "PCS"),
+    baseQty: Number(item.baseQty ?? item.qtyPcs ?? 0),
     receivedPcs: Number(item.receivedPcs || 0),
     productName: item.productName || "",
     categoryName: item.categoryName || "",
@@ -209,7 +213,7 @@ async function handlePATCH(
     transfer.outletId = outletId as never;
     transfer.remarks = cleanString(body?.remarks);
     transfer.totalItems = preparedItems.length;
-    transfer.totalQty = preparedItems.reduce((sum, item) => sum + item.qtyPcs, 0);
+    transfer.totalQty = preparedItems.reduce((sum, item) => sum + item.baseQty, 0);
 
     if (transferDateInput) {
       transfer.transferDate = new Date(transferDateInput);
@@ -325,14 +329,14 @@ async function handleDELETE(
         const groceryLedger = [];
 
         for (const item of items) {
-          const pcs = Number(item.qtyPcs || item.qty || 0);
+          const baseQty = Number(item.baseQty ?? item.qtyPcs ?? item.qty ?? 0);
 
-          if (pcs <= 0) continue;
+          if (baseQty <= 0) continue;
 
           if (item.source === "GROCERY") {
             const product = await ProductModel.findOneAndUpdate(
               { _id: item.productId },
-              { $inc: { stockPcs: pcs } },
+              { $inc: { stockPcs: baseQty } },
               { new: true, session: mongoSession }
             );
 
@@ -349,8 +353,8 @@ async function handleDELETE(
               productId: product._id,
               type: "VOID_REVERSAL",
               unit: "PCS",
-              quantity: pcs,
-              previousStock: newStock - pcs,
+              quantity: baseQty,
+              previousStock: newStock - baseQty,
               newStock,
               remarks: `CANCEL TRANSFER ${transfer.transferNumber}`,
               referenceType: "STOCK_TRANSFER_CANCEL",
@@ -366,7 +370,7 @@ async function handleDELETE(
             { _id: item.bodegaProductId },
             {
               $inc: {
-                stockQty: pcs,
+                stockQty: baseQty,
                 ...(isHeadTransfer
                   ? { stockHeads: Number(item.qty || 0) }
                   : {}),
@@ -387,10 +391,10 @@ async function handleDELETE(
           bodegaLedger.push({
             bodegaProductId: product._id,
             type: "VOID_REVERSAL",
-            quantity: pcs,
+            quantity: baseQty,
             heads: isHeadTransfer ? Number(item.qty || 0) : 0,
-            pieces: isHeadTransfer ? 0 : pcs,
-            previousStock: newStock - pcs,
+            pieces: isHeadTransfer ? 0 : baseQty,
+            previousStock: newStock - baseQty,
             newStock,
             remarks: `CANCEL TRANSFER ${transfer.transferNumber}`,
             referenceType: "STOCK_TRANSFER_CANCEL",

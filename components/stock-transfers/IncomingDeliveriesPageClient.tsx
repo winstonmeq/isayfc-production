@@ -53,7 +53,7 @@ type ConfirmRowState = {
   itemId: string;
   productName: string;
   qty: number;
-  unitLabel: "PACK" | "PCS" | "QTY";
+  unitLabel: "PACK" | "HEAD" | "PCS" | "QTY";
   packSize: number;
   receivedQty: string;
   remarks: string;
@@ -424,7 +424,14 @@ export function IncomingDeliveriesPageClient() {
               const variance = Number.isFinite(received)
                 ? Math.max(row.qty - received, 0)
                 : 0;
-              const unit = row.unitLabel === "PACK" ? "pack" : "pcs";
+              const unit =
+                row.unitLabel === "PACK"
+                  ? "pack"
+                  : row.unitLabel === "HEAD"
+                    ? "head"
+                    : row.unitLabel === "QTY"
+                      ? "unit"
+                      : "pcs";
               const isPack = row.unitLabel === "PACK" && row.packSize > 0;
               const receivedPcs =
                 isPack && Number.isFinite(received) ? received * row.packSize : 0;

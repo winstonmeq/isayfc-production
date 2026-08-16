@@ -56,6 +56,10 @@ function serializeSale(sale: any, lines: any[] = []) {
       stockUnit: line.stockUnit,
       packSize: line.packSize || 0,
       stockPcsOut: line.stockPcsOut || 0,
+      baseUnit: line.baseUnit || (line.stockUnit === "HEAD" ? "HEAD" : line.source === "GROCERY" ? "QTY" : "PCS"),
+      baseQty: Number(line.baseQty ?? line.stockPcsOut ?? line.qty ?? 0),
+      entryUnit: line.entryUnit || line.stockUnit,
+      multiplier: Number(line.multiplier || (line.stockUnit === "PACK" ? line.packSize : 1) || 1),
       remarks: line.remarks || "",
     })),
   };
@@ -195,7 +199,7 @@ async function handleDELETE(
         // transfer has already restored stock, while a draft never deducted it.
         if (linkedTransfer) continue;
 
-        const stockToRestore = Number(line.stockPcsOut || line.qty || 0);
+        const stockToRestore = Number(line.baseQty ?? line.stockPcsOut ?? line.qty ?? 0);
 
         if (stockToRestore <= 0) continue;
 

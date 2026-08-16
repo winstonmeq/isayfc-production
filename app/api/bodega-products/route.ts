@@ -42,7 +42,7 @@ type LeanStandardPacking = {
   productId?: Types.ObjectId | string | null;
   standardPacking?: number;
   chickenSizeType?: string;
-  wholeChickenId?: { name?: string } | Types.ObjectId | string | null;
+  wholeChickenId?: { _id?: Types.ObjectId | string; name?: string } | Types.ObjectId | string | null;
 };
 
 function numberValue(value: unknown) {
@@ -54,6 +54,9 @@ function idToString(value: unknown) {
   if (!value) return "";
   if (typeof value === "string") return value;
   if (value instanceof Types.ObjectId) return value.toString();
+  if (typeof value === "object" && "_id" in value) {
+    return idToString((value as { _id?: unknown })._id);
+  }
   if (typeof value === "object" && "toString" in value) return String(value.toString());
   return "";
 }
@@ -104,12 +107,14 @@ function serializeBodegaProduct(
     packSize: number;
     chickenSizeType: string;
     wholeChickenName: string;
-  }> = []
+  }> = [],
+  isWholeChicken = false
 ) {
   if (!product) return null;
 
   const packSize = packingOptions[0]?.packSize || 0;
   const isPackProduct = packSize > 0;
+  const baseUnit = isPackProduct ? "PCS" : isWholeChicken ? "HEAD" : "PCS";
   const stockBreakdown = getPackBreakdown(product.stockQty, packSize);
   const sellingPrice = numberValue(product.sellingPrice);
   const buyingPrice = numberValue(product.buyingPrice);
@@ -137,6 +142,7 @@ function serializeBodegaProduct(
 
     // Owner-friendly pack display fields.
     isPackProduct,
+    baseUnit,
     packSize,
     packingOptions,
     stockPcs: stockBreakdown.totalPcs,
@@ -207,11 +213,15 @@ export async function GET(req: NextRequest) {
       wholeChickenName: string;
     }>
   >();
+  const wholeChickenProductIds = new Set<string>();
 
   if (productIds.length > 0) {
     const standards = (await StandardPackingModel.find({
       isActive: true,
-      productId: { $in: productIds },
+      $or: [
+        { productId: { $in: productIds } },
+        { wholeChickenId: { $in: productIds } },
+      ],
     })
       .populate("wholeChickenId", "name")
       .select("productId standardPacking chickenSizeType wholeChickenId")
@@ -220,9 +230,12 @@ export async function GET(req: NextRequest) {
 
     for (const standard of standards) {
       const productId = idToString(standard.productId);
+      const wholeChickenId = idToString(standard.wholeChickenId);
       const packSize = Math.max(0, Math.trunc(numberValue(standard.standardPacking)));
 
-      if (!productId || packSize <= 0) continue;
+      if (wholeChickenId) wholeChickenProductIds.add(wholeChickenId);
+
+      if (!productId || !productIds.some((id) => id.toString() === productId) || packSize <= 0) continue;
       const wholeChicken =
         standard.wholeChickenId &&
         typeof standard.wholeChickenId === "object" &&
@@ -247,7 +260,8 @@ export async function GET(req: NextRequest) {
       .map((item) =>
         serializeBodegaProduct(
           item,
-          packingOptionsByProductId.get(idToString(item._id)) || []
+          packingOptionsByProductId.get(idToString(item._id)) || [],
+          wholeChickenProductIds.has(idToString(item._id))
         )
       )
       .filter(Boolean),

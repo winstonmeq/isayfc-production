@@ -168,6 +168,13 @@ export async function POST(
         const unitToPcs = item.unitLabel === "PACK" && packSize > 0 ? packSize : 1;
         const receivedPcs = receivedQty * unitToPcs;
         const variancePcs = varianceQty * unitToPcs;
+        const source = item.source === "GROCERY" ? "GROCERY" : "BODEGA";
+        const baseUnit =
+          item.baseUnit === "HEAD" || item.unitLabel === "HEAD"
+            ? "HEAD"
+            : source === "GROCERY"
+              ? "QTY"
+              : "PCS";
 
         item.receivedQty = receivedQty;
         item.receivedPcs = receivedPcs;
@@ -181,12 +188,14 @@ export async function POST(
 
         if (receivedPcs <= 0) continue;
 
-        const source = item.source === "GROCERY" ? "GROCERY" : "BODEGA";
         const productRef = source === "GROCERY" ? item.productId : item.bodegaProductId;
 
         const existingInventory = await OutletInventoryModel.findOneAndUpdate(
           { outletId: transfer.outletId, productSource: source, productId: productRef, isActive: true },
-          { $inc: { stockQty: receivedPcs } },
+          {
+            $inc: { stockQty: receivedPcs },
+            $set: { unitLabel: baseUnit, packSize },
+          },
           { new: true, session: mongoSession }
         );
 
@@ -207,7 +216,7 @@ export async function POST(
                 productName: item.productName,
                 categoryName: item.categoryName,
                 stockQty: receivedPcs,
-                unitLabel: "PCS",
+                unitLabel: baseUnit,
                 packSize,
                 lowStockAlert: 0,
                 buyingPrice: item.buyingPrice,
@@ -232,6 +241,9 @@ export async function POST(
               transactionDate: new Date(),
               type: "DELIVERY_RECEIVED",
               quantity: receivedPcs,
+              entryUnit: item.unitLabel,
+              baseUnit,
+              multiplier: unitToPcs,
               previousStock,
               newStock,
               referenceType: "STOCK_TRANSFER",

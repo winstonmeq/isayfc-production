@@ -61,7 +61,7 @@ function getCategoryName(product: any) {
 }
 
 function getLineQty(line: any) {
-  return wholeNumber(line.stockPcsOut || line.qty || line.quantity || 0);
+  return wholeNumber(line.baseQty ?? line.stockPcsOut ?? line.qty ?? line.quantity ?? 0);
 }
 
 function getLinePrice(line: any) {

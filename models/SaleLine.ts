@@ -24,6 +24,10 @@ export interface ISaleLine extends Document {
   stockUnit: SaleStockUnit;
   packSize: number;
   stockPcsOut: number;
+  baseUnit?: "HEAD" | "PCS" | "QTY";
+  baseQty?: number;
+  entryUnit?: "HEAD" | "PACK" | "PCS" | "QTY";
+  multiplier?: number;
 
   remarks?: string;
 
@@ -116,6 +120,28 @@ const SaleLineSchema = new Schema<ISaleLine>(
       type: Number,
       default: 0,
       min: 0,
+    },
+
+    // Explicit quantity snapshots for new sales. Legacy stockPcsOut remains
+    // readable so historical reports do not require a destructive migration.
+    baseUnit: {
+      type: String,
+      enum: ["HEAD", "PCS", "QTY"],
+    },
+
+    baseQty: {
+      type: Number,
+      min: 0,
+    },
+
+    entryUnit: {
+      type: String,
+      enum: ["HEAD", "PACK", "PCS", "QTY"],
+    },
+
+    multiplier: {
+      type: Number,
+      min: 1,
     },
 
     remarks: {

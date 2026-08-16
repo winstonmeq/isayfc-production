@@ -17,6 +17,7 @@ import BodegaProductModel from "@/models/BodegaProduct";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletModel from "@/models/Outlet";
 import StandardPackingModel from "@/models/StandardPacking";
+import SlicingItemModel from "@/models/SlicingItem";
 import {
   formatStock,
   packingSnapshot,
@@ -35,6 +36,9 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const stockParam = String(searchParams.get("stock") || "").toLowerCase();
+  const categoryFilter = String(searchParams.get("category") || "")
+    .trim()
+    .toUpperCase();
   // Optional filter: "low" (at or below alert), "zero", or "in" (has stock).
   const stockFilter =
     stockParam === "low" || stockParam === "zero" || stockParam === "in"
@@ -76,11 +80,12 @@ export async function GET(req: NextRequest) {
       isActive: true,
       standardPacking: { $gt: 0 },
     })
-      .select("productId standardPacking")
+      .select("productId wholeChickenId standardPacking")
       .sort({ updatedAt: -1, _id: -1 })
       .lean(),
     ]);
   const packSizeByProduct = new Map<string, number>();
+  const wholeChickenProductIds = new Set<string>();
   for (const standard of packingStandards) {
     const productId = standard.productId?.toString();
     if (productId && !packSizeByProduct.has(productId)) {
@@ -89,7 +94,49 @@ export async function GET(req: NextRequest) {
         Math.max(0, Math.trunc(Number(standard.standardPacking || 0)))
       );
     }
+    const wholeChickenId = standard.wholeChickenId?.toString();
+    if (wholeChickenId) wholeChickenProductIds.add(wholeChickenId);
   }
+
+  // Older slicing records increased output stock without updating the sliced
+  // product's buyingPrice. Use their recorded input cost as a valuation
+  // fallback so existing C10/C65/C99 inventory is not incorrectly worth zero.
+  const slicedCostRows = await SlicingItemModel.aggregate<{
+    _id: unknown;
+    totalInputCost: number;
+    totalOutputPcs: number;
+  }>([
+    {
+      $match: {
+        slicedProductId: { $in: bodegaProducts.map((product: any) => product._id) },
+        actualSlicedPcs: { $gt: 0 },
+        inputCost: { $gt: 0 },
+      },
+    },
+    {
+      $lookup: {
+        from: "slicingbatches",
+        localField: "batchId",
+        foreignField: "_id",
+        as: "batch",
+      },
+    },
+    { $unwind: "$batch" },
+    { $match: { "batch.isVoided": { $ne: true } } },
+    {
+      $group: {
+        _id: "$slicedProductId",
+        totalInputCost: { $sum: "$inputCost" },
+        totalOutputPcs: { $sum: "$actualSlicedPcs" },
+      },
+    },
+  ]);
+  const slicedBaseCostByProduct = new Map(
+    slicedCostRows.map((row) => [
+      String(row._id),
+      row.totalOutputPcs > 0 ? row.totalInputCost / row.totalOutputPcs : 0,
+    ])
+  );
 
   type Row = {
     id: string;
@@ -133,11 +180,11 @@ export async function GET(req: NextRequest) {
       stockStatus,
       source: "GROCERY",
       location: "MAIN",
-      unitLabel: "PCS",
+      unitLabel: "QTY",
       packSize: 0,
       stockDisplay: formatStock(
         stock,
-        packingSnapshot({ unit: "PCS", baseUnit: "PCS" })
+        packingSnapshot({ unit: "QTY", baseUnit: "QTY" })
       ),
     };
   });
@@ -147,12 +194,18 @@ export async function GET(req: NextRequest) {
     const savedCost = Number(product.buyingPrice || 0);
     const sellingPrice = Number(product.sellingPrice || 0);
     const packSize = packSizeByProduct.get(product._id.toString()) || 0;
+    const isWholeChicken = wholeChickenProductIds.has(product._id.toString());
+    const baseUnit = isWholeChicken ? "HEAD" : "PCS";
     const packing = packingSnapshot({
-      unit: packSize > 0 ? "PACK" : "PCS",
-      baseUnit: "PCS",
+      unit: packSize > 0 ? "PACK" : baseUnit,
+      baseUnit,
       multiplier: packSize,
     });
-    const cost = toBaseUnitCost(savedCost, packing);
+    const recordedBaseCost = toBaseUnitCost(savedCost, packing);
+    const cost =
+      recordedBaseCost > 0
+        ? recordedBaseCost
+        : slicedBaseCostByProduct.get(product._id.toString()) || 0;
     const retail = toBaseUnitCost(sellingPrice, packing);
     const costValue = roundMoney(stock * cost);
     const retailValue = roundMoney(stock * retail);
@@ -170,7 +223,7 @@ export async function GET(req: NextRequest) {
       stockStatus: stock <= 0 ? "OUT" : "OK",
       source: "BODEGA",
       location: "MAIN BODEGA",
-      unitLabel: packSize > 0 ? "PACK" : "PCS",
+      unitLabel: packSize > 0 ? "PACK" : baseUnit,
       packSize,
       stockDisplay: formatStock(stock, packing),
     };
@@ -188,7 +241,14 @@ export async function GET(req: NextRequest) {
             ? "BAG"
             : "PACK"
           : inventory.unitLabel || "QTY",
-      baseUnit: inventory.unitLabel === "KG" ? "KG" : "PCS",
+      baseUnit:
+        inventory.unitLabel === "KG"
+          ? "KG"
+          : inventory.unitLabel === "HEAD"
+            ? "HEAD"
+            : inventory.productSource === "GROCERY"
+              ? "QTY"
+              : "PCS",
       multiplier: packSize,
     });
     const cost = toBaseUnitCost(savedCost, packing);
@@ -222,8 +282,11 @@ export async function GET(req: NextRequest) {
   const allRows = [...groceryRows, ...bodegaRows, ...outletRows].sort((a, b) =>
     a.name.localeCompare(b.name)
   );
+  const categoryOptions = [
+    ...new Set(allRows.map((row) => row.categoryName).filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b));
 
-  const rows = stockFilter
+  const stockRows = stockFilter
     ? allRows.filter((r) =>
         stockFilter === "zero"
           ? r.stockStatus === "OUT"
@@ -232,6 +295,11 @@ export async function GET(req: NextRequest) {
             : r.stockPcs > 0
       )
     : allRows;
+  const rows = categoryFilter
+    ? stockRows.filter(
+        (row) => row.categoryName.trim().toUpperCase() === categoryFilter
+      )
+    : stockRows;
 
   // Category subtotals (over the filtered rows).
   const catMap = new Map<
@@ -276,6 +344,7 @@ export async function GET(req: NextRequest) {
     generatedAt: manilaDateString(),
     rows,
     categories,
+    categoryOptions,
     grand: {
       ...grand,
       potentialMargin: roundMoney(grand.retailValue - grand.costValue),

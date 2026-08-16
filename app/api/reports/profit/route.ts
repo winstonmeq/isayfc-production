@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
     bodegaProductId?: { toString: () => string } | null;
     qty?: number;
     stockPcsOut?: number;
+    baseQty?: number;
     lineTotal?: number;
     unitCost?: number;
   };
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
       ? []
       : await SaleLineModel.find({ saleId: { $in: saleIds } })
           .select(
-            "saleId source productId bodegaProductId qty stockPcsOut lineTotal unitCost"
+            "saleId source productId bodegaProductId qty stockPcsOut baseQty lineTotal unitCost"
           )
           .lean<Line[]>();
 
@@ -175,7 +176,7 @@ export async function GET(req: NextRequest) {
     const revenue = Number(l.lineTotal || 0);
     // Cost = pieces sold × unit cost. stockPcsOut is the true base-unit qty
     // (packs already expanded); fall back to qty.
-    const pcs = Number(l.stockPcsOut || l.qty || 0);
+    const pcs = Number(l.baseQty ?? l.stockPcsOut ?? l.qty ?? 0);
     const unitCost =
       Number(l.unitCost || 0) ||
       (isChicken

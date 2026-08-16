@@ -1,4 +1,4 @@
-export type InventoryBaseUnit = "PCS" | "KG" | "QTY";
+export type InventoryBaseUnit = "HEAD" | "PCS" | "KG" | "QTY";
 export type InventoryEntryUnit = InventoryBaseUnit | "PACK" | "BAG";
 
 export type PackingSnapshot = {
@@ -28,6 +28,16 @@ export function positiveMultiplier(value: unknown) {
 
 export function isPackagedUnit(unit: unknown) {
   return unit === "PACK" || unit === "BAG";
+}
+
+export function normalizeBaseUnit(
+  unit: unknown,
+  fallback: InventoryBaseUnit = "QTY"
+): InventoryBaseUnit {
+  const value = String(unit || "").trim().toUpperCase();
+  return value === "HEAD" || value === "PCS" || value === "KG" || value === "QTY"
+    ? value
+    : fallback;
 }
 
 export function toBaseQuantity(

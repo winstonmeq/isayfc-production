@@ -36,6 +36,8 @@ export interface IStockTransferItem extends Document {
   // qtyPcs is the true base-unit quantity moved in stock = qty * (packSize||1).
   qty: number;
   qtyPcs: number;
+  baseUnit?: "HEAD" | "PCS" | "QTY";
+  baseQty?: number;
   receivedQty: number;
   receivedPcs: number;
   varianceQty: number;
@@ -122,6 +124,18 @@ const StockTransferItemSchema = new Schema<IStockTransferItem>(
       type: Number,
       required: true,
       min: 1,
+    },
+
+    // Explicit unit snapshot for new records. qtyPcs remains for compatibility
+    // with existing transfers, but baseQty is the authoritative moved amount.
+    baseUnit: {
+      type: String,
+      enum: ["HEAD", "PCS", "QTY"],
+    },
+
+    baseQty: {
+      type: Number,
+      min: 0,
     },
 
     receivedQty: {

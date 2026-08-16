@@ -251,6 +251,10 @@ export async function POST(req: NextRequest) {
           stockUnit: "QTY",
           packSize: 1,
           stockPcsOut: qty,
+          baseUnit: "QTY",
+          baseQty: qty,
+          entryUnit: "QTY",
+          multiplier: 1,
           remarks: `MENU:${menu._id.toString()}`,
         });
 
@@ -378,6 +382,16 @@ export async function POST(req: NextRequest) {
 
         const before = Number(inv.stockQty || 0);
         const after = before - dec.qty;
+        const baseUnit =
+          inv.unitLabel === "HEAD"
+            ? "HEAD"
+            : dec.source === "GROCERY"
+              ? "QTY"
+              : "PCS";
+        // Menu component quantities are configured in inventory base units.
+        // A C10 component therefore deducts PCS even when the UI can display
+        // that inventory as packs.
+        const entryUnit = baseUnit;
         if (after < 0) {
           warnings.push(
             `${inv.productName}: sold ${dec.qty} but only ${before} in stock (now ${after}).`
@@ -398,15 +412,15 @@ export async function POST(req: NextRequest) {
               transactionDate: new Date(),
               type: "SALE",
               quantity: dec.qty,
-              entryUnit: "PCS",
+              entryUnit,
               entryQty: dec.qty,
               multiplier: 1,
-              baseUnit: "PCS",
+              baseUnit,
               unitCost: toBaseUnitCost(
                 inv.buyingPrice,
                 packingSnapshot({
-                  unit: Number(inv.packSize || 0) > 0 ? "PACK" : "QTY",
-                  baseUnit: "PCS",
+                  unit: Number(inv.packSize || 0) > 0 ? "PACK" : entryUnit,
+                  baseUnit,
                   multiplier: inv.packSize,
                 })
               ),

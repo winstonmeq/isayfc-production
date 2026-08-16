@@ -79,7 +79,7 @@ type ProductOption = {
   packingLabel?: string;
   stock: number;
   packSize: number;
-  unitLabel: "PACK" | "PCS" | "QTY";
+  unitLabel: "PACK" | "HEAD" | "PCS" | "QTY";
   stockDisplay: string;
 };
 
@@ -309,6 +309,7 @@ export function StockTransfersPageClient() {
           _id: string;
           name: string;
           stockQty?: number;
+          baseUnit?: "HEAD" | "PCS";
           packSize?: number;
           stockDisplay?: string;
           packingOptions?: Array<{
@@ -340,12 +341,12 @@ export function StockTransfersPageClient() {
             packingLabel,
             stock,
             packSize,
-            unitLabel: packSize > 0 ? "PACK" : "PCS",
+            unitLabel: packSize > 0 ? "PACK" : p.baseUnit === "HEAD" ? "HEAD" : "PCS",
             stockDisplay:
               p.stockDisplay ||
               (packSize > 0
                 ? `${Math.floor(stock / packSize)} pack(s) + ${stock % packSize} pcs`
-                : `${stock} pcs`),
+                : `${stock} ${p.baseUnit === "HEAD" ? "head(s)" : "pcs"}`),
           });
       }
 
@@ -954,6 +955,8 @@ export function StockTransfersPageClient() {
                             ? "packs"
                             : selected?.unitLabel === "QTY"
                               ? "units"
+                              : selected?.unitLabel === "HEAD"
+                                ? "heads"
                               : selected
                                 ? "pcs"
                                 : ""}

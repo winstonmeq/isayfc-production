@@ -7,7 +7,7 @@ import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import ExpenseModel, { ExpenseCategory, ExpenseType } from "@/models/Expense";
 
-const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA"];
+const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
 
 const expenseTypes: ExpenseType[] = [
   "DELIVERY_EXPENSES",
@@ -48,7 +48,9 @@ function serializeExpense(expense: any) {
   return {
     _id: expense._id.toString(),
     name: expense.name,
-    expenseCategory: normalizeExpenseCategory(expense.expenseCategory),
+    expenseCategory: expense.outletId
+      ? "OUTLET"
+      : normalizeExpenseCategory(expense.expenseCategory),
     type: normalizeExpenseType(expense.type),
     expenseDate: expense.expenseDate
       ? new Date(expense.expenseDate).toISOString()

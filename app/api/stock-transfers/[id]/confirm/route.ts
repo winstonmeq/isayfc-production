@@ -157,9 +157,16 @@ async function handlePOST(
 
         const packSize = Number(item.packSize || 0);
         const unitToPcs = item.unitLabel === "PACK" && packSize > 0 ? packSize : 1;
+        const source = item.source === "GROCERY" ? "GROCERY" : "BODEGA";
 
         const receivedPcs = receivedQty * unitToPcs;
         const variancePcs = (item.qty - receivedQty) * unitToPcs;
+        const baseUnit =
+          item.baseUnit === "HEAD" || item.unitLabel === "HEAD"
+            ? "HEAD"
+            : source === "GROCERY"
+              ? "QTY"
+              : "PCS";
 
         item.receivedQty = receivedQty;
         item.receivedPcs = receivedPcs;
@@ -180,7 +187,6 @@ async function handlePOST(
 
         if (receivedPcs <= 0) continue;
 
-        const source = item.source === "GROCERY" ? "GROCERY" : "BODEGA";
         const productRef =
           source === "GROCERY" ? item.productId : item.bodegaProductId;
 
@@ -193,7 +199,10 @@ async function handlePOST(
             productId: productRef,
             isActive: true,
           },
-          { $inc: { stockQty: receivedPcs } },
+          {
+            $inc: { stockQty: receivedPcs },
+            $set: { unitLabel: baseUnit, packSize },
+          },
           { new: true, session: mongoSession }
         );
 
@@ -214,7 +223,7 @@ async function handlePOST(
                 productName: item.productName,
                 categoryName: item.categoryName,
                 stockQty: receivedPcs,
-                unitLabel: "PCS",
+                unitLabel: baseUnit,
                 packSize,
                 lowStockAlert: 0,
                 buyingPrice: item.buyingPrice,
@@ -240,6 +249,9 @@ async function handlePOST(
               transactionDate: new Date(),
               type: "DELIVERY_RECEIVED",
               quantity: receivedPcs,
+              entryUnit: item.unitLabel,
+              baseUnit,
+              multiplier: unitToPcs,
               previousStock,
               newStock,
               referenceType: "STOCK_TRANSFER",

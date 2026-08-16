@@ -1,7 +1,7 @@
 // models/Expense.ts
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
-export type ExpenseCategory = "GROCERY" | "BODEGA";
+export type ExpenseCategory = "GROCERY" | "BODEGA" | "OUTLET";
 
 export type ExpenseType =
   | "DELIVERY_EXPENSES"
@@ -32,7 +32,7 @@ export interface IExpense extends Document {
   updatedAt: Date;
 }
 
-const expenseCategoryValues: ExpenseCategory[] = ["GROCERY", "BODEGA"];
+const expenseCategoryValues: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
 
 const expenseTypeValues: ExpenseType[] = [
   "DELIVERY_EXPENSES",

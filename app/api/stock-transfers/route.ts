@@ -170,7 +170,7 @@ async function handlePOST(req: NextRequest) {
     const preparedItems = await prepareTransferItems(body?.items || []);
 
     // Track totalQty in base units (pcs) so it matches the stock that moves.
-    const totalQty = preparedItems.reduce((sum, item) => sum + item.qtyPcs, 0);
+    const totalQty = preparedItems.reduce((sum, item) => sum + item.baseQty, 0);
 
     let transfer = null;
 

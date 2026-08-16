@@ -64,6 +64,10 @@ type PreparedSaleItem = {
   stockUnit: "PACK" | "HEAD" | "QTY";
   packSize: number;
   stockPcsOut: number;
+  baseUnit: "HEAD" | "PCS" | "QTY";
+  baseQty: number;
+  entryUnit: "HEAD" | "PACK" | "QTY";
+  multiplier: number;
   previousStock: number;
   remarks: string;
 };
@@ -156,7 +160,7 @@ async function getPackSizeForBodegaProduct(
   bodegaProductId: string,
   session: mongoose.ClientSession
 ) {
-  const standard = await StandardPackingModel.findOne({
+  const standards = await StandardPackingModel.find({
     isActive: true,
     productId: bodegaProductId,
   })
@@ -164,7 +168,20 @@ async function getPackSizeForBodegaProduct(
     .session(session)
     .lean();
 
-  return wholeNumber(standard?.standardPacking);
+  const packSizes = [
+    ...new Set(
+      standards
+        .map((standard) => wholeNumber(standard.standardPacking))
+        .filter((size) => size > 0)
+    ),
+  ];
+  if (packSizes.length > 1) {
+    fail(
+      400,
+      "This product has conflicting active pack sizes. Fix Standard PCS & Packs before selling it."
+    );
+  }
+  return packSizes[0] || 0;
 }
 
 export async function GET(req: NextRequest) {
@@ -526,14 +543,32 @@ async function handlePOST(req: NextRequest) {
           unitCost: toBaseUnitCost(
             product.buyingPrice,
             packingSnapshot({
-              unit: itemSource === "CHICKEN" && chickenUnit === "PACK" ? "PACK" : "QTY",
-              baseUnit: "PCS",
+              unit: itemSource === "CHICKEN" ? chickenUnit : "QTY",
+              baseUnit:
+                itemSource === "CHICKEN"
+                  ? chickenUnit === "PACK"
+                    ? "PCS"
+                    : "HEAD"
+                  : "QTY",
               multiplier: packSize,
             })
           ),
           stockUnit: itemSource === "CHICKEN" ? chickenUnit : "QTY",
           packSize: itemSource === "CHICKEN" ? packSize : 0,
           stockPcsOut: stockOut,
+          baseUnit:
+            itemSource === "CHICKEN"
+              ? chickenUnit === "PACK"
+                ? "PCS"
+                : "HEAD"
+              : "QTY",
+          baseQty: stockOut,
+          entryUnit:
+            itemSource === "CHICKEN" ? chickenUnit : "QTY",
+          multiplier:
+            itemSource === "CHICKEN" && chickenUnit === "PACK"
+              ? packSize
+              : 1,
           previousStock,
           remarks: itemRemarks,
         });
@@ -602,6 +637,8 @@ async function handlePOST(req: NextRequest) {
             sellingPrice: item.price,
             qty: item.qty,
             qtyPcs: item.stockPcsOut,
+            baseUnit: item.baseUnit,
+            baseQty: item.baseQty,
             receivedQty: 0,
             receivedPcs: 0,
             varianceQty: 0,
@@ -714,6 +751,10 @@ async function handlePOST(req: NextRequest) {
           stockUnit: item.stockUnit,
           packSize: item.packSize,
           stockPcsOut: item.stockPcsOut,
+          baseUnit: item.baseUnit,
+          baseQty: item.baseQty,
+          entryUnit: item.entryUnit,
+          multiplier: item.multiplier,
           remarks: item.remarks,
         });
       }

@@ -9,6 +9,7 @@ import {
   RefreshCcw,
   Search,
   ShoppingBasket,
+  Store,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -43,7 +44,7 @@ import {
 } from "@/components/ui/table";
 import { formatPeso } from "@/lib/utils";
 
-type ExpenseCategory = "GROCERY" | "BODEGA";
+type ExpenseCategory = "GROCERY" | "BODEGA" | "OUTLET";
 
 type ExpenseType =
   | "DELIVERY_EXPENSES"
@@ -95,6 +96,11 @@ const expenseCategoryOptions: { label: string; value: ExpenseCategory; descripti
     label: "Bodega",
     value: "BODEGA",
     description: "Expenses related to chicken, bodega, slicing, and delivery operations.",
+  },
+  {
+    label: "Outlet",
+    value: "OUTLET",
+    description: "Operating expenses recorded by an outlet cashier.",
   },
 ];
 
@@ -182,6 +188,7 @@ export function ExpensesBodegaPageClient() {
 
   const groceryTotal = getCategoryTotal(summary.byCategory, "GROCERY");
   const bodegaTotal = getCategoryTotal(summary.byCategory, "BODEGA");
+  const outletTotal = getCategoryTotal(summary.byCategory, "OUTLET");
 
   const activeFilterText = useMemo(() => {
     const parts: string[] = [];
@@ -389,22 +396,16 @@ export function ExpensesBodegaPageClient() {
     <div className="space-y-6">
       <ModuleHeader
         title="Business Expenses"
-        description="Record and separate Grocery/Product expenses from Bodega expenses for clearer owner reporting."
+        description="Track Grocery/Product, Bodega, and Outlet operating expenses separately."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => openAddDialog("GROCERY")} className="rounded-xl">
-              <ShoppingBasket className="mr-2 h-4 w-4" />
-              Add Grocery Expense
-            </Button>
-            <Button onClick={() => openAddDialog("BODEGA")} className="rounded-xl">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Bodega Expense
-            </Button>
-          </div>
+          <Button onClick={() => openAddDialog("BODEGA")} className="rounded-xl">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Expense
+          </Button>
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="rounded-2xl border-slate-200 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -444,6 +445,19 @@ export function ExpensesBodegaPageClient() {
           <CardContent>
             <p className="text-3xl font-bold">{formatPeso(bodegaTotal)}</p>
             <p className="mt-1 text-sm text-muted-foreground">Chicken, slicing, bodega, and delivery costs</p>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-slate-200 shadow-sm">
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            <Store className="h-4 w-4 text-amber-700" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Outlet
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{formatPeso(outletTotal)}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Expenses recorded by outlet cashiers</p>
           </CardContent>
         </Card>
       </div>

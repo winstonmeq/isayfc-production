@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
         [
           {
             name,
-            expenseCategory: "BODEGA",
+            expenseCategory: "OUTLET",
             type,
             expenseDate,
             amount,

@@ -47,7 +47,7 @@ export type TransferItemRow = {
   productName: string;
   categoryName: string;
   packSize: number;
-  unitLabel: "PACK" | "PCS" | "QTY";
+  unitLabel: "PACK" | "HEAD" | "PCS" | "QTY";
   buyingPrice: number;
   sellingPrice: number;
   qty: number;
@@ -182,7 +182,14 @@ export function TransferDetailDialog({
               </TableHeader>
               <TableBody>
                 {detail.items.map((item) => {
-                  const unit = item.unitLabel === "PACK" ? "pack" : "pcs";
+                  const unit =
+                    item.unitLabel === "PACK"
+                      ? "pack"
+                      : item.unitLabel === "HEAD"
+                        ? "head"
+                        : item.unitLabel === "QTY"
+                          ? "unit"
+                          : "pcs";
 
                   return (
                     <TableRow key={item._id}>

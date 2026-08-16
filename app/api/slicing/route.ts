@@ -661,21 +661,46 @@ async function handlePOST(req: NextRequest) {
         const mainNewStock = toNumber((updatedMainProduct as any).stockQty);
         const mainPreviousStock = mainNewStock + item.heads;
 
-        const updatedSlicedProduct = await BodegaProductModel.findOneAndUpdate(
-          {
-            _id: item.slicedProductId,
-            isActive: true,
-          },
-          { $inc: { stockQty: item.actualSlicedPcs } },
-          { new: true, session: mongoSession }
-        );
+        const slicedProductForUpdate = await BodegaProductModel.findOne({
+          _id: item.slicedProductId,
+          isActive: true,
+        }).session(mongoSession);
+
+        if (!slicedProductForUpdate) {
+          fail(404, `${item.slicedProductName} was not found.`);
+        }
+
+        const slicedPreviousStock = toNumber(slicedProductForUpdate.stockQty);
+        const previousPackCost = toNumber(slicedProductForUpdate.buyingPrice);
+        const previousBaseCost =
+          item.standardPacking > 0
+            ? previousPackCost / item.standardPacking
+            : previousPackCost;
+        const producedBaseCost =
+          item.actualSlicedPcs > 0 ? item.inputCost / item.actualSlicedPcs : 0;
+        const slicedNewStock = slicedPreviousStock + item.actualSlicedPcs;
+
+        // Sliced inventory is stored in PCS, while the product master keeps
+        // C10/C65/C99 cost per pack for compatibility with selling prices.
+        // Carry the consumed chicken cost into the output using weighted
+        // average costing so inventory reports and later sales have a cost.
+        if (producedBaseCost > 0 && slicedNewStock > 0) {
+          const weightedBaseCost =
+            (slicedPreviousStock * previousBaseCost +
+              item.actualSlicedPcs * producedBaseCost) /
+            slicedNewStock;
+          slicedProductForUpdate.buyingPrice = roundMoney(
+            weightedBaseCost * item.standardPacking
+          );
+        }
+        slicedProductForUpdate.stockQty = slicedNewStock;
+        const updatedSlicedProduct = await slicedProductForUpdate.save({
+          session: mongoSession,
+        });
 
         if (!updatedSlicedProduct) {
           fail(404, `${item.slicedProductName} was not found.`);
         }
-
-        const slicedNewStock = toNumber((updatedSlicedProduct as any).stockQty);
-        const slicedPreviousStock = slicedNewStock - item.actualSlicedPcs;
 
         slicingItemsToInsert.push({
           batchId: batch._id,

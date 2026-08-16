@@ -24,17 +24,10 @@ type Row = {
   packSize: number;
   stockDisplay: string;
 };
-type CatRow = {
-  categoryName: string;
-  items: number;
-  stockPcs: number;
-  costValue: number;
-  retailValue: number;
-};
 type InventoryReport = {
   generatedAt: string;
   rows: Row[];
-  categories: CatRow[];
+  categoryOptions: string[];
   grand: {
     items: number;
     stockPcs: number;
@@ -50,15 +43,16 @@ type StockFilter = "all" | "in" | "low" | "zero";
 
 export function InventoryReportPageClient() {
   const [stock, setStock] = useState<StockFilter>("all");
+  const [category, setCategory] = useState("");
   const [data, setData] = useState<InventoryReport | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"items" | "category">("items");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (stock !== "all") params.set("stock", stock);
+      if (category) params.set("category", category);
       const qs = params.toString();
       const res = await fetch(`/api/reports/inventory${qs ? `?${qs}` : ""}`, {
         cache: "no-store",
@@ -71,13 +65,13 @@ export function InventoryReportPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [stock]);
+  }, [stock, category]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stock]);
+  }, [stock, category]);
 
   const statusBadge = (s: Row["stockStatus"]) =>
     s === "OUT"
@@ -101,26 +95,41 @@ export function InventoryReportPageClient() {
       onTo={() => {}}
       onApply={() => {}}
       extraFilters={
-        <div className="flex items-end gap-1 rounded-lg border border-slate-200 p-1">
-          {([
-            ["all", "All"],
-            ["in", "In Stock"],
-            ["low", "Low"],
-            ["zero", "Out"],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setStock(key)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                stock === key
-                  ? "bg-rose-600 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="flex items-end gap-1 rounded-lg border border-slate-200 p-1">
+            {([
+              ["all", "All"],
+              ["in", "In Stock"],
+              ["low", "Low"],
+              ["zero", "Out"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setStock(key)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                  stock === key
+                    ? "bg-rose-600 text-white"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <select
+            aria-label="Category"
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            className="h-10 min-w-52 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+          >
+            <option value="">All Categories</option>
+            {(data?.categoryOptions || []).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </>
       }
     >
       {loading ? (
@@ -152,27 +161,7 @@ export function InventoryReportPageClient() {
             />
           </div>
 
-          <div className="no-print flex gap-1 border-b border-slate-200">
-            {([
-              ["items", "By Item"],
-              ["category", "By Category"],
-            ] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${
-                  tab === key
-                    ? "border-rose-600 text-rose-600"
-                    : "border-transparent text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {tab === "items" ? (
-            data.rows.length === 0 ? (
+          {data.rows.length === 0 ? (
               <Empty>No products match this filter.</Empty>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
@@ -246,61 +235,7 @@ export function InventoryReportPageClient() {
                   </tfoot>
                 </table>
               </div>
-            )
-          ) : data.categories.length === 0 ? (
-            <Empty>No categories to show.</Empty>
-          ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-slate-500">
-                  <tr>
-                    <th className="p-2.5 font-semibold">Category</th>
-                    <th className="p-2.5 text-right font-semibold">Items</th>
-                    <th className="p-2.5 text-right font-semibold">Stock</th>
-                    <th className="p-2.5 text-right font-semibold">Cost Value</th>
-                    <th className="p-2.5 text-right font-semibold">
-                      Retail Value
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.categories.map((c) => (
-                    <tr
-                      key={c.categoryName}
-                      className="border-t border-slate-100"
-                    >
-                      <td className="p-2.5 font-medium">{c.categoryName}</td>
-                      <td className="p-2.5 text-right text-slate-500">
-                        {c.items}
-                      </td>
-                      <td className="p-2.5 text-right">{qtyFmt(c.stockPcs)}</td>
-                      <td className="p-2.5 text-right font-medium">
-                        {peso(c.costValue)}
-                      </td>
-                      <td className="p-2.5 text-right text-slate-600">
-                        {peso(c.retailValue)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-bold">
-                  <tr>
-                    <td className="p-2.5">GRAND TOTAL</td>
-                    <td className="p-2.5 text-right">{data.grand.items}</td>
-                    <td className="p-2.5 text-right">
-                      {qtyFmt(data.grand.stockPcs)}
-                    </td>
-                    <td className="p-2.5 text-right">
-                      {peso(data.grand.costValue)}
-                    </td>
-                    <td className="p-2.5 text-right">
-                      {peso(data.grand.retailValue)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
+            )}
         </>
       )}
     </ReportShell>

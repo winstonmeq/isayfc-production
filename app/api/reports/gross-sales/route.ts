@@ -25,6 +25,7 @@ type SaleLineRow = {
   stockUnit?: string;
   packSize?: number;
   stockPcsOut?: number;
+  baseQty?: number;
 };
 
 type ProductBucket = {
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
   const lines = saleIds.length
     ? await SaleLineModel.find({ saleId: { $in: saleIds } })
         .select(
-          "saleId source categoryName productName qty price lineTotal unitCost stockUnit packSize stockPcsOut"
+          "saleId source categoryName productName qty price lineTotal unitCost stockUnit packSize stockPcsOut baseQty"
         )
         .lean<SaleLineRow[]>()
     : [];
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     const qty = Number(line.qty || 0);
     const revenue = Number(line.lineTotal || 0);
-    const stockUnits = Number(line.stockPcsOut || qty);
+    const stockUnits = Number(line.baseQty ?? line.stockPcsOut ?? qty);
     if (line.stockUnit === "PACK") {
       bucket.packUnits += qty;
       bucket.packRevenue = roundMoney(bucket.packRevenue + revenue);

@@ -133,7 +133,14 @@ export function TransferPrintClient({ transferId }: { transferId: string }) {
           </thead>
           <tbody>
             {detail.items.map((item, index) => {
-              const unit = item.unitLabel === "PACK" ? "pack" : "pcs";
+              const unit =
+                item.unitLabel === "PACK"
+                  ? "pack"
+                  : item.unitLabel === "HEAD"
+                    ? "head"
+                    : item.unitLabel === "QTY"
+                      ? "unit"
+                      : "pcs";
 
               return (
                 <tr key={item._id} className="border-b border-slate-200">

@@ -11,7 +11,7 @@ import {
 } from "@/lib/crud-utils";
 import ExpenseModel, { ExpenseCategory, ExpenseType } from "@/models/Expense";
 
-const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA"];
+const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
 
 const expenseTypes: ExpenseType[] = [
   "DELIVERY_EXPENSES",
@@ -49,13 +49,22 @@ function toExpenseDate(value: string) {
 }
 
 function categoryFilter(category: ExpenseCategory) {
+  if (category === "OUTLET") {
+    return { outletId: { $exists: true, $ne: null } };
+  }
+
   if (category === "BODEGA") {
     return {
-      $or: [
-        { expenseCategory: "BODEGA" },
-        { expenseCategory: { $exists: false } },
-        { expenseCategory: null },
-        { expenseCategory: "" },
+      $and: [
+        { outletId: null },
+        {
+          $or: [
+            { expenseCategory: "BODEGA" },
+            { expenseCategory: { $exists: false } },
+            { expenseCategory: null },
+            { expenseCategory: "" },
+          ],
+        },
       ],
     };
   }
@@ -64,10 +73,13 @@ function categoryFilter(category: ExpenseCategory) {
 }
 
 function serializeExpense(expense: any) {
+  const effectiveCategory: ExpenseCategory = expense.outletId
+    ? "OUTLET"
+    : normalizeExpenseCategory(expense.expenseCategory);
   return {
     _id: expense._id.toString(),
     name: expense.name,
-    expenseCategory: normalizeExpenseCategory(expense.expenseCategory),
+    expenseCategory: effectiveCategory,
     type: normalizeExpenseType(expense.type),
     expenseDate: expense.expenseDate
       ? new Date(expense.expenseDate).toISOString()
@@ -135,9 +147,15 @@ export async function GET(req: NextRequest) {
 
   const normalizedCategoryExpression = {
     $cond: [
-      { $eq: ["$expenseCategory", "GROCERY"] },
-      "GROCERY",
-      "BODEGA",
+      { $ne: [{ $ifNull: ["$outletId", null] }, null] },
+      "OUTLET",
+      {
+        $cond: [
+          { $eq: ["$expenseCategory", "GROCERY"] },
+          "GROCERY",
+          "BODEGA",
+        ],
+      },
     ],
   };
 

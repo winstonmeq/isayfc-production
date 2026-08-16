@@ -2,7 +2,7 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type OutletInventorySource = "BODEGA" | "GROCERY";
-export type OutletInventoryUnit = "PCS" | "PACK" | "QTY" | "KG" | "BAG";
+export type OutletInventoryUnit = "HEAD" | "PCS" | "PACK" | "QTY" | "KG" | "BAG";
 
 export interface IOutletInventory extends Document {
   _id: Types.ObjectId;
@@ -69,7 +69,7 @@ const OutletInventorySchema = new Schema<IOutletInventory>(
 
     unitLabel: {
       type: String,
-      enum: ["PCS", "PACK", "QTY", "KG", "BAG"],
+      enum: ["HEAD", "PCS", "PACK", "QTY", "KG", "BAG"],
       default: "QTY",
       required: true,
     },

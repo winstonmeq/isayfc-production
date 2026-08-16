@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
             ? { source }
             : {}),
         })
-          .select("saleId source qty stockUnit stockPcsOut lineTotal")
+          .select("saleId source qty stockUnit stockPcsOut baseQty lineTotal")
           .lean<
             Array<{
               saleId: { toString: () => string };
@@ -103,6 +103,7 @@ export async function GET(req: NextRequest) {
               qty?: number;
               stockUnit?: string;
               stockPcsOut?: number;
+              baseQty?: number;
               lineTotal?: number;
             }>
           >();
@@ -135,7 +136,7 @@ export async function GET(req: NextRequest) {
     };
     if (line.source === "CHICKEN" || line.stockUnit === "PACK") {
       current.packs += Number(line.qty || 0);
-      current.pcsOut += Number(line.stockPcsOut || 0);
+      current.pcsOut += Number(line.baseQty ?? line.stockPcsOut ?? 0);
     } else {
       current.quantity += Number(line.qty || 0);
     }

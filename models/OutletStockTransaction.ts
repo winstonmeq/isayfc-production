@@ -29,10 +29,10 @@ export interface IOutletStockTransaction extends Document {
   type: OutletStockTransactionType;
   quantity: number;
   unitCost: number;
-  entryUnit: "PCS" | "PACK" | "QTY" | "KG" | "BAG";
+  entryUnit: "HEAD" | "PCS" | "PACK" | "QTY" | "KG" | "BAG";
   entryQty: number;
   multiplier: number;
-  baseUnit: "PCS" | "KG" | "QTY";
+  baseUnit: "HEAD" | "PCS" | "KG" | "QTY";
   previousStock: number;
   newStock: number;
   referenceType?: string;
@@ -117,7 +117,7 @@ const OutletStockTransactionSchema = new Schema<IOutletStockTransaction>(
 
     entryUnit: {
       type: String,
-      enum: ["PCS", "PACK", "QTY", "KG", "BAG"],
+      enum: ["HEAD", "PCS", "PACK", "QTY", "KG", "BAG"],
       default: "QTY",
     },
 
@@ -135,7 +135,7 @@ const OutletStockTransactionSchema = new Schema<IOutletStockTransaction>(
 
     baseUnit: {
       type: String,
-      enum: ["PCS", "KG", "QTY"],
+      enum: ["HEAD", "PCS", "KG", "QTY"],
       default: "QTY",
     },
 
