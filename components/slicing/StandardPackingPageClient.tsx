@@ -94,14 +94,34 @@ export function StandardPackingPageClient() {
 
   async function loadBodegaProducts() {
     try {
-      const res = await fetch("/api/bodega-products?limit=1000", {
+      const res = await fetch("/api/bodega-products?limit=100&page=1", {
         cache: "no-store",
       });
 
       const json = await res.json();
 
       if (res.ok && json.success) {
-        setBodegaProducts(json.data || []);
+        const totalPages = Math.max(Number(json.meta?.totalPages) || 1, 1);
+        const remainingPages = await Promise.all(
+          Array.from({ length: totalPages - 1 }, async (_, index) => {
+            const pageRes = await fetch(
+              `/api/bodega-products?limit=100&page=${index + 2}`,
+              { cache: "no-store" }
+            );
+            const pageJson = await pageRes.json();
+
+            if (!pageRes.ok || !pageJson.success) {
+              throw new Error("Failed to load all bodega products.");
+            }
+
+            return (pageJson.data || []) as BodegaProductOption[];
+          })
+        );
+
+        setBodegaProducts([
+          ...((json.data || []) as BodegaProductOption[]),
+          ...remainingPages.flat(),
+        ]);
       }
     } catch {
       toast.error("Failed to load bodega products.");
