@@ -4,6 +4,7 @@ import { isValidObjectId } from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import { saveUpload } from "@/lib/upload-storage";
+import MenuCatalogItemModel from "@/models/MenuCatalogItem";
 import OutletMenuItemModel from "@/models/OutletMenuItem";
 
 export const dynamic = "force-dynamic";
@@ -139,6 +140,37 @@ export async function PATCH(
       { success: false, message: "Menu item not found." },
       { status: 404 }
     );
+  }
+
+  // Shared fields are maintained in the catalog and copied to every linked
+  // outlet assignment. Availability remains outlet-specific.
+  if (item.catalogItemId) {
+    await Promise.all([
+      MenuCatalogItemModel.updateOne(
+        { _id: item.catalogItemId, isActive: true },
+        {
+          $set: {
+            name,
+            normalizedName: name.toLowerCase(),
+            category,
+            defaultPrice: price,
+            ...(imageUrl !== undefined ? { imageUrl } : {}),
+          },
+        },
+        { runValidators: true }
+      ),
+      OutletMenuItemModel.updateMany(
+        { catalogItemId: item.catalogItemId, isActive: true },
+        {
+          $set: {
+            name,
+            category,
+            price,
+            ...(imageUrl !== undefined ? { imageUrl } : {}),
+          },
+        }
+      ),
+    ]);
   }
 
   return NextResponse.json({

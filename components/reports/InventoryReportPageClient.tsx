@@ -21,7 +21,9 @@ type Row = {
   source: "GROCERY" | "BODEGA" | "OUTLET";
   location: string;
   unitLabel: string;
+  baseUnit: "HEAD" | "PCS" | "KG" | "QTY";
   packSize: number;
+  packCost: number;
   stockDisplay: string;
 };
 type InventoryReport = {
@@ -30,7 +32,7 @@ type InventoryReport = {
   categoryOptions: string[];
   grand: {
     items: number;
-    stockPcs: number;
+    stockByUnit: Record<string, number>;
     costValue: number;
     retailValue: number;
     potentialMargin: number;
@@ -82,10 +84,10 @@ export function InventoryReportPageClient() {
 
   return (
     <ReportShell
-      title="Inventory Report"
-      subtitle="Stock-on-hand valuation at cost and retail, as of now."
+      title="Inventory Stock-on-Hand Report"
+      subtitle="Current stock quantity and valuation by product and location."
       generatedAt={data?.generatedAt}
-      periodLabel="As of today"
+      periodLabel={data?.generatedAt ? `As of ${data.generatedAt}` : "As of now"}
       showRange={false}
       preset={"month" as Preset}
       from=""
@@ -172,7 +174,8 @@ export function InventoryReportPageClient() {
                       <th className="p-2.5 font-semibold">Location</th>
                       <th className="p-2.5 font-semibold">Category</th>
                       <th className="p-2.5 text-right font-semibold">Stock</th>
-                      <th className="p-2.5 text-right font-semibold">Unit Cost</th>
+                      <th className="p-2.5 text-right font-semibold">Base Unit Cost</th>
+                      <th className="p-2.5 text-right font-semibold">Pack Cost</th>
                       <th className="p-2.5 text-right font-semibold">
                         Cost Value
                       </th>
@@ -195,7 +198,10 @@ export function InventoryReportPageClient() {
                             `${qtyFmt(r.stockPcs)} ${r.unitLabel}`}
                         </td>
                         <td className="p-2.5 text-right text-slate-600">
-                          {peso(r.buyingPrice)}
+                          {peso(r.buyingPrice)} / {r.baseUnit.toLowerCase()}
+                        </td>
+                        <td className="p-2.5 text-right text-slate-600">
+                          {r.packSize > 0 ? peso(r.packCost) : "—"}
                         </td>
                         <td className="p-2.5 text-right font-medium">
                           {peso(r.costValue)}
@@ -221,9 +227,12 @@ export function InventoryReportPageClient() {
                         GRAND TOTAL ({data.grand.items})
                       </td>
                       <td className="p-2.5 text-right">
-                        {qtyFmt(data.grand.stockPcs)}
+                        {Object.entries(data.grand.stockByUnit)
+                          .filter(([, value]) => value !== 0)
+                          .map(([unit, value]) => `${qtyFmt(value)} ${unit.toLowerCase()}`)
+                          .join(" • ") || "—"}
                       </td>
-                      <td />
+                      <td colSpan={2} />
                       <td className="p-2.5 text-right">
                         {peso(data.grand.costValue)}
                       </td>

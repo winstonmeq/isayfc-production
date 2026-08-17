@@ -10,6 +10,7 @@ import type { Types } from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import { saveUpload } from "@/lib/upload-storage";
+import MenuCatalogItemModel from "@/models/MenuCatalogItem";
 import OutletMenuItemModel from "@/models/OutletMenuItem";
 import OutletInventoryModel from "@/models/OutletInventory";
 
@@ -176,8 +177,35 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const normalizedName = name.toLowerCase();
+  let catalogItem;
+  try {
+    catalogItem = await MenuCatalogItemModel.findOneAndUpdate(
+      { normalizedName, category, isActive: true },
+      {
+        $setOnInsert: {
+          name,
+          normalizedName,
+          category,
+          defaultPrice: price,
+          imageUrl,
+          components: [],
+          isActive: true,
+          createdBy: user.id,
+        },
+      },
+      { new: true, upsert: true, runValidators: true }
+    );
+  } catch {
+    return NextResponse.json(
+      { success: false, message: `"${name}" already exists in the shared menu catalog.` },
+      { status: 409 }
+    );
+  }
+
   const item = await OutletMenuItemModel.create({
     outletId: user.outlet.id,
+    catalogItemId: catalogItem._id,
     name,
     category,
     price,

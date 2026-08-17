@@ -9,9 +9,7 @@ type PageRule = {
 
 const PAGE_RULES: PageRule[] = [
   { prefix: "/profit/chicken-slicing", permission: "reports.profit" },
-  { prefix: "/profit/products", permission: "reports.profit" },
   { prefix: "/reports/chicken-slicing", permission: "reports.profit" },
-  { prefix: "/reports/product-profits", permission: "reports.profit" },
   { exact: "/dashboard", permission: "dashboard.view" },
   { prefix: "/outlets", permission: "outlets.view" },
   { prefix: "/outlet-inventory", permission: "outlet-inventory.view" },

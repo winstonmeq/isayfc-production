@@ -60,7 +60,6 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
   const isProfitabilityModule = [
     "/outlet-summary",
     "/profit/chicken-slicing",
-    "/profit/products",
   ].some(
     (route) =>
       selectedModule === route ||
@@ -245,7 +244,6 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
     ...(canAccessAnyFinanceRoute([
       "/outlet-summary",
       "/profit/chicken-slicing",
-      "/profit/products",
     ])
       ? [
           {

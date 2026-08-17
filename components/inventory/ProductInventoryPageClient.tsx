@@ -129,7 +129,6 @@ export function ProductInventoryPageClient() {
   const [limit, setLimit] = useState("10");
   const [search, setSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");
-  const [categoryId, setCategoryId] = useState("ALL");
   const [stockStatus, setStockStatus] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -149,21 +148,6 @@ export function ProductInventoryPageClient() {
     return getStockByUnit(stockItem, stockForm.unit);
   }, [stockItem, stockForm.unit]);
 
-  async function loadCategories() {
-    try {
-      const res = await fetch("/api/categories?limit=100", { cache: "no-store" });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.message || "Failed to load categories.");
-      }
-
-      setCategories(json.data || []);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to load categories.");
-    }
-  }
-
   async function loadItems() {
     setIsLoading(true);
 
@@ -173,7 +157,6 @@ export function ProductInventoryPageClient() {
     });
 
     if (search) params.set("search", search);
-    if (categoryId !== "ALL") params.set("categoryId", categoryId);
     if (stockStatus !== "ALL") params.set("stockStatus", stockStatus);
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
@@ -189,6 +172,7 @@ export function ProductInventoryPageClient() {
       }
 
       setItems(json.data || []);
+      setCategories(json.categoryOptions || []);
       setMeta(
         json.meta || {
           page,
@@ -209,13 +193,9 @@ export function ProductInventoryPageClient() {
   }
 
   useEffect(() => {
-    void loadCategories();
-  }, []);
-
-  useEffect(() => {
     void loadItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, search, categoryId, stockStatus, dateFrom, dateTo]);
+  }, [page, limit, search, stockStatus, dateFrom, dateTo]);
 
   function updateForm(name: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -233,7 +213,6 @@ export function ProductInventoryPageClient() {
   function resetFilters() {
     setDraftSearch("");
     setSearch("");
-    setCategoryId("ALL");
     setStockStatus("ALL");
     setDateFrom("");
     setDateTo("");
@@ -303,7 +282,7 @@ export function ProductInventoryPageClient() {
   return (
     <div className="space-y-6">
       <Card className="rounded-2xl border-slate-200 shadow-sm">
-        <CardContent className="grid items-end gap-3 pt-6 md:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_auto_auto]">
+        <CardContent className="grid items-end gap-3 pt-6 md:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr_auto_auto]">
           <Input
             value={draftSearch}
             onChange={(event) => setDraftSearch(event.target.value)}
@@ -312,26 +291,6 @@ export function ProductInventoryPageClient() {
               if (event.key === "Enter") applySearch();
             }}
           />
-
-          <Select
-            value={categoryId}
-            onValueChange={(value) => {
-              setCategoryId(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All categories</SelectItem>
-              {categories.map((category) => (
-                <SelectItem key={category._id} value={category._id}>
-                  {category.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
 
           <Select
             value={stockStatus}

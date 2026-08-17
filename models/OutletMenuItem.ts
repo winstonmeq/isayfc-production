@@ -8,8 +8,9 @@ import mongoose, { Document, Model, Schema, Types } from "mongoose";
  *
  * `components` optionally map the menu item to raw outlet-inventory stock that
  * gets deducted on each sale. Example: one "Fried Chicken C10" consumes 1 pc of
- * the C10 outlet-inventory item. An empty components array = sell with no stock
- * deduction (revenue only).
+ * the C10 outlet-inventory item. When production/mixing has created matching
+ * finished OutletInventory, sales consume that finished stock first; components
+ * remain the fallback for legacy direct-consumption menu items.
  */
 export interface IOutletMenuComponent {
   // References an OutletInventory record's identity (productSource + productId).
@@ -23,6 +24,7 @@ export interface IOutletMenuComponent {
 export interface IOutletMenuItem extends Document {
   _id: Types.ObjectId;
   outletId: Types.ObjectId;
+  catalogItemId?: Types.ObjectId;
   name: string;
   category: string; // e.g. "Chicken", "Drinks", "Rice", "Meals"
   price: number;
@@ -59,6 +61,10 @@ const OutletMenuItemSchema = new Schema<IOutletMenuItem>(
       type: Schema.Types.ObjectId,
       ref: "Outlet",
       required: true,
+    },
+    catalogItemId: {
+      type: Schema.Types.ObjectId,
+      ref: "MenuCatalogItem",
     },
     name: {
       type: String,
@@ -103,6 +109,7 @@ const OutletMenuItemSchema = new Schema<IOutletMenuItem>(
 
 OutletMenuItemSchema.index({ outletId: 1, isActive: 1, category: 1, sortOrder: 1 });
 OutletMenuItemSchema.index({ outletId: 1, name: 1 });
+OutletMenuItemSchema.index({ outletId: 1, catalogItemId: 1 });
 
 const OutletMenuItemModel: Model<IOutletMenuItem> =
   mongoose.models.OutletMenuItem ||

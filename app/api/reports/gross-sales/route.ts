@@ -7,6 +7,8 @@ import { cogsByOutlet } from "@/lib/outlet-profit";
 import { parseReportRange, roundMoney } from "@/lib/report-utils";
 import { requirePermission } from "@/lib/require-permission";
 import ExpenseModel from "@/models/Expense";
+import BodegaProductModel from "@/models/BodegaProduct";
+import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 
@@ -39,6 +41,12 @@ type ProductBucket = {
   pieceRevenue: number;
   stockUnitsOut: number;
   cogs: number;
+};
+
+type StockRollForward = {
+  beginning: number;
+  processed: number;
+  ending: number;
 };
 
 export async function GET(request: NextRequest) {
@@ -113,10 +121,73 @@ export async function GET(request: NextRequest) {
     buckets.set(key, bucket);
   }
 
+  const bodegaProducts = await BodegaProductModel.find({ isActive: true })
+    .select("name stockQty")
+    .lean<Array<{ _id: Types.ObjectId; name?: string; stockQty?: number }>>();
+  const bodegaIds = bodegaProducts.map((product) => product._id);
+  const bodegaTransactions = bodegaIds.length
+    ? await BodegaStockTransactionModel.find({
+        bodegaProductId: { $in: bodegaIds },
+        transactionDate: { $gte: start },
+      })
+        .select("bodegaProductId transactionDate previousStock newStock referenceType")
+        .lean<
+          Array<{
+            bodegaProductId: Types.ObjectId;
+            transactionDate: Date;
+            previousStock?: number;
+            newStock?: number;
+            referenceType?: string;
+          }>
+        >()
+    : [];
+
+  const rollForwardByName = new Map<string, StockRollForward>();
+  for (const product of bodegaProducts) {
+    const productId = product._id.toString();
+    const current = Number(product.stockQty || 0);
+    const transactions = bodegaTransactions.filter(
+      (transaction) => transaction.bodegaProductId.toString() === productId
+    );
+    const afterStart = transactions.reduce(
+      (sum, transaction) =>
+        sum + Number(transaction.newStock || 0) - Number(transaction.previousStock || 0),
+      0
+    );
+    const afterEnd = transactions
+      .filter((transaction) => new Date(transaction.transactionDate) >= end)
+      .reduce(
+        (sum, transaction) =>
+          sum + Number(transaction.newStock || 0) - Number(transaction.previousStock || 0),
+        0
+      );
+    const processed = transactions
+      .filter(
+        (transaction) =>
+          new Date(transaction.transactionDate) < end &&
+          transaction.referenceType === "SLICING_BATCH" &&
+          Number(transaction.newStock || 0) > Number(transaction.previousStock || 0)
+      )
+      .reduce(
+        (sum, transaction) =>
+          sum + Number(transaction.newStock || 0) - Number(transaction.previousStock || 0),
+        0
+      );
+    rollForwardByName.set(String(product.name || "").toUpperCase(), {
+      beginning: current - afterStart,
+      processed,
+      ending: current - afterEnd,
+    });
+  }
+
   const products = [...buckets.values()]
     .map((bucket) => {
       const grossSales = roundMoney(bucket.packRevenue + bucket.pieceRevenue);
       const cogs = roundMoney(bucket.cogs);
+      const rollForward =
+        bucket.source === "CHICKEN"
+          ? rollForwardByName.get(bucket.productName)
+          : undefined;
       return {
         ...bucket,
         packUnits: Math.round(bucket.packUnits * 100) / 100,
@@ -133,6 +204,9 @@ export async function GET(request: NextRequest) {
         grossSales,
         cogs,
         grossProfit: roundMoney(grossSales - cogs),
+        beginningInventory: rollForward?.beginning || 0,
+        processedChickenCuts: rollForward?.processed || 0,
+        endingInventory: rollForward?.ending || 0,
       };
     })
     .sort((a, b) => b.grossSales - a.grossSales || a.productName.localeCompare(b.productName));
@@ -199,6 +273,18 @@ export async function GET(request: NextRequest) {
       pieceUnits: products.reduce((sum, product) => sum + product.pieceUnits, 0),
       pieceSales: roundMoney(products.reduce((sum, product) => sum + product.pieceRevenue, 0)),
       grossSales,
+      beginningInventory: products.reduce(
+        (sum, product) => sum + product.beginningInventory,
+        0
+      ),
+      processedChickenCuts: products.reduce(
+        (sum, product) => sum + product.processedChickenCuts,
+        0
+      ),
+      endingInventory: products.reduce(
+        (sum, product) => sum + product.endingInventory,
+        0
+      ),
       productCogs,
       outletCogs,
       totalCogs,

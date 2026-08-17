@@ -104,6 +104,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const search = cleanString(searchParams.get("search"));
+  const stockStatus = cleanString(searchParams.get("stockStatus")).toUpperCase();
   const dateFrom = cleanString(searchParams.get("dateFrom"));
   const dateTo = cleanString(searchParams.get("dateTo"));
 
@@ -198,7 +199,7 @@ export async function GET(req: NextRequest) {
     movementMap.set(productId, current);
   }
 
-  const data = (products as any[]).map((product) => {
+  const allData = (products as any[]).map((product) => {
     const id = objectIdString(product._id);
     const movement = movementMap.get(id) || {
       stockIn: 0,
@@ -227,6 +228,11 @@ export async function GET(req: NextRequest) {
       })
     );
 
+    const currentStock = toNumber(product.stockQty);
+    const isLowStock =
+      currentStock > 0 &&
+      (isPackProduct ? currentStock <= packSize * 3 : currentStock <= 10);
+
     return {
       _id: id,
       product: product.name,
@@ -234,7 +240,7 @@ export async function GET(req: NextRequest) {
 
       stockIn: toNumber(movement.stockIn),
       stockOut: toNumber(movement.stockOut),
-      currentStock: toNumber(product.stockQty),
+      currentStock,
       currentBags: toNumber(product.stockBags),
       currentKilos: toNumber(product.stockKilos),
       currentHeads: toNumber(product.stockHeads || product.stockQty),
@@ -252,6 +258,7 @@ export async function GET(req: NextRequest) {
       stockUnit: isPackProduct ? "PACK_PCS" : "UNIT",
       isPackProduct,
       packSize,
+      stockStatus: currentStock <= 0 ? "OUT" : isLowStock ? "LOW" : "OK",
 
       stockInPcs: stockInBreakdown.totalPcs,
       stockInPacks: stockInBreakdown.packs,
@@ -274,6 +281,14 @@ export async function GET(req: NextRequest) {
             : undefined,
     };
   });
+
+  const data = allData.filter((row) =>
+    stockStatus === "LOW"
+      ? row.stockStatus === "LOW"
+      : stockStatus === "OUT"
+        ? row.stockStatus === "OUT"
+        : true
+  );
 
   const totals = data.reduce(
     (sum, row) => {

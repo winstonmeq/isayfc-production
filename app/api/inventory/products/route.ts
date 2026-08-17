@@ -111,6 +111,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // This page is exclusively for Product (grocery) inventory. Only expose
+  // categories that are actually assigned to active Product records; shared
+  // system categories such as CHICKEN belong to Bodega inventory.
+  const groceryCategoryIds = await ProductModel.distinct("categoryId", {
+    isActive: true,
+    categoryId: { $ne: null },
+  });
+  const categoryOptions = await CategoryModel.find({
+    _id: { $in: groceryCategoryIds },
+    isActive: true,
+  })
+    .select("name")
+    .sort({ name: 1 })
+    .lean();
+
   const [items, total, summaryRows] = await Promise.all([
     ProductModel.find(filter as any)
       .populate("categoryId", "name")
@@ -258,6 +273,10 @@ export async function GET(req: NextRequest) {
       totalSellingValue: roundMoney(Number(summary.totalSellingValue || 0)),
       lowStockCount: Number(summary.lowStockCount || 0),
     },
+    categoryOptions: categoryOptions.map((category: any) => ({
+      _id: category._id.toString(),
+      name: String(category.name || ""),
+    })),
     meta: {
       page,
       limit,

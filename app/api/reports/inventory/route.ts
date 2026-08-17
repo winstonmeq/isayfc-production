@@ -10,7 +10,6 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { roundMoney } from "@/lib/report-utils";
-import { manilaDateString } from "@/lib/date-utils";
 import ProductModel from "@/models/Product";
 import CategoryModel from "@/models/Category";
 import BodegaProductModel from "@/models/BodegaProduct";
@@ -72,7 +71,7 @@ export async function GET(req: NextRequest) {
     OutletInventoryModel.find({ isActive: true })
       .populate("outletId", "name code")
       .select(
-        "outletId productName categoryName stockQty unitLabel packSize lowStockAlert buyingPrice sellingPrice"
+        "outletId productSource productId productName categoryName stockQty unitLabel packSize lowStockAlert buyingPrice sellingPrice"
       )
       .sort({ productName: 1 })
       .lean(),
@@ -153,7 +152,9 @@ export async function GET(req: NextRequest) {
     source: "GROCERY" | "BODEGA" | "OUTLET";
     location: string;
     unitLabel: string;
+    baseUnit: "HEAD" | "PCS" | "KG" | "QTY";
     packSize: number;
+    packCost: number;
     stockDisplay: string;
   };
 
@@ -181,7 +182,9 @@ export async function GET(req: NextRequest) {
       source: "GROCERY",
       location: "MAIN",
       unitLabel: "QTY",
+      baseUnit: "QTY",
       packSize: 0,
+      packCost: 0,
       stockDisplay: formatStock(
         stock,
         packingSnapshot({ unit: "QTY", baseUnit: "QTY" })
@@ -224,10 +227,19 @@ export async function GET(req: NextRequest) {
       source: "BODEGA",
       location: "MAIN BODEGA",
       unitLabel: packSize > 0 ? "PACK" : baseUnit,
+      baseUnit,
       packSize,
+      packCost: packSize > 0 ? roundMoney(cost * packSize) : 0,
       stockDisplay: formatStock(stock, packing),
     };
   });
+
+  const groceryCostById = new Map(
+    groceryRows.map((row) => [row.id, row.buyingPrice])
+  );
+  const bodegaCostById = new Map(
+    bodegaRows.map((row) => [row.id, row.buyingPrice])
+  );
 
   const outletRows: Row[] = outletInventory.map((inventory: any) => {
     const stock = Number(inventory.stockQty || 0);
@@ -251,7 +263,15 @@ export async function GET(req: NextRequest) {
               : "PCS",
       multiplier: packSize,
     });
-    const cost = toBaseUnitCost(savedCost, packing);
+    const recordedCost = toBaseUnitCost(savedCost, packing);
+    const sourceId = inventory.productId?.toString?.() || "";
+    const sourceCost =
+      inventory.productSource === "GROCERY"
+        ? groceryCostById.get(sourceId) || 0
+        : bodegaCostById.get(sourceId) || 0;
+    // Older outlet balances may predate cost snapshots. Value them using the
+    // linked source master's current base-unit cost instead of reporting zero.
+    const cost = recordedCost > 0 ? recordedCost : sourceCost;
     const retail = toBaseUnitCost(savedRetail, packing);
     const alert = Number(inventory.lowStockAlert || 0);
     const costValue = roundMoney(stock * cost);
@@ -274,7 +294,12 @@ export async function GET(req: NextRequest) {
       source: "OUTLET",
       location: String(outletName),
       unitLabel: packing.unit,
+      baseUnit: packing.baseUnit,
       packSize: packing.multiplier > 1 ? packing.multiplier : 0,
+      packCost:
+        packing.multiplier > 1
+          ? roundMoney(cost * packing.multiplier)
+          : 0,
       stockDisplay: formatStock(stock, packing),
     };
   });
@@ -304,7 +329,13 @@ export async function GET(req: NextRequest) {
   // Category subtotals (over the filtered rows).
   const catMap = new Map<
     string,
-    { categoryName: string; items: number; stockPcs: number; costValue: number; retailValue: number }
+    {
+      categoryName: string;
+      items: number;
+      stockByUnit: Record<string, number>;
+      costValue: number;
+      retailValue: number;
+    }
   >();
   for (const r of rows) {
     const cur =
@@ -312,12 +343,13 @@ export async function GET(req: NextRequest) {
       {
         categoryName: r.categoryName,
         items: 0,
-        stockPcs: 0,
+        stockByUnit: {},
         costValue: 0,
         retailValue: 0,
       };
     cur.items += 1;
-    cur.stockPcs += r.stockPcs;
+    cur.stockByUnit[r.baseUnit] =
+      (cur.stockByUnit[r.baseUnit] || 0) + r.stockPcs;
     cur.costValue = roundMoney(cur.costValue + r.costValue);
     cur.retailValue = roundMoney(cur.retailValue + r.retailValue);
     catMap.set(r.categoryName, cur);
@@ -329,19 +361,35 @@ export async function GET(req: NextRequest) {
   const grand = rows.reduce(
     (acc, r) => {
       acc.items += 1;
-      acc.stockPcs += r.stockPcs;
+      acc.stockByUnit[r.baseUnit] =
+        (acc.stockByUnit[r.baseUnit] || 0) + r.stockPcs;
       acc.costValue = roundMoney(acc.costValue + r.costValue);
       acc.retailValue = roundMoney(acc.retailValue + r.retailValue);
       if (r.stockStatus === "OUT") acc.outOfStock += 1;
       else if (r.stockStatus === "LOW") acc.lowStock += 1;
       return acc;
     },
-    { items: 0, stockPcs: 0, costValue: 0, retailValue: 0, lowStock: 0, outOfStock: 0 }
+    {
+      items: 0,
+      stockByUnit: {} as Record<string, number>,
+      costValue: 0,
+      retailValue: 0,
+      lowStock: 0,
+      outOfStock: 0,
+    }
   );
 
   return NextResponse.json({
     success: true,
-    generatedAt: manilaDateString(),
+    generatedAt: new Intl.DateTimeFormat("en-PH", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date()),
     rows,
     categories,
     categoryOptions,

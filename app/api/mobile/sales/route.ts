@@ -4,9 +4,9 @@
 // items + quantities. We total it, create the Sale (+ lines), and deduct any
 // mapped raw stock from outlet inventory — all in one transaction.
 //
-// Cash only, walk-in by default (no customer). Out-of-stock components do NOT
-// block the sale (a POS shouldn't freeze at the counter); the shortfall is
-// recorded and returned as a warning.
+// Cash only, walk-in by default (no customer). Inventory-backed menu items
+// require enough finished stock (or enough legacy recipe-component stock)
+// before the sale can be completed.
 
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId } from "mongoose";
@@ -222,9 +222,37 @@ export async function POST(req: NextRequest) {
 
       const menuById = new Map(menuItems.map((m) => [m._id.toString(), m]));
 
+      // Production/mixing stores finished menu products in OutletInventory.
+      // Prefer those finished records over the legacy direct-component recipe
+      // path so selling Buttered Chicken consumes Buttered Chicken stock, not
+      // C10 again after C10 was already consumed during production.
+      const finishedInventories = await OutletInventoryModel.find({
+        outletId,
+        isActive: true,
+        $or: [
+          { productId: { $in: menuItems.map((m) => m._id) } },
+          { productName: { $in: menuItems.map((m) => m.name) } },
+        ],
+      }).session(mongoSession);
+      const finishedByMenuId = new Map(
+        finishedInventories.map((inv) => [inv.productId.toString(), inv])
+      );
+      const finishedByName = new Map(
+        finishedInventories.map((inv) => [inv.productName.trim().toUpperCase(), inv])
+      );
+
       // 2) Build sale lines + accumulate stock deductions.
       const lines: any[] = [];
-      const stockDeductions = new Map<string, { source: string; productId: string; qty: number; name: string }>();
+      const stockDeductions = new Map<
+        string,
+        {
+          source: string;
+          productId: string;
+          qty: number;
+          name: string;
+          finishedMenuItem?: boolean;
+        }
+      >();
       let totalAmount = 0;
       let totalQty = 0;
 
@@ -258,21 +286,47 @@ export async function POST(req: NextRequest) {
           remarks: `MENU:${menu._id.toString()}`,
         });
 
-        // Accumulate component deductions across the whole cart.
-        for (const comp of menu.components || []) {
-          const per = Number(comp.qtyPerSale || 0);
-          if (per <= 0) continue;
-          const key = `${comp.productSource}:${comp.productId.toString()}`;
+        const finishedInventory =
+          finishedByMenuId.get(menu._id.toString()) ||
+          finishedByName.get(menu.name.trim().toUpperCase());
+
+        if (finishedInventory) {
+          const key = `FINISHED:${finishedInventory._id.toString()}`;
           const existing = stockDeductions.get(key);
-          const add = per * qty;
-          if (existing) existing.qty += add;
+          if (existing) existing.qty += qty;
           else
             stockDeductions.set(key, {
-              source: comp.productSource,
-              productId: comp.productId.toString(),
-              qty: add,
-              name: comp.productName || "",
+              source: finishedInventory.productSource,
+              productId: finishedInventory.productId.toString(),
+              qty,
+              name: finishedInventory.productName,
+              finishedMenuItem: true,
             });
+        } else {
+          // Legacy menu items that have not been produced into finished stock
+          // still deduct their configured raw inventory components directly.
+          const components = menu.components || [];
+          if (components.length === 0) {
+            throw new ApiError(
+              409,
+              `${menu.name} has no outlet stock. Produce or receive stock before selling it.`
+            );
+          }
+          for (const comp of components) {
+            const per = Number(comp.qtyPerSale || 0);
+            if (per <= 0) continue;
+            const key = `${comp.productSource}:${comp.productId.toString()}`;
+            const existing = stockDeductions.get(key);
+            const add = per * qty;
+            if (existing) existing.qty += add;
+            else
+              stockDeductions.set(key, {
+                source: comp.productSource,
+                productId: comp.productId.toString(),
+                qty: add,
+                name: comp.productName || "",
+              });
+          }
         }
       }
 
@@ -364,20 +418,35 @@ export async function POST(req: NextRequest) {
         { session: mongoSession }
       );
 
-      // 4) Deduct mapped raw stock from outlet inventory. Does NOT block on
-      //    insufficient stock — records the shortfall and continues.
+      // 4) Deduct finished stock or mapped legacy component stock. Missing or
+      //    insufficient stock aborts the transaction so inventory cannot go
+      //    negative and the shift/sale records remain consistent.
       const warnings: string[] = [];
       for (const dec of stockDeductions.values()) {
         const inv = await OutletInventoryModel.findOne({
           outletId,
-          productSource: dec.source as "BODEGA" | "GROCERY",
-          productId: dec.productId,
           isActive: true,
+          ...(dec.finishedMenuItem
+            ? {
+                $or: [
+                  { productId: dec.productId },
+                  {
+                    productSource: dec.source as "BODEGA" | "GROCERY",
+                    productName: dec.name,
+                  },
+                ],
+              }
+            : {
+                productSource: dec.source as "BODEGA" | "GROCERY",
+                productId: dec.productId,
+              }),
         }).session(mongoSession);
 
         if (!inv) {
-          warnings.push(`${dec.name || "An ingredient"} is not stocked at this outlet.`);
-          continue;
+          throw new ApiError(
+            409,
+            `${dec.name || "An ingredient"} is not stocked at this outlet.`
+          );
         }
 
         const before = Number(inv.stockQty || 0);
@@ -393,8 +462,9 @@ export async function POST(req: NextRequest) {
         // that inventory as packs.
         const entryUnit = baseUnit;
         if (after < 0) {
-          warnings.push(
-            `${inv.productName}: sold ${dec.qty} but only ${before} in stock (now ${after}).`
+          throw new ApiError(
+            409,
+            `${inv.productName} has only ${before} available; ${dec.qty} is required.`
           );
         }
 
@@ -406,8 +476,8 @@ export async function POST(req: NextRequest) {
             {
               outletId,
               outletInventoryId: inv._id,
-              productSource: dec.source,
-              productId: dec.productId,
+              productSource: inv.productSource,
+              productId: inv.productId,
               productName: inv.productName,
               transactionDate: new Date(),
               type: "SALE",

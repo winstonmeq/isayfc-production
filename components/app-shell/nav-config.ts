@@ -6,6 +6,7 @@ import {
   Send,
   BarChart3,
   Building2,
+  CalendarDays,
   Boxes,
   ClipboardList,
   Clock,
@@ -236,13 +237,6 @@ export const appNavItems: AppNavItem[] = [
     section: "Finance",
   },
   {
-    title: "Product/Grocery Profit",
-    href: "/profit/products",
-    icon: BarChart3,
-    permission: "reports.profit",
-    section: "Finance",
-  },
-  {
     title: "Business Expenses",
     href: "/expenses-bodega",
     icon: ReceiptText,
@@ -256,7 +250,7 @@ export const appNavItems: AppNavItem[] = [
     section: "Finance",
     children: [
       {
-        title: "Bodega Stock Movement",
+        title: "Bodega Inventory",
         href: "/inventory/bodega",
         icon: ArrowLeftRight,
         permission: "inventory.view",
@@ -282,7 +276,7 @@ export const appNavItems: AppNavItem[] = [
     section: "Finance",
     children: [
       {
-        title: "Gross Sales & Profitability",
+        title: "Income Statement",
         href: "/reports/gross-sales",
         icon: BarChart3,
         permission: "reports.profit",
@@ -306,6 +300,12 @@ export const appNavItems: AppNavItem[] = [
         permission: "reports.inventory",
       },
       {
+        title: "Monthly Inventory",
+        href: "/reports/monthly-inventory",
+        icon: CalendarDays,
+        permission: "reports.inventory",
+      },
+      {
         title: "Inventory Reconciliation",
         href: "/reports/inventory-reconciliation",
         icon: ShieldCheck,
@@ -321,12 +321,6 @@ export const appNavItems: AppNavItem[] = [
         title: "Profit Report",
         href: "/reports/profit",
         icon: Gauge,
-        permission: "reports.profit",
-      },
-      {
-        title: "Product Profit Recovery",
-        href: "/reports/product-profits",
-        icon: BarChart3,
         permission: "reports.profit",
       },
     ],

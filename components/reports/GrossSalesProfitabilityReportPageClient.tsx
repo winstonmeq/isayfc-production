@@ -33,6 +33,9 @@ type ProductColumn = {
   grossSales: number;
   cogs: number;
   grossProfit: number;
+  beginningInventory: number;
+  processedChickenCuts: number;
+  endingInventory: number;
 };
 
 type ReportData = {
@@ -45,6 +48,9 @@ type ReportData = {
     pieceUnits: number;
     pieceSales: number;
     grossSales: number;
+    beginningInventory: number;
+    processedChickenCuts: number;
+    endingInventory: number;
     productCogs: number;
     outletCogs: number;
     totalCogs: number;
@@ -66,8 +72,6 @@ const quantity = (value: number) =>
   (Number(value) || 0).toLocaleString("en-PH", {
     maximumFractionDigits: 2,
   });
-
-const roundAmount = (value: number) => Math.round(value * 100) / 100;
 
 const expenseLabel: Record<string, string> = {
   DELIVERY_EXPENSES: "Delivery Expenses",
@@ -157,30 +161,11 @@ export function GrossSalesProfitabilityReportPageClient() {
 
   const visibleTotals = useMemo(() => {
     if (!data) return undefined;
-    const packUnits = visibleProducts.reduce((sum, product) => sum + product.packUnits, 0);
-    const packSales = roundAmount(visibleProducts.reduce((sum, product) => sum + product.packRevenue, 0));
-    const pieceUnits = visibleProducts.reduce((sum, product) => sum + product.pieceUnits, 0);
-    const pieceSales = roundAmount(visibleProducts.reduce((sum, product) => sum + product.pieceRevenue, 0));
-    const grossSales = roundAmount(packSales + pieceSales);
-    const productCogs = roundAmount(visibleProducts.reduce((sum, product) => sum + product.cogs, 0));
-    const grossProfit = roundAmount(grossSales - productCogs);
-    const netIncome = roundAmount(grossProfit - data.totals.totalOperatingExpenses);
-    return {
-      ...data.totals,
-      packUnits,
-      packSales,
-      pieceUnits,
-      pieceSales,
-      grossSales,
-      productCogs,
-      outletCogs: 0,
-      totalCogs: productCogs,
-      grossProfit,
-      netIncome,
-      profitabilityRatio:
-        grossSales > 0 ? Math.round((netIncome / grossSales) * 10000) / 100 : 0,
-    };
-  }, [data, visibleProducts]);
+    // Product selection controls displayed columns only. Accounting totals
+    // must continue to represent the complete period and must retain outlet
+    // POS component COGS and all operating expenses.
+    return data.totals;
+  }, [data]);
 
   function toggleProduct(key: string, checked: boolean) {
     setSelectedProductKeys((current) =>
@@ -198,8 +183,7 @@ export function GrossSalesProfitabilityReportPageClient() {
 
   return (
     <ReportShell
-      title="Gross Sales & Profitability Report"
-      subtitle="Gross sales, historical cost of sales, operating expenses, and net income by product."
+      title="Gross Sales, Cost of Sales & Income Statement"
       generatedAt={data?.generatedAt}
       periodLabel={periodLabel}
       preset={preset}
@@ -215,7 +199,7 @@ export function GrossSalesProfitabilityReportPageClient() {
             <PopoverTrigger asChild>
               <Button variant="outline" className="w-56 justify-between font-normal">
                 <span className="truncate">
-                  Products ({visibleProducts.length}/{availableProducts.length})
+                  Product Columns ({visibleProducts.length}/{availableProducts.length})
                 </span>
                 <ChevronDown className="h-4 w-4 opacity-60" />
               </Button>
@@ -371,28 +355,50 @@ export function GrossSalesProfitabilityReportPageClient() {
               <SectionTitle title="Cost of Sales" products={visibleProducts} />
               <GroupLabel label="In Stock Units" products={visibleProducts} />
               <DataRow
-                label="Units Released from Inventory"
-                total={quantity(
-                  visibleProducts.reduce(
-                    (sum, product) => sum + product.stockUnitsOut,
-                    0
-                  )
-                )}
+                label="Beginning Inventory"
+                total={quantity(visibleTotals.beginningInventory)}
                 values={visibleProducts.map((product) =>
-                  quantity(product.stockUnitsOut)
+                  product.source === "CHICKEN"
+                    ? quantity(product.beginningInventory)
+                    : "—"
                 )}
+              />
+              <DataRow
+                label="Add: Processed Chicken Cuts"
+                total={quantity(visibleTotals.processedChickenCuts)}
+                values={visibleProducts.map((product) =>
+                  product.source === "CHICKEN"
+                    ? quantity(product.processedChickenCuts)
+                    : "—"
+                )}
+              />
+              <DataRow
+                label="Less: Ending Inventory"
+                total={quantity(visibleTotals.endingInventory)}
+                values={visibleProducts.map((product) =>
+                  product.source === "CHICKEN"
+                    ? quantity(product.endingInventory)
+                    : "—"
+                )}
+              />
+              <DataRow
+                label="Inventory Units Released (Sold)"
+                total={quantity(visibleProducts.reduce((sum, product) => sum + product.stockUnitsOut, 0))}
+                values={visibleProducts.map((product) => quantity(product.stockUnitsOut))}
+                bold
+                rule
               />
               <SpacerRow products={visibleProducts} />
               <GroupLabel label="In Peso" products={visibleProducts} />
               <DataRow
-                label="Historical Product Cost"
+                label="Historical Product Cost from Sales Ledger"
                 total={money(visibleTotals.productCogs)}
                 values={visibleProducts.map((product) => money(product.cogs))}
                 bold
               />
               {visibleTotals.outletCogs > 0 ? (
                 <DataRow
-                  label="Outlet POS Component Cost"
+                  label="Outlet POS Component Cost from Stock Ledger"
                   total={money(visibleTotals.outletCogs)}
                   values={visibleProducts.map(() => "—")}
                 />

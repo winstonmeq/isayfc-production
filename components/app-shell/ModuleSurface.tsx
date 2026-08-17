@@ -170,13 +170,6 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
-  "/profit/products": dynamic(
-    () =>
-      import("@/components/reports/ProductProfitRecoveryReportPageClient").then(
-        (m) => m.ProductProfitRecoveryReportPageClient
-      ),
-    { loading: LoadingModule }
-  ),
   "/expenses-bodega": dynamic(
     () =>
       import("@/components/expenses/ExpensesBodegaPageClient").then(
@@ -240,6 +233,13 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/reports/monthly-inventory": dynamic(
+    () =>
+      import("@/components/reports/MonthlyInventoryReportPageClient").then(
+        (m) => m.MonthlyInventoryReportPageClient
+      ),
+    { loading: LoadingModule }
+  ),
   "/reports/inventory-reconciliation": dynamic(
     () =>
       import("@/components/reports/InventoryReconciliationReportPageClient").then(
@@ -258,13 +258,6 @@ const moduleComponents: Record<string, ComponentType> = {
     () =>
       import("@/components/reports/ProfitReportPageClient").then(
         (m) => m.ProfitReportPageClient
-      ),
-    { loading: LoadingModule }
-  ),
-  "/reports/product-profits": dynamic(
-    () =>
-      import("@/components/reports/ProductProfitRecoveryReportPageClient").then(
-        (m) => m.ProductProfitRecoveryReportPageClient
       ),
     { loading: LoadingModule }
   ),

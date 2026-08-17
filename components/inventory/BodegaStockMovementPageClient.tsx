@@ -10,6 +10,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -78,10 +85,12 @@ export function BodegaStockMovementPageClient() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [stockStatus, setStockStatus] = useState("ALL");
   const [appliedFilters, setAppliedFilters] = useState({
     search: "",
     dateFrom: "",
     dateTo: "",
+    stockStatus: "ALL",
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -92,6 +101,9 @@ export function BodegaStockMovementPageClient() {
     if (appliedFilters.search) params.set("search", appliedFilters.search);
     if (appliedFilters.dateFrom) params.set("dateFrom", appliedFilters.dateFrom);
     if (appliedFilters.dateTo) params.set("dateTo", appliedFilters.dateTo);
+    if (appliedFilters.stockStatus !== "ALL") {
+      params.set("stockStatus", appliedFilters.stockStatus);
+    }
 
     try {
       const res = await fetch(`/api/inventory/bodega?${params.toString()}`, {
@@ -130,6 +142,7 @@ export function BodegaStockMovementPageClient() {
       search: search.trim(),
       dateFrom,
       dateTo,
+      stockStatus,
     });
   }
 
@@ -137,7 +150,13 @@ export function BodegaStockMovementPageClient() {
     setSearch("");
     setDateFrom("");
     setDateTo("");
-    setAppliedFilters({ search: "", dateFrom: "", dateTo: "" });
+    setStockStatus("ALL");
+    setAppliedFilters({
+      search: "",
+      dateFrom: "",
+      dateTo: "",
+      stockStatus: "ALL",
+    });
   }
 
   function formatNumber(value: number | undefined, decimals = 2) {
@@ -165,7 +184,7 @@ export function BodegaStockMovementPageClient() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardContent className="grid gap-4 p-5 md:grid-cols-4">
+        <CardContent className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-5">
           <div>
             <Label>Search Product</Label>
             <Input
@@ -176,6 +195,20 @@ export function BodegaStockMovementPageClient() {
                 if (event.key === "Enter") applyFilters();
               }}
             />
+          </div>
+
+          <div>
+            <Label>Stock Status</Label>
+            <Select value={stockStatus} onValueChange={setStockStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Stock" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Stock</SelectItem>
+                <SelectItem value="LOW">Low</SelectItem>
+                <SelectItem value="OUT">Out</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div>

@@ -142,12 +142,12 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             active: selectedModule.startsWith("/payments"),
           }
         : null,
-      canAccessAny(["/outlet-summary", "/profit/chicken-slicing", "/profit/products"])
+      canAccessAny(["/outlet-summary", "/profit/chicken-slicing"])
         ? {
             label: "Profitability",
             href: financeHref("/outlet-summary"),
             icon: BarChart3,
-            active: ["/outlet-summary", "/profit/chicken-slicing", "/profit/products"].some((route) => selectedModule.startsWith(route)),
+            active: ["/outlet-summary", "/profit/chicken-slicing"].some((route) => selectedModule.startsWith(route)),
           }
         : null,
       canAccessAny(["/expenses-bodega"])
