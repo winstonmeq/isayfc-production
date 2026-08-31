@@ -4,6 +4,7 @@ import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
+import { canCreateManualOutletDelivery } from "@/lib/outlet-delivery-policy";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanString, escapeRegex, getPagination } from "@/lib/crud-utils";
 import {
@@ -121,6 +122,18 @@ async function handlePOST(req: NextRequest) {
     "stock-transfers.manage"
   );
   if (response) return response;
+  if (!canCreateManualOutletDelivery({
+    role: session?.user?.role,
+    roleName: session?.user?.roleName,
+  })) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Manual outlet deliveries are restricted to administrators. Create an outlet customer sale instead.",
+      },
+      { status: 403 }
+    );
+  }
 
   await dbConnect();
 

@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
 
   if (source === "OUTLET") {
     saleFilter.$or = [
-      { outletId: { $exists: true, $ne: null } },
+      { source: "OUTLET" },
       { channel: "MOBILE" },
       { receiptNumber: { $regex: "^MOB-", $options: "i" } },
       { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
   ) {
     saleFilter.source = source === "GROCERY" ? "BODEGA" : source;
     saleFilter.$nor = [
-      { outletId: { $exists: true, $ne: null } },
+      { source: "OUTLET" },
       { channel: "MOBILE" },
       { receiptNumber: { $regex: "^MOB-", $options: "i" } },
       { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
@@ -312,10 +312,14 @@ export async function GET(req: NextRequest) {
   const summary = filteredLines.reduce(
     (sum, line) => ({
       rows: sum.rows + 1,
+      totalQty: sum.totalQty + Number(line.qty || 0),
+      totalPrice: sum.totalPrice + Number(line.price || 0),
       totalAmount: sum.totalAmount + Number(line.lineTotal || 0),
     }),
     {
       rows: 0,
+      totalQty: 0,
+      totalPrice: 0,
       totalAmount: 0,
     }
   );

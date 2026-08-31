@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { cogsByOutlet, marginPct, parseRange } from "@/lib/outlet-profit";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import OutletModel from "@/models/Outlet";
 import SaleModel from "@/models/Sale";
 import ExpenseModel from "@/models/Expense";
@@ -55,10 +56,7 @@ export async function GET(req: NextRequest) {
       $match: {
         saleDate: { $gte: start, $lt: end },
         isVoided: { $ne: true },
-        $or: [
-          { outletId: { $ne: null } },
-          { remarks: { $regex: "MOBILE SALE OUTLET:" } },
-        ],
+        $or: outletSaleMatchClauses(),
       },
     },
     {

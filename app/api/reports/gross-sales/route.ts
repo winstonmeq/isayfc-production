@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { manilaDateString } from "@/lib/date-utils";
-import { cogsByOutlet } from "@/lib/outlet-profit";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import { parseReportRange, roundMoney } from "@/lib/report-utils";
 import { requirePermission } from "@/lib/require-permission";
 import ExpenseModel from "@/models/Expense";
@@ -16,7 +16,6 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type SaleLineRow = {
-  saleId?: Types.ObjectId;
   source?: string;
   categoryName?: string;
   productName?: string;
@@ -60,25 +59,17 @@ export async function GET(request: NextRequest) {
   const sales = await SaleModel.find({
     isVoided: false,
     saleDate: { $gte: start, $lt: end },
+    $nor: outletSaleMatchClauses(),
   })
-    .select("_id channel receiptNumber")
-    .lean<Array<{ _id: Types.ObjectId; channel?: string; receiptNumber?: string }>>();
+    .select("_id")
+    .lean<Array<{ _id: Types.ObjectId }>>();
 
   const saleIds = sales.map((sale) => sale._id);
-  const mobileSaleIds = new Set(
-    sales
-      .filter(
-        (sale) =>
-          sale.channel === "MOBILE" ||
-          String(sale.receiptNumber || "").startsWith("MOB-")
-      )
-      .map((sale) => sale._id.toString())
-  );
 
   const lines = saleIds.length
     ? await SaleLineModel.find({ saleId: { $in: saleIds } })
         .select(
-          "saleId source categoryName productName qty price lineTotal unitCost stockUnit packSize stockPcsOut baseQty"
+          "source categoryName productName qty price lineTotal unitCost stockUnit packSize stockPcsOut baseQty"
         )
         .lean<SaleLineRow[]>()
     : [];
@@ -113,11 +104,9 @@ export async function GET(request: NextRequest) {
       bucket.pieceRevenue = roundMoney(bucket.pieceRevenue + revenue);
     }
     bucket.stockUnitsOut += stockUnits;
-    if (!mobileSaleIds.has(line.saleId?.toString() || "")) {
-      bucket.cogs = roundMoney(
-        bucket.cogs + stockUnits * Number(line.unitCost || 0)
-      );
-    }
+    bucket.cogs = roundMoney(
+      bucket.cogs + stockUnits * Number(line.unitCost || 0)
+    );
     buckets.set(key, bucket);
   }
 
@@ -211,10 +200,9 @@ export async function GET(request: NextRequest) {
     })
     .sort((a, b) => b.grossSales - a.grossSales || a.productName.localeCompare(b.productName));
 
-  const outletCogsMap = await cogsByOutlet(start, end);
-  const outletCogs = roundMoney(
-    [...outletCogsMap.values()].reduce((sum, value) => sum + value, 0)
-  );
+  // Outlet POS has its own P&L. Including it here would count transferred
+  // Chicken/Grocery inventory as revenue a second time.
+  const outletCogs = 0;
   const grossSales = roundMoney(
     products.reduce((sum, product) => sum + product.grossSales, 0)
   );
@@ -232,6 +220,11 @@ export async function GET(request: NextRequest) {
       $match: {
         isActive: true,
         expenseDate: { $gte: start, $lt: end },
+        $nor: [
+          { expenseCategory: "OUTLET" },
+          { outletId: { $exists: true, $ne: null } },
+          { remarks: { $regex: "MOBILE EXPENSE OUTLET:", $options: "i" } },
+        ],
       },
     },
     { $group: { _id: "$type", total: { $sum: "$amount" } } },

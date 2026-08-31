@@ -59,7 +59,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
     {
       title: "Purchasing",
       icon: Truck,
-      routes: ["/purchase-items", "/deliveries"],
+      routes: ["/purchase-items", "/deliveries", "/supplier-invoices"],
     },
     {
       title: "Production",
@@ -93,6 +93,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
         "/payments/pos-collections",
         "/payments/add",
         "/payments/history",
+        "/accounts-payable",
       ],
     },
     {
@@ -115,6 +116,8 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
         "/inventory/bodega",
         "/inventory/products",
         "/outlet-inventory",
+        "/stock-counts",
+        "/inventory-adjustments",
       ],
     },
     {
@@ -123,6 +126,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       routes: [
         "/reports/gross-sales",
         "/reports/sales",
+        "/reports/outlet-pos",
         "/reports/inventory",
         "/reports/inventory-movements",
         "/reports/monthly-inventory",
@@ -235,6 +239,8 @@ export function AppModuleBar() {
           (!selectedModule && isRouteActive(pathname, module.href))
       )
     ) || groups[0];
+
+  if (pathname === "/pos" || pathname.startsWith("/pos/")) return null;
 
   if (status === "loading" || !activeGroup) {
     return <div className="h-11 border-b bg-white" />;

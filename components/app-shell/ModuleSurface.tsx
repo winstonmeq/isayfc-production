@@ -80,6 +80,15 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/supplier-invoices": dynamic(
+    () =>
+      import("@/components/suppliers/SupplierFinancePage").then(
+        (m) => function SupplierInvoicesModule() {
+          return <m.SupplierFinancePage mode="invoice" />;
+        }
+      ),
+    { loading: LoadingModule }
+  ),
   "/slicing": dynamic(
     () =>
       import("@/components/slicing/SliceHistoryPageClient").then(
@@ -156,6 +165,15 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/accounts-payable": dynamic(
+    () =>
+      import("@/components/suppliers/SupplierFinancePage").then(
+        (m) => function AccountsPayableModule() {
+          return <m.SupplierFinancePage mode="payable" />;
+        }
+      ),
+    { loading: LoadingModule }
+  ),
   "/outlet-summary": dynamic(
     () =>
       import("@/components/outlets/OutletSummaryPageClient").then(
@@ -205,10 +223,35 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/stock-counts": dynamic(
+    () =>
+      import("@/components/inventory/StockControlPage").then(
+        (m) => function StockCountsModule() {
+          return <m.StockControlPage mode="count" />;
+        }
+      ),
+    { loading: LoadingModule }
+  ),
+  "/inventory-adjustments": dynamic(
+    () =>
+      import("@/components/inventory/StockControlPage").then(
+        (m) => function InventoryAdjustmentsModule() {
+          return <m.StockControlPage mode="adjustment" />;
+        }
+      ),
+    { loading: LoadingModule }
+  ),
   "/reports/sales": dynamic(
     () =>
       import("@/components/reports/SalesReportPageClient").then(
         (m) => m.SalesReportPageClient
+      ),
+    { loading: LoadingModule }
+  ),
+  "/reports/outlet-pos": dynamic(
+    () =>
+      import("@/components/reports/OutletPosReportPageClient").then(
+        (m) => m.OutletPosReportPageClient
       ),
     { loading: LoadingModule }
   ),

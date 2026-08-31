@@ -345,6 +345,7 @@ export async function POST(req: NextRequest) {
                 {
                   outletId,
                   productSource,
+                  originType: "OUTLET_PRODUCTION",
                   productId,
                   productName,
                   categoryName: String(t.categoryName || consumed[0]?.inv.categoryName || "")
@@ -365,6 +366,10 @@ export async function POST(req: NextRequest) {
             inv = created;
           }
         }
+
+        // Any repack target is manufactured by this outlet, even when an
+        // existing target inventory row is reused.
+        inv.originType = "OUTLET_PRODUCTION";
 
         totalTargetUnits += qty;
         prepared.push({

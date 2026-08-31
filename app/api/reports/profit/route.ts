@@ -23,13 +23,12 @@ import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { parseReportRange, roundMoney } from "@/lib/report-utils";
 import { manilaDateString } from "@/lib/date-utils";
-import { cogsByOutlet } from "@/lib/outlet-profit";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import ProductModel from "@/models/Product";
 import BodegaProductModel from "@/models/BodegaProduct";
 import ExpenseModel from "@/models/Expense";
-import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import StandardPackingModel from "@/models/StandardPacking";
 import {
   packingSnapshot,
@@ -49,32 +48,28 @@ export async function GET(req: NextRequest) {
   const { start, end } = parseReportRange(searchParams);
 
   // 1) Non-voided sales in the period -> their line items. Mobile POS sales
-  //    are identified by channel (or the MOB- receipt prefix on legacy rows):
+  //    are identified by their first-class OUTLET source. Channel and the
+  //    MOB- receipt prefix remain as compatibility fallbacks for legacy rows.
   //    their lines are menu items with NO productId/bodegaProductId, so they
   //    cannot be costed from the product maps below — their real COGS lives in
   //    the outlet stock ledger (component deductions) and is added separately.
   const sales = await SaleModel.find({
     isVoided: false,
     saleDate: { $gte: start, $lt: end },
+    $nor: outletSaleMatchClauses(),
   })
-    .select("_id channel receiptNumber")
+    .select("_id source channel receiptNumber")
     .lean<
-      Array<{ _id: Types.ObjectId; channel?: string; receiptNumber?: string }>
+      Array<{
+        _id: Types.ObjectId;
+        source?: string;
+        channel?: string;
+        receiptNumber?: string;
+      }>
     >();
 
   const saleIds = sales.map((s) => s._id);
-  const mobileSaleIds = new Set(
-    sales
-      .filter(
-        (s) =>
-          s.channel === "MOBILE" ||
-          String(s.receiptNumber || "").startsWith("MOB-")
-      )
-      .map((s) => s._id.toString())
-  );
-
   type Line = {
-    saleId?: { toString: () => string } | null;
     source?: string;
     productId?: { toString: () => string } | null;
     bodegaProductId?: { toString: () => string } | null;
@@ -90,7 +85,7 @@ export async function GET(req: NextRequest) {
       ? []
       : await SaleLineModel.find({ saleId: { $in: saleIds } })
           .select(
-            "saleId source productId bodegaProductId qty stockPcsOut baseQty lineTotal unitCost"
+            "source productId bodegaProductId qty stockPcsOut baseQty lineTotal unitCost"
           )
           .lean<Line[]>();
 
@@ -160,17 +155,9 @@ export async function GET(req: NextRequest) {
   const bySource = {
     CHICKEN: { revenue: 0, cogs: 0 },
     BODEGA: { revenue: 0, cogs: 0 },
-    OUTLET: { revenue: 0, cogs: 0 },
   };
 
   for (const l of lines) {
-    if (mobileSaleIds.has(l.saleId?.toString() || "")) {
-      bySource.OUTLET.revenue = roundMoney(
-        bySource.OUTLET.revenue + Number(l.lineTotal || 0)
-      );
-      continue; // COGS for mobile sales comes from the outlet ledger below
-    }
-
     const isChicken = l.source === "CHICKEN" || !!l.bodegaProductId;
     const bucket = isChicken ? bySource.CHICKEN : bySource.BODEGA;
     const revenue = Number(l.lineTotal || 0);
@@ -190,16 +177,11 @@ export async function GET(req: NextRequest) {
   // Mobile POS COGS from the outlet stock ledger (SALE component deductions ×
   // outlet buyingPrice) — the same source outlet-summary uses, so the two
   // reports agree.
-  const outletCogsMap = await cogsByOutlet(start, end);
-  for (const value of outletCogsMap.values()) {
-    bySource.OUTLET.cogs = roundMoney(bySource.OUTLET.cogs + value);
-  }
-
   const revenue = roundMoney(
-    bySource.CHICKEN.revenue + bySource.BODEGA.revenue + bySource.OUTLET.revenue
+    bySource.CHICKEN.revenue + bySource.BODEGA.revenue
   );
   const cogs = roundMoney(
-    bySource.CHICKEN.cogs + bySource.BODEGA.cogs + bySource.OUTLET.cogs
+    bySource.CHICKEN.cogs + bySource.BODEGA.cogs
   );
   const grossProfit = roundMoney(revenue - cogs);
 
@@ -213,6 +195,11 @@ export async function GET(req: NextRequest) {
       $match: {
         isActive: true,
         expenseDate: { $gte: start, $lt: end },
+        $nor: [
+          { expenseCategory: "OUTLET" },
+          { outletId: { $exists: true, $ne: null } },
+          { remarks: { $regex: "MOBILE EXPENSE OUTLET:", $options: "i" } },
+        ],
       },
     },
     {
@@ -230,62 +217,6 @@ export async function GET(req: NextRequest) {
     total: roundMoney(Number(e.total || 0)),
     count: Number(e.count || 0),
   }));
-  const deductionLossRows = await OutletStockTransactionModel.aggregate<{
-    total?: number;
-    count?: number;
-  }>([
-    {
-      $match: {
-        type: "STOCK_OUT",
-        referenceType: "MANUAL_DEDUCTION",
-        transactionDate: { $gte: start, $lt: end },
-      },
-    },
-    {
-      $lookup: {
-        from: "outletinventories",
-        localField: "outletInventoryId",
-        foreignField: "_id",
-        as: "inventory",
-      },
-    },
-    {
-      $project: {
-        loss: {
-          $multiply: [
-            "$quantity",
-            {
-              $cond: [
-                { $gt: [{ $ifNull: ["$unitCost", 0] }, 0] },
-                "$unitCost",
-                {
-                  $ifNull: [
-                    { $arrayElemAt: ["$inventory.buyingPrice", 0] },
-                    0,
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        total: { $sum: "$loss" },
-        count: { $sum: 1 },
-      },
-    },
-  ]);
-  const deductionLoss = roundMoney(Number(deductionLossRows[0]?.total || 0));
-  if (deductionLoss > 0) {
-    expenses.push({
-      type: "INVENTORY_DEDUCTION_LOSS",
-      total: deductionLoss,
-      count: Number(deductionLossRows[0]?.count || 0),
-    });
-  }
   const expenseTotal = roundMoney(
     expenses.reduce((s, e) => s + e.total, 0)
   );
@@ -302,13 +233,11 @@ export async function GET(req: NextRequest) {
       total: revenue,
       chicken: roundMoney(bySource.CHICKEN.revenue),
       grocery: roundMoney(bySource.BODEGA.revenue),
-      outlet: roundMoney(bySource.OUTLET.revenue),
     },
     cogs: {
       total: cogs,
       chicken: roundMoney(bySource.CHICKEN.cogs),
       grocery: roundMoney(bySource.BODEGA.cogs),
-      outlet: roundMoney(bySource.OUTLET.cogs),
     },
     grossProfit,
     grossMarginPct,

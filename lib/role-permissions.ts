@@ -39,6 +39,8 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "purchase-items.manage", label: "Manage Purchase Items" },
       { key: "supplier-deliveries.view", label: "View Supplier Deliveries" },
       { key: "supplier-deliveries.manage", label: "Manage Supplier Deliveries" },
+      { key: "supplier-invoices.view", label: "View Supplier Invoices" },
+      { key: "supplier-invoices.manage", label: "Manage Supplier Invoices" },
     ],
   },
   {
@@ -65,10 +67,19 @@ export const ROLE_PERMISSION_GROUPS = [
     ],
   },
   {
+    group: "Point of Sale (POS)",
+    permissions: [
+      { key: "pos.view", label: "View Outlet POS" },
+      { key: "pos.manage", label: "Operate POS and Cashier Shifts" },
+    ],
+  },
+  {
     group: "Payments",
     permissions: [
       { key: "payments.view", label: "View Payments" },
       { key: "payments.manage", label: "Manage Payments" },
+      { key: "accounts-payable.view", label: "View Accounts Payable" },
+      { key: "accounts-payable.manage", label: "Manage Accounts Payable" },
     ],
   },
   {
@@ -84,6 +95,10 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "inventory.view", label: "View Inventory" },
       { key: "inventory.manage", label: "Manage Inventory" },
       { key: "stock-adjustment.manage", label: "Manage Stock Adjustment" },
+      { key: "stock-counts.view", label: "View Stock Counts" },
+      { key: "stock-counts.manage", label: "Manage and Post Stock Counts" },
+      { key: "inventory-adjustments.view", label: "View Inventory Adjustments" },
+      { key: "inventory-adjustments.manage", label: "Post Inventory Adjustments" },
     ],
   },
   {
@@ -151,6 +166,10 @@ export const CATEGORY_LOOKUP_PERMISSIONS: RolePermission[] = [
   "inventory.view",
   "inventory.manage",
   "sales-lines.view",
+  "stock-counts.view",
+  "stock-counts.manage",
+  "inventory-adjustments.view",
+  "inventory-adjustments.manage",
 ];
 
 export const BODEGA_PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
@@ -169,6 +188,10 @@ export const BODEGA_PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
   "sales-lines.view",
   "sales.view",
   "sales.manage",
+  "stock-counts.view",
+  "stock-counts.manage",
+  "inventory-adjustments.view",
+  "inventory-adjustments.manage",
 ];
 
 export const PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
@@ -182,6 +205,10 @@ export const PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
   "inventory.manage",
   "sales.view",
   "sales.manage",
+  "stock-counts.view",
+  "stock-counts.manage",
+  "inventory-adjustments.view",
+  "inventory-adjustments.manage",
 ];
 
 export const SUPPLIER_LOOKUP_PERMISSIONS: RolePermission[] = [
@@ -189,4 +216,8 @@ export const SUPPLIER_LOOKUP_PERMISSIONS: RolePermission[] = [
   "suppliers.manage",
   "supplier-deliveries.view",
   "supplier-deliveries.manage",
+  "supplier-invoices.view",
+  "supplier-invoices.manage",
+  "accounts-payable.view",
+  "accounts-payable.manage",
 ];

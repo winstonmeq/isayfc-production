@@ -132,6 +132,14 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             href: operationsHref("/sales/history"),
             icon: ShoppingCart,
             active: ["/sales", "/stock-transfers"].some((route) => selectedModule.startsWith(route)),
+        }
+        : null,
+      canAccessAny(["/pos"])
+        ? {
+            label: "POS",
+            href: "/pos",
+            icon: ShoppingCart,
+            active: pathname === "/pos" || pathname.startsWith("/pos/"),
           }
         : null,
       canAccessAny(["/payments"])

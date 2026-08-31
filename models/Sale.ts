@@ -1,7 +1,7 @@
 // models/Sale.ts
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
-export type SaleSource = "CHICKEN" | "BODEGA" | "MIXED";
+export type SaleSource = "CHICKEN" | "BODEGA" | "MIXED" | "OUTLET";
 export type SaleStatus = "UNPAID" | "PARTIAL" | "PAID" | "VOIDED";
 export type SaleChannel = "WEB" | "MOBILE";
 export type PaymentMethod = "CASH" | "GCASH" | "CREDIT";
@@ -67,7 +67,7 @@ const SaleSchema = new Schema<ISale>(
 
     source: {
       type: String,
-      enum: ["CHICKEN", "BODEGA", "MIXED"],
+      enum: ["CHICKEN", "BODEGA", "MIXED", "OUTLET"],
       required: true,
     },
 

@@ -248,9 +248,9 @@ export async function POST(req: NextRequest) {
         {
           source: string;
           productId: string;
+          outletInventoryId: string;
           qty: number;
           name: string;
-          finishedMenuItem?: boolean;
         }
       >();
       let totalAmount = 0;
@@ -269,13 +269,34 @@ export async function POST(req: NextRequest) {
         totalAmount += lineTotal;
         totalQty += qty;
 
+        const finishedInventory =
+          finishedByMenuId.get(menu._id.toString()) ||
+          finishedByName.get(menu.name.trim().toUpperCase());
+
+        if (!finishedInventory) {
+          throw new ApiError(
+            409,
+            `${menu.name} has no finished outlet stock. Produce it through mixing before selling it.`
+          );
+        }
+
         lines.push({
-          source: "BODEGA",
+          source: "OUTLET",
+          outletInventoryId: finishedInventory._id,
+          menuItemId: menu._id,
           productName: menu.name,
           categoryName: menu.category,
           qty,
           price: Number(menu.price),
           lineTotal,
+          unitCost: toBaseUnitCost(
+            finishedInventory.buyingPrice,
+            packingSnapshot({
+              unit: Number(finishedInventory.packSize || 0) > 0 ? "PACK" : "QTY",
+              baseUnit: "QTY",
+              multiplier: finishedInventory.packSize,
+            })
+          ),
           stockUnit: "QTY",
           packSize: 1,
           stockPcsOut: qty,
@@ -286,48 +307,17 @@ export async function POST(req: NextRequest) {
           remarks: `MENU:${menu._id.toString()}`,
         });
 
-        const finishedInventory =
-          finishedByMenuId.get(menu._id.toString()) ||
-          finishedByName.get(menu.name.trim().toUpperCase());
-
-        if (finishedInventory) {
-          const key = `FINISHED:${finishedInventory._id.toString()}`;
-          const existing = stockDeductions.get(key);
-          if (existing) existing.qty += qty;
-          else
-            stockDeductions.set(key, {
-              source: finishedInventory.productSource,
-              productId: finishedInventory.productId.toString(),
-              qty,
-              name: finishedInventory.productName,
-              finishedMenuItem: true,
-            });
-        } else {
-          // Legacy menu items that have not been produced into finished stock
-          // still deduct their configured raw inventory components directly.
-          const components = menu.components || [];
-          if (components.length === 0) {
-            throw new ApiError(
-              409,
-              `${menu.name} has no outlet stock. Produce or receive stock before selling it.`
-            );
-          }
-          for (const comp of components) {
-            const per = Number(comp.qtyPerSale || 0);
-            if (per <= 0) continue;
-            const key = `${comp.productSource}:${comp.productId.toString()}`;
-            const existing = stockDeductions.get(key);
-            const add = per * qty;
-            if (existing) existing.qty += add;
-            else
-              stockDeductions.set(key, {
-                source: comp.productSource,
-                productId: comp.productId.toString(),
-                qty: add,
-                name: comp.productName || "",
-              });
-          }
-        }
+        const key = `FINISHED:${finishedInventory._id.toString()}`;
+        const existing = stockDeductions.get(key);
+        if (existing) existing.qty += qty;
+        else
+          stockDeductions.set(key, {
+            source: finishedInventory.productSource,
+            productId: finishedInventory.productId.toString(),
+            outletInventoryId: finishedInventory._id.toString(),
+            qty,
+            name: finishedInventory.productName,
+          });
       }
 
       const cashReceived = Number(body?.cashReceived);
@@ -373,7 +363,7 @@ export async function POST(req: NextRequest) {
               {
                 receiptNumber,
                 saleDate: new Date(),
-                source: "BODEGA",
+                source: "OUTLET",
                 // First-class fields (the remarks tag is kept for backward
                 // compatibility with rows written before these existed).
                 outletId,
@@ -426,20 +416,7 @@ export async function POST(req: NextRequest) {
         const inv = await OutletInventoryModel.findOne({
           outletId,
           isActive: true,
-          ...(dec.finishedMenuItem
-            ? {
-                $or: [
-                  { productId: dec.productId },
-                  {
-                    productSource: dec.source as "BODEGA" | "GROCERY",
-                    productName: dec.name,
-                  },
-                ],
-              }
-            : {
-                productSource: dec.source as "BODEGA" | "GROCERY",
-                productId: dec.productId,
-              }),
+          _id: dec.outletInventoryId,
         }).session(mongoSession);
 
         if (!inv) {

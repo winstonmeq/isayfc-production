@@ -16,8 +16,8 @@ type ExpenseRow = { type: string; total: number; count: number };
 type ProfitReport = {
   range: { start: string; end: string };
   generatedAt: string;
-  revenue: { total: number; chicken: number; grocery: number; outlet: number };
-  cogs: { total: number; chicken: number; grocery: number; outlet: number };
+  revenue: { total: number; chicken: number; grocery: number };
+  cogs: { total: number; chicken: number; grocery: number };
   grossProfit: number;
   grossMarginPct: number;
   expenses: ExpenseRow[];
@@ -71,7 +71,7 @@ export function ProfitReportPageClient() {
   return (
     <ReportShell
       title="Profit Report"
-      subtitle="Income statement: revenue, cost of goods, gross profit, expenses, and net profit."
+      subtitle="Main-company income statement for Chicken and Grocery operations."
       generatedAt={data?.generatedAt}
       periodLabel={periodLabel}
       preset={preset}
@@ -113,22 +113,11 @@ export function ProfitReportPageClient() {
                 <SectionHeader label="Revenue" />
                 <Line label="Chicken Sales" value={data.revenue.chicken} indent />
                 <Line label="Grocery Sales" value={data.revenue.grocery} indent />
-                <Line
-                  label="Outlet Sales (Mobile POS)"
-                  value={data.revenue.outlet ?? 0}
-                  indent
-                />
                 <Subtotal label="Total Revenue" value={data.revenue.total} />
 
                 <SectionHeader label="Cost of Goods Sold" />
                 <Line label="Chicken COGS" value={data.cogs.chicken} indent negative />
                 <Line label="Grocery COGS" value={data.cogs.grocery} indent negative />
-                <Line
-                  label="Outlet COGS (Mobile POS)"
-                  value={data.cogs.outlet ?? 0}
-                  indent
-                  negative
-                />
                 <Subtotal label="Total COGS" value={data.cogs.total} negative />
 
                 <Subtotal

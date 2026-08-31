@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import ExpenseModel, { ExpenseCategory, ExpenseType } from "@/models/Expense";
+import { isMainExpenseCategory } from "@/lib/expense-scope";
 
 const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
 
@@ -85,6 +86,12 @@ async function handlePATCH(
   await dbConnect();
 
   const body = await req.json();
+  if (!isMainExpenseCategory(body.expenseCategory)) {
+    return NextResponse.json(
+      { success: false, message: "Outlet expenses must be managed from the outlet POS." },
+      { status: 400 }
+    );
+  }
   const name = cleanString(body.name);
   const expenseCategory = normalizeExpenseCategory(body.expenseCategory);
   const type = normalizeExpenseType(body.type);
@@ -123,7 +130,7 @@ async function handlePATCH(
   }
 
   const expense = await ExpenseModel.findOneAndUpdate(
-    { _id: id, isActive: true },
+    { _id: id, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
     {
       name,
       expenseCategory,
@@ -168,7 +175,7 @@ async function handleDELETE(
   await dbConnect();
 
   const expense = await ExpenseModel.findOneAndUpdate(
-    { _id: id, isActive: true },
+    { _id: id, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
     { isActive: false },
     { new: true }
   );

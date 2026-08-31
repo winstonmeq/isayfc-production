@@ -11,6 +11,7 @@ import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
+import { packingSnapshot, toBaseUnitCost } from "@/lib/inventory-units";
 
 export const dynamic = "force-dynamic";
 
@@ -190,29 +191,60 @@ async function handlePOST(
         const productRef =
           source === "GROCERY" ? item.productId : item.bodegaProductId;
 
-        // Increase outlet inventory (always stored in pcs): update the existing
-        // record or create it from the transfer item's product snapshot.
-        const existingInventory = await OutletInventoryModel.findOneAndUpdate(
+        // The main branch charges its marked-up selling price to the outlet.
+        // Keep stock in base units, but carry that transfer price into outlet
+        // inventory so mixing and POS COGS use the outlet's true acquisition
+        // cost instead of the main branch's supplier cost.
+        const transferPrice =
+          Number(item.sellingPrice || 0) > 0
+            ? Number(item.sellingPrice)
+            : Number(item.buyingPrice || 0);
+        const transferPacking = packingSnapshot({
+          unit: item.unitLabel,
+          baseUnit,
+          multiplier: unitToPcs,
+        });
+        const incomingBaseCost = toBaseUnitCost(transferPrice, transferPacking);
+
+        const existingInventory = await OutletInventoryModel.findOne(
           {
             outletId: transfer.outletId,
             productSource: source,
             productId: productRef,
             isActive: true,
-          },
-          {
-            $inc: { stockQty: receivedPcs },
-            $set: { unitLabel: baseUnit, packSize },
-          },
-          { new: true, session: mongoSession }
-        );
+          }
+        ).session(mongoSession);
 
         let inventoryId = existingInventory?._id;
         let previousStock = 0;
         let newStock = receivedPcs;
 
         if (existingInventory) {
-          newStock = Number(existingInventory.stockQty || 0);
-          previousStock = newStock - receivedPcs;
+          previousStock = Number(existingInventory.stockQty || 0);
+          newStock = previousStock + receivedPcs;
+          const existingBaseCost = toBaseUnitCost(
+            existingInventory.buyingPrice,
+            packingSnapshot({
+              unit: Number(existingInventory.packSize || 0) > 0 ? "PACK" : baseUnit,
+              baseUnit,
+              multiplier: existingInventory.packSize,
+            })
+          );
+          const averageBaseCost =
+            newStock > 0
+              ? (previousStock * existingBaseCost + receivedPcs * incomingBaseCost) /
+                newStock
+              : incomingBaseCost;
+
+          existingInventory.stockQty = newStock;
+          existingInventory.unitLabel = baseUnit;
+          existingInventory.packSize = packSize;
+          existingInventory.buyingPrice =
+            item.unitLabel === "PACK" && unitToPcs > 1
+              ? averageBaseCost * unitToPcs
+              : averageBaseCost;
+          existingInventory.sellingPrice = Number(item.sellingPrice || 0);
+          await existingInventory.save({ session: mongoSession });
         } else {
           const [created] = await OutletInventoryModel.create(
             [
@@ -226,7 +258,7 @@ async function handlePOST(
                 unitLabel: baseUnit,
                 packSize,
                 lowStockAlert: 0,
-                buyingPrice: item.buyingPrice,
+                buyingPrice: transferPrice,
                 sellingPrice: item.sellingPrice,
                 remarks: "",
                 createdBy: session?.user?.id,
@@ -249,7 +281,9 @@ async function handlePOST(
               transactionDate: new Date(),
               type: "DELIVERY_RECEIVED",
               quantity: receivedPcs,
+              unitCost: incomingBaseCost,
               entryUnit: item.unitLabel,
+              entryQty: receivedQty,
               baseUnit,
               multiplier: unitToPcs,
               previousStock,

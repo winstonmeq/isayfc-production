@@ -22,6 +22,7 @@ export type TransferRow = {
   transferNumber: string;
   status: string;
   transferDate?: string;
+  saleId?: string;
   outletId: string;
   outletName: string;
   outletCode: string;

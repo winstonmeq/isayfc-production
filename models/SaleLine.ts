@@ -1,7 +1,7 @@
 // models/SaleLine.ts
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
-export type SaleLineSource = "CHICKEN" | "BODEGA";
+export type SaleLineSource = "CHICKEN" | "BODEGA" | "OUTLET";
 export type SaleStockUnit = "PACK" | "HEAD" | "QTY";
 
 export interface ISaleLine extends Document {
@@ -11,6 +11,8 @@ export interface ISaleLine extends Document {
 
   productId?: Types.ObjectId;
   bodegaProductId?: Types.ObjectId;
+  outletInventoryId?: Types.ObjectId;
+  menuItemId?: Types.ObjectId;
 
   categoryId?: Types.ObjectId;
   categoryName: string;
@@ -45,7 +47,7 @@ const SaleLineSchema = new Schema<ISaleLine>(
 
     source: {
       type: String,
-      enum: ["CHICKEN", "BODEGA"],
+      enum: ["CHICKEN", "BODEGA", "OUTLET"],
       required: true,
     },
 
@@ -57,6 +59,16 @@ const SaleLineSchema = new Schema<ISaleLine>(
     bodegaProductId: {
       type: Schema.Types.ObjectId,
       ref: "BodegaProduct",
+    },
+
+    outletInventoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "OutletInventory",
+    },
+
+    menuItemId: {
+      type: Schema.Types.ObjectId,
+      ref: "OutletMenuItem",
     },
 
     categoryId: {
@@ -160,6 +172,8 @@ SaleLineSchema.index({ saleId: 1 });
 SaleLineSchema.index({ source: 1 });
 SaleLineSchema.index({ productId: 1 });
 SaleLineSchema.index({ bodegaProductId: 1 });
+SaleLineSchema.index({ outletInventoryId: 1 });
+SaleLineSchema.index({ menuItemId: 1 });
 SaleLineSchema.index({ categoryName: 1 });
 SaleLineSchema.index({ productName: 1 });
 

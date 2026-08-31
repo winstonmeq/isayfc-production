@@ -81,7 +81,7 @@ export function TransferPrintClient({ transferId }: { transferId: string }) {
           <h1 className="text-xl font-black uppercase tracking-wide">
             Delivery Receipt
           </h1>
-          <p className="text-sm text-slate-600">Stock Transfer — Main Branch</p>
+          <p className="text-sm text-slate-600">Outlet Delivery — Main Branch</p>
         </div>
 
         <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-2 text-sm">

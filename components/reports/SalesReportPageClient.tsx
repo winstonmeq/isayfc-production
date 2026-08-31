@@ -80,7 +80,7 @@ export function SalesReportPageClient() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [source, setSource] =
-    useState<"ALL" | "CHICKEN" | "BODEGA" | "OUTLET">("ALL");
+    useState<"ALL" | "CHICKEN" | "BODEGA">("ALL");
   const [data, setData] = useState<SalesReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("register");
@@ -136,7 +136,7 @@ export function SalesReportPageClient() {
       onApply={load}
       extraFilters={
         <div className="flex items-end gap-1 rounded-lg border border-slate-200 p-1">
-          {(["ALL", "CHICKEN", "BODEGA", "OUTLET"] as const).map((s) => (
+          {(["ALL", "CHICKEN", "BODEGA"] as const).map((s) => (
             <button
               key={s}
               onClick={() => setSource(s)}
@@ -147,12 +147,10 @@ export function SalesReportPageClient() {
               }`}
             >
               {s === "ALL"
-                ? "All"
+                ? "Main All"
                 : s === "CHICKEN"
                   ? "Chicken"
-                  : s === "BODEGA"
-                    ? "Grocery"
-                    : "Outlet"}
+                  : "Grocery"}
             </button>
           ))}
         </div>

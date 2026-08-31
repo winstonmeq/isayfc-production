@@ -206,19 +206,42 @@ export async function GET(req: NextRequest) {
 
   if (source === "OUTLET") {
     filter.$or = [
-      { outletId: { $exists: true, $ne: null } },
+      { source: "OUTLET" },
       { channel: "MOBILE" },
       { receiptNumber: { $regex: "^MOB-", $options: "i" } },
       { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
     ];
   } else if (
     source === "CHICKEN" ||
-    source === "GROCERY" ||
-    source === "MIXED"
+    source === "GROCERY"
   ) {
-    filter.source = source === "GROCERY" ? "BODEGA" : source;
+    // The row shown in Sales History is based on SaleLine.source. A MIXED or
+    // legacy sale can therefore contain CHICKEN/GROCERY lines even when the
+    // parent Sale.source does not equal that label. Match both representations
+    // so the filtered result agrees with what the unfiltered table displays.
+    const lineSource = source === "GROCERY" ? "BODEGA" : "CHICKEN";
+    const headerSource = lineSource;
+    const matchingSaleIds = await SaleLineModel.distinct("saleId", {
+      source: lineSource,
+    });
+    filter.$and = [
+      {
+        $or: [
+          { source: headerSource },
+          { _id: { $in: matchingSaleIds } },
+        ],
+      },
+    ];
     filter.$nor = [
-      { outletId: { $exists: true, $ne: null } },
+      { source: "OUTLET" },
+      { channel: "MOBILE" },
+      { receiptNumber: { $regex: "^MOB-", $options: "i" } },
+      { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
+    ];
+  } else if (source === "MIXED") {
+    filter.source = "MIXED";
+    filter.$nor = [
+      { source: "OUTLET" },
       { channel: "MOBILE" },
       { receiptNumber: { $regex: "^MOB-", $options: "i" } },
       { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },

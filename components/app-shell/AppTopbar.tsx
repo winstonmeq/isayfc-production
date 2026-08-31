@@ -33,7 +33,11 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
   const displayName = user?.name || user?.username || "User";
   const roleName = user?.roleName || user?.role || "Staff";
   const selectedModule = searchParams.get("module") || "";
-  const isPurchasingModule = ["/purchase-items", "/deliveries"].some(
+  const isPurchasingModule = [
+    "/purchase-items",
+    "/deliveries",
+    "/supplier-invoices",
+  ].some(
     (route) => selectedModule === route || pathname === route
   );
   const isProductionModule = ["/slicing"].some(
@@ -50,7 +54,8 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       pathname === route ||
       pathname.startsWith(`${route}/`)
   );
-  const isCollectionsModule = ["/payments"].some(
+  const isPosModule = pathname === "/pos" || pathname.startsWith("/pos/");
+  const isCollectionsModule = ["/payments", "/accounts-payable"].some(
     (route) =>
       selectedModule === route ||
       selectedModule.startsWith(`${route}/`) ||
@@ -73,6 +78,8 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
     "/inventory/bodega",
     "/inventory/products",
     "/outlet-inventory",
+    "/stock-counts",
+    "/inventory-adjustments",
   ].some(
     (route) =>
       selectedModule === route ||
@@ -88,6 +95,8 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
         ? "Purchasing"
         : isProductionModule
           ? "Production"
+          : isPosModule
+            ? "Outlet POS"
           : isSalesModule
             ? "Sales"
             : isCollectionsModule
@@ -205,7 +214,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           },
         ]
       : []),
-    ...(canAccessAnyRoute(["/purchase-items", "/deliveries"])
+    ...(canAccessAnyRoute(["/purchase-items", "/deliveries", "/supplier-invoices"])
       ? [
           {
             label: "Purchasing",
@@ -232,7 +241,16 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           },
         ]
       : []),
-    ...(canAccessAnyFinanceRoute(["/payments"])
+    ...((isAdmin || permissions.includes("pos.view"))
+      ? [
+          {
+            label: "POS",
+            href: "/pos",
+            active: isPosModule,
+          },
+        ]
+      : []),
+    ...(canAccessAnyFinanceRoute(["/payments", "/accounts-payable"])
       ? [
           {
             label: "Collections",
@@ -266,6 +284,8 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       "/inventory/bodega",
       "/inventory/products",
       "/outlet-inventory",
+      "/stock-counts",
+      "/inventory-adjustments",
     ])
       ? [
           {

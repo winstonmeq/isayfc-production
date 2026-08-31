@@ -9,7 +9,6 @@ import {
   RefreshCcw,
   Search,
   ShoppingBasket,
-  Store,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -44,7 +43,7 @@ import {
 } from "@/components/ui/table";
 import { formatPeso } from "@/lib/utils";
 
-type ExpenseCategory = "GROCERY" | "BODEGA" | "OUTLET";
+type ExpenseCategory = "GROCERY" | "BODEGA";
 
 type ExpenseType =
   | "DELIVERY_EXPENSES"
@@ -96,11 +95,6 @@ const expenseCategoryOptions: { label: string; value: ExpenseCategory; descripti
     label: "Bodega",
     value: "BODEGA",
     description: "Expenses related to chicken, bodega, slicing, and delivery operations.",
-  },
-  {
-    label: "Outlet",
-    value: "OUTLET",
-    description: "Operating expenses recorded by an outlet cashier.",
   },
 ];
 
@@ -188,7 +182,6 @@ export function ExpensesBodegaPageClient() {
 
   const groceryTotal = getCategoryTotal(summary.byCategory, "GROCERY");
   const bodegaTotal = getCategoryTotal(summary.byCategory, "BODEGA");
-  const outletTotal = getCategoryTotal(summary.byCategory, "OUTLET");
 
   const activeFilterText = useMemo(() => {
     const parts: string[] = [];
@@ -396,7 +389,7 @@ export function ExpensesBodegaPageClient() {
     <div className="space-y-6">
       <ModuleHeader
         title="Business Expenses"
-        description="Track Grocery/Product, Bodega, and Outlet operating expenses separately."
+        description="Track main-branch Grocery/Product and Bodega operating expenses. Outlet expenses are recorded in the outlet POS."
         actions={
           <Button onClick={() => openAddDialog("BODEGA")} className="rounded-xl">
             <Plus className="mr-2 h-4 w-4" />
@@ -405,7 +398,7 @@ export function ExpensesBodegaPageClient() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card className="rounded-2xl border-slate-200 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -448,18 +441,6 @@ export function ExpensesBodegaPageClient() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader className="flex flex-row items-center gap-2 pb-2">
-            <Store className="h-4 w-4 text-amber-700" />
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Outlet
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{formatPeso(outletTotal)}</p>
-            <p className="mt-1 text-sm text-muted-foreground">Expenses recorded by outlet cashiers</p>
-          </CardContent>
-        </Card>
       </div>
 
       <Card className="rounded-2xl border-slate-200 shadow-sm">
@@ -541,27 +522,6 @@ export function ExpensesBodegaPageClient() {
           </div>
         </CardContent>
       </Card>
-
-      {summary.byType.length > 0 ? (
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Expense Type Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-3">
-            {summary.byType.map((item) => (
-              <div key={item.type} className="rounded-xl border bg-slate-50 p-4">
-                <p className="text-sm font-medium">{getTypeLabel(item.type)}</p>
-                <p className="mt-1 text-xl font-bold">
-                  {formatPeso(item.totalAmount)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {item.rows.toLocaleString()} record{item.rows === 1 ? "" : "s"}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
 
       <Card className="rounded-2xl border-slate-200 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between gap-3">

@@ -17,7 +17,12 @@ import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import CustomerModel from "@/models/Customer";
 import OutletModel from "@/models/Outlet";
-import { getSaleOrigin, getSaleSourceLabel } from "@/lib/sale-origin";
+import {
+  getSaleOrigin,
+  getSaleSourceLabel,
+  outletSaleMatchClauses,
+} from "@/lib/sale-origin";
+import { getMainSalesReportSource } from "@/lib/report-scope";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,32 +37,22 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const { start, end } = parseReportRange(searchParams);
-  const sourceParam = String(searchParams.get("source") || "").toUpperCase();
-  const source =
-    sourceParam === "CHICKEN" ||
-    sourceParam === "BODEGA" ||
-    sourceParam === "OUTLET"
-      ? sourceParam
-      : null;
+  const source = getMainSalesReportSource(searchParams.get("source"));
 
   const saleFilter: Record<string, unknown> = {
     isVoided: false,
     saleDate: { $gte: start, $lt: end },
   };
-  if (source === "OUTLET") {
-    saleFilter.$or = [
-      { channel: "MOBILE" },
-      { receiptNumber: { $regex: "^MOB-" } },
-    ];
-  } else if (source === "BODEGA" || source === "CHICKEN") {
+  if (source === "BODEGA" || source === "CHICKEN") {
     // A mixed receipt belongs in both product-type reports. The line-level
     // filtering below limits its quantities and peso values to the selected
     // product type.
     saleFilter.source = { $in: [source, "MIXED"] };
-    saleFilter.$nor = [
-      { channel: "MOBILE" },
-      { receiptNumber: { $regex: "^MOB-" } },
-    ];
+    saleFilter.$nor = outletSaleMatchClauses();
+  } else {
+    // "All" is the main-company register. Outlet POS revenue is reported
+    // separately so transferred inventory is not counted as revenue twice.
+    saleFilter.$nor = outletSaleMatchClauses();
   }
 
   const sales = await SaleModel.find(saleFilter)

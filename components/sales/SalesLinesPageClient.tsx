@@ -67,6 +67,8 @@ type ApiMeta = {
 
 type Summary = {
   rows: number;
+  totalQty: number;
+  totalPrice: number;
   totalAmount: number;
 };
 
@@ -110,6 +112,8 @@ export function SalesLinesPageClient() {
 
   const [summary, setSummary] = useState<Summary>({
     rows: 0,
+    totalQty: 0,
+    totalPrice: 0,
     totalAmount: 0,
   });
 
@@ -275,7 +279,14 @@ export function SalesLinesPageClient() {
       }
 
       setLines(json.data || []);
-      setSummary(json.summary || { rows: 0, totalAmount: 0 });
+      setSummary(
+        json.summary || {
+          rows: 0,
+          totalQty: 0,
+          totalPrice: 0,
+          totalAmount: 0,
+        }
+      );
       setMeta(
         json.meta || {
           page: targetPage,
@@ -580,8 +591,9 @@ export function SalesLinesPageClient() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  lines.map((line) => (
-                    <TableRow key={line._id}>
+                  <>
+                    {lines.map((line) => (
+                      <TableRow key={line._id}>
                       <TableCell>{displaySaleId(line)}</TableCell>
                       <TableCell>{line.receiptNumber || "—"}</TableCell>
                       <TableCell>{formatDate(line.saleDate)}</TableCell>
@@ -614,8 +626,25 @@ export function SalesLinesPageClient() {
                         {formatPeso(Number(line.lineTotal || 0))}
                       </TableCell>
                       <TableCell>{line.remarks || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2 bg-slate-100 font-bold hover:bg-slate-100">
+                      <TableCell colSpan={9}>TOTAL ({summary.rows})</TableCell>
+                      <TableCell className="text-right">
+                        {Number(summary.totalQty || 0).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(Number(summary.totalPrice || 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(Number(summary.totalAmount || 0))}
+                      </TableCell>
+                      <TableCell>—</TableCell>
                     </TableRow>
-                  ))
+                  </>
                 )}
               </TableBody>
             </Table>

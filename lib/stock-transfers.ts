@@ -435,6 +435,7 @@ type LeanTransfer = {
   transferNumber?: string;
   status?: string;
   transferDate?: Date | string;
+  saleId?: { toString?: () => string } | string | null;
   outletId?:
     | { _id?: { toString?: () => string }; name?: string; code?: string }
     | { toString?: () => string }
@@ -467,6 +468,7 @@ export function serializeTransfer(transfer: LeanTransfer) {
     transferDate: transfer.transferDate
       ? new Date(transfer.transferDate).toISOString()
       : undefined,
+    saleId: transfer.saleId?.toString?.() || "",
     outletId: outlet ? outlet._id?.toString?.() || outlet.toString?.() || "" : "",
     outletName: outlet?.name || "",
     outletCode: outlet?.code || "",

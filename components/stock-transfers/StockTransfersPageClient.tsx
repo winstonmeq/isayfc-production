@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import {
   Check,
   ChevronsUpDown,
@@ -67,6 +68,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { canCreateManualOutletDelivery } from "@/lib/outlet-delivery-policy";
 
 type OutletOption = { _id: string; name: string; code: string };
 
@@ -187,6 +189,11 @@ function formatDate(value?: string) {
 }
 
 export function StockTransfersPageClient() {
+  const { data: session } = useSession();
+  const canCreateManual = canCreateManualOutletDelivery({
+    role: session?.user?.role,
+    roleName: session?.user?.roleName,
+  });
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [meta, setMeta] = useState<ApiMeta>({
@@ -674,10 +681,10 @@ export function StockTransfersPageClient() {
               )}
               Refresh
             </Button>
-            <Button onClick={openCreate}>
+            {canCreateManual ? <Button onClick={openCreate} title="Administrator exception only">
               <Plus className="size-4" />
-              New Delivery Order
-            </Button>
+              Admin Manual Delivery
+            </Button> : null}
           </div>
         </CardContent>
       </Card>
@@ -687,9 +694,10 @@ export function StockTransfersPageClient() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Transfer #</TableHead>
+                <TableHead>Delivery #</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Outlet</TableHead>
+                <TableHead>Origin</TableHead>
                 <TableHead className="text-right">Items</TableHead>
                 <TableHead className="text-right">Qty Sent</TableHead>
                 <TableHead className="text-right">Qty Received</TableHead>
@@ -700,18 +708,18 @@ export function StockTransfersPageClient() {
             <TableBody>
               {isLoading && transfers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center">
+                  <TableCell colSpan={9} className="py-10 text-center">
                     <Loader2 className="mx-auto size-5 animate-spin text-slate-400" />
                   </TableCell>
                 </TableRow>
               ) : transfers.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="py-10 text-center text-slate-500"
                   >
                     <Truck className="mx-auto mb-2 size-6" />
-                    No stock transfers found.
+                    No outlet deliveries found.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -725,6 +733,11 @@ export function StockTransfersPageClient() {
                     </TableCell>
                     <TableCell className="text-sm">
                       {transfer.outletName}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={transfer.saleId ? "default" : "secondary"}>
+                        {transfer.saleId ? "Outlet Sale" : "Admin Manual"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right text-sm">
                       {transfer.totalItems}
@@ -778,14 +791,14 @@ export function StockTransfersPageClient() {
 
                         {transfer.status === "DRAFT" ? (
                           <>
-                            <Button
+                            {canCreateManual && !transfer.saleId ? <Button
                               variant="ghost"
                               size="icon"
                               title="Edit draft"
                               onClick={() => void openEdit(transfer._id)}
                             >
                               <Pencil className="size-4" />
-                            </Button>
+                            </Button> : null}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -834,7 +847,7 @@ export function StockTransfersPageClient() {
 
           <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
             <p className="text-sm text-slate-500">
-              {meta.total.toLocaleString("en-PH")} transfers · Page {meta.page} of{" "}
+              {meta.total.toLocaleString("en-PH")} deliveries · Page {meta.page} of{" "}
               {meta.totalPages}
             </p>
             <div className="flex gap-2">
@@ -863,10 +876,11 @@ export function StockTransfersPageClient() {
         <DialogContent className="max-h-[92vh] w-[95vw] max-w-[95vw] overflow-y-auto sm:max-w-3xl lg:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
-              {editingId ? "Edit Delivery Order" : "New Delivery Order"}
+              {editingId ? "Edit Manual Delivery" : "Administrator Manual Delivery"}
             </DialogTitle>
             <DialogDescription>
-              Select the outlet and products to transfer. Products come directly
+              Exception workflow only. Normal outlet deliveries must be generated
+              from an outlet customer sale. Select the outlet and products to transfer. Products come directly
               from the Bodega and Grocery product masters. Pack products are
               entered in packs; other products use their inventory quantity.
               Stock is only deducted when dispatched.

@@ -2,12 +2,14 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type OutletInventorySource = "BODEGA" | "GROCERY";
+export type OutletInventoryOrigin = "TRANSFER" | "OUTLET_PRODUCTION";
 export type OutletInventoryUnit = "HEAD" | "PCS" | "PACK" | "QTY" | "KG" | "BAG";
 
 export interface IOutletInventory extends Document {
   _id: Types.ObjectId;
   outletId: Types.ObjectId;
   productSource: OutletInventorySource;
+  originType: OutletInventoryOrigin;
   productId: Types.ObjectId;
   productName: string;
   categoryName?: string;
@@ -36,6 +38,15 @@ const OutletInventorySchema = new Schema<IOutletInventory>(
     productSource: {
       type: String,
       enum: ["BODEGA", "GROCERY"],
+      required: true,
+    },
+
+    // `productSource` preserves ingredient/cost lineage. `originType` tells
+    // users whether this stock was received or manufactured at the outlet.
+    originType: {
+      type: String,
+      enum: ["TRANSFER", "OUTLET_PRODUCTION"],
+      default: "TRANSFER",
       required: true,
     },
 

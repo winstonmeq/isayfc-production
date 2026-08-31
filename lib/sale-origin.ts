@@ -4,6 +4,16 @@ export type SaleOrigin =
   | "GROCERY"
   | "CHICKEN + GROCERY";
 
+/** MongoDB clauses that identify outlet POS sales, including legacy rows. */
+export function outletSaleMatchClauses(): Record<string, unknown>[] {
+  return [
+    { source: "OUTLET" },
+    { channel: "MOBILE" },
+    { receiptNumber: { $regex: "^MOB-", $options: "i" } },
+    { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
+  ];
+}
+
 export function getSaleOrigin(sale: {
   outletId?: unknown;
   channel?: unknown;
@@ -16,7 +26,6 @@ export function getSaleOrigin(sale: {
   const channel = String(sale.channel || "").toUpperCase();
 
   if (
-    sale.outletId ||
     channel === "MOBILE" ||
     receipt.startsWith("MOB-") ||
     remarks.includes("MOBILE SALE OUTLET:")
@@ -25,6 +34,7 @@ export function getSaleOrigin(sale: {
   }
 
   const source = String(sale.source || "BODEGA").toUpperCase();
+  if (source === "OUTLET") return "OUTLET";
   if (source === "CHICKEN") return "CHICKEN";
   if (source === "MIXED") return "CHICKEN + GROCERY";
   return "GROCERY";

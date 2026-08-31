@@ -115,6 +115,13 @@ export const appNavItems: AppNavItem[] = [
     section: "Operations",
   },
   {
+    title: "Supplier Invoices",
+    href: "/supplier-invoices",
+    icon: ReceiptText,
+    permission: "supplier-invoices.view",
+    section: "Operations",
+  },
+  {
     title: "Slicing",
     icon: Scissors,
     permission: "slicing.view",
@@ -183,7 +190,7 @@ export const appNavItems: AppNavItem[] = [
         permission: "sales-lines.view",
       },
       {
-        title: "Stock Transfers",
+        title: "Outlet Deliveries",
         href: "/stock-transfers",
         icon: Send,
         permission: "stock-transfers.view",
@@ -230,6 +237,13 @@ export const appNavItems: AppNavItem[] = [
     section: "Finance",
   },
   {
+    title: "Accounts Payable",
+    href: "/accounts-payable",
+    icon: CreditCard,
+    permission: "accounts-payable.view",
+    section: "Finance",
+  },
+  {
     title: "Chicken Slicing Profit",
     href: "/profit/chicken-slicing",
     icon: BarChart3,
@@ -267,7 +281,26 @@ export const appNavItems: AppNavItem[] = [
         icon: Warehouse,
         permission: "outlet-inventory.view",
       },
+      {
+        title: "Stock Counts",
+        href: "/stock-counts",
+        icon: ClipboardList,
+        permission: "stock-counts.view",
+      },
+      {
+        title: "Inventory Adjustments",
+        href: "/inventory-adjustments",
+        icon: ArrowLeftRight,
+        permission: "inventory-adjustments.view",
+      },
     ],
+  },
+  {
+    title: "Outlet POS",
+    href: "/pos",
+    icon: ShoppingBasket,
+    permission: "pos.view",
+    section: "Operations",
   },
   {
     title: "Reports",
@@ -285,6 +318,12 @@ export const appNavItems: AppNavItem[] = [
         title: "Sales Report",
         href: "/reports/sales",
         icon: BarChart3,
+        permission: "reports.sales",
+      },
+      {
+        title: "Outlet POS Report",
+        href: "/reports/outlet-pos",
+        icon: ReceiptText,
         permission: "reports.sales",
       },
       {

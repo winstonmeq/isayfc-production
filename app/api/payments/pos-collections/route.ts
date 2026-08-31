@@ -4,6 +4,7 @@ import { isValidObjectId } from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { cleanString, escapeRegex, getPagination } from "@/lib/crud-utils";
 import { requirePermission } from "@/lib/require-permission";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import CashShiftModel from "@/models/CashShift";
 import OutletModel from "@/models/Outlet";
 import SaleModel from "@/models/Sale";
@@ -28,17 +29,9 @@ export async function GET(req: NextRequest) {
   const outletId = cleanString(searchParams.get("outletId"));
   const receipt = cleanString(searchParams.get("receipt"));
 
-  const originFilter = {
-    $or: [
-      { outletId: { $exists: true, $ne: null } },
-      { channel: "MOBILE" },
-      { receiptNumber: { $regex: "^MOB-", $options: "i" } },
-      { remarks: { $regex: "MOBILE SALE OUTLET:", $options: "i" } },
-    ],
-  };
   const filter: Record<string, any> = {
     isVoided: false,
-    ...originFilter,
+    $or: outletSaleMatchClauses(),
   };
 
   if (dateFrom || dateTo) {

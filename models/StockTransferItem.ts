@@ -30,6 +30,9 @@ export interface IStockTransferItem extends Document {
   packSize: number;
   unitLabel: "PACK" | "HEAD" | "PCS" | "QTY";
   buyingPrice: number;
+  // Internal transfer price charged to the outlet. This is the main product's
+  // marked-up selling price at dispatch and becomes the outlet's acquisition
+  // cost when received. It is not consolidated company revenue.
   sellingPrice: number;
 
   // qty is what the user enters (packs for pack products, otherwise pieces/qty).

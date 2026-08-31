@@ -23,6 +23,7 @@ import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { marginPct, parseRange } from "@/lib/outlet-profit";
 import { manilaDateString } from "@/lib/date-utils";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import OutletModel from "@/models/Outlet";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import SaleModel from "@/models/Sale";
@@ -91,7 +92,13 @@ export async function GET(
       $project: {
         productName: 1,
         quantity: 1,
-        buyingPrice: { $ifNull: [{ $arrayElemAt: ["$inv.buyingPrice", 0] }, 0] },
+        buyingPrice: {
+          $cond: [
+            { $gt: [{ $ifNull: ["$unitCost", 0] }, 0] },
+            "$unitCost",
+            { $ifNull: [{ $arrayElemAt: ["$inv.buyingPrice", 0] }, 0] },
+          ],
+        },
         sellingPrice: {
           $ifNull: [{ $arrayElemAt: ["$inv.sellingPrice", 0] }, 0],
         },
@@ -166,9 +173,14 @@ export async function GET(
       $match: {
         isVoided: { $ne: true },
         saleDate: { $gte: start, $lt: end },
-        $or: [
-          { outletId: outlet._id },
-          { remarks: { $regex: `OUTLET:${id}` } },
+        $and: [
+          {
+            $or: [
+              { outletId: outlet._id },
+              { remarks: { $regex: `OUTLET:${id}` } },
+            ],
+          },
+          { $or: outletSaleMatchClauses() },
         ],
       },
     },
@@ -236,7 +248,18 @@ export async function GET(
         cost: {
           $multiply: [
             "$quantity",
-            { $ifNull: [{ $arrayElemAt: ["$inv.buyingPrice", 0] }, 0] },
+            {
+              $cond: [
+                { $gt: [{ $ifNull: ["$unitCost", 0] }, 0] },
+                "$unitCost",
+                {
+                  $ifNull: [
+                    { $arrayElemAt: ["$inv.buyingPrice", 0] },
+                    0,
+                  ],
+                },
+              ],
+            },
           ],
         },
       },

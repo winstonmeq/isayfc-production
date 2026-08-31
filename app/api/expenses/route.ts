@@ -10,6 +10,7 @@ import {
   getPagination,
 } from "@/lib/crud-utils";
 import ExpenseModel, { ExpenseCategory, ExpenseType } from "@/models/Expense";
+import { isMainExpenseCategory } from "@/lib/expense-scope";
 
 const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
 
@@ -109,7 +110,11 @@ export async function GET(req: NextRequest) {
   const dateFrom = cleanString(searchParams.get("dateFrom"));
   const dateTo = cleanString(searchParams.get("dateTo"));
 
-  const andFilters: Record<string, any>[] = [{ isActive: true }];
+  const andFilters: Record<string, any>[] = [
+    { isActive: true },
+    { outletId: null },
+    { expenseCategory: { $ne: "OUTLET" } },
+  ];
 
   if (search) {
     andFilters.push({
@@ -120,7 +125,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  if (isExpenseCategory(expenseCategory)) {
+  if (isMainExpenseCategory(expenseCategory)) {
     andFilters.push(categoryFilter(expenseCategory));
   }
 
@@ -233,6 +238,12 @@ async function handlePOST(req: NextRequest) {
   await dbConnect();
 
   const body = await req.json();
+  if (!isMainExpenseCategory(body.expenseCategory)) {
+    return NextResponse.json(
+      { success: false, message: "Outlet expenses must be recorded from the outlet POS." },
+      { status: 400 }
+    );
+  }
   const name = cleanString(body.name);
   const expenseCategory = normalizeExpenseCategory(body.expenseCategory);
   const type = normalizeExpenseType(body.type);
