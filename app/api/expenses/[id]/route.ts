@@ -6,28 +6,14 @@ import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import ExpenseModel, { ExpenseCategory, ExpenseType } from "@/models/Expense";
+import ExpenseTypeModel from "@/models/ExpenseType";
+import { ensureDefaultExpenseTypes, expenseTypeCode } from "@/lib/expense-types";
 import { isMainExpenseCategory } from "@/lib/expense-scope";
 
 const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
 
-const expenseTypes: ExpenseType[] = [
-  "DELIVERY_EXPENSES",
-  "CLEANING_SUPPLIES",
-  "TRANSPORTATION_EXPENSES",
-  "MARINATE_EXPENSES",
-  "OFFICE_SUPPLIES",
-  "REPAIR_AND_MAINTENANCE",
-  "SALARIES",
-  "INCENTIVES_AND_ALLOWANCES",
-  "OTHERS",
-];
-
 function isExpenseCategory(value: string): value is ExpenseCategory {
   return expenseCategories.includes(value as ExpenseCategory);
-}
-
-function isExpenseType(value: string): value is ExpenseType {
-  return expenseTypes.includes(value as ExpenseType);
 }
 
 function normalizeExpenseCategory(value: unknown): ExpenseCategory {
@@ -36,8 +22,7 @@ function normalizeExpenseCategory(value: unknown): ExpenseCategory {
 }
 
 function normalizeExpenseType(value: unknown): ExpenseType {
-  const raw = cleanString(value).toUpperCase();
-  return isExpenseType(raw) ? raw : "OTHERS";
+  return expenseTypeCode(value) || "OTHERS";
 }
 
 function toExpenseDate(value: string) {
@@ -84,6 +69,7 @@ async function handlePATCH(
   }
 
   await dbConnect();
+  await ensureDefaultExpenseTypes();
 
   const body = await req.json();
   if (!isMainExpenseCategory(body.expenseCategory)) {
@@ -98,6 +84,14 @@ async function handlePATCH(
   const expenseDateInput = cleanString(body.expenseDate);
   const amount = cleanNumber(body.amount);
   const remarks = cleanString(body.remarks);
+
+  const validType = await ExpenseTypeModel.exists({ code: type, isActive: true });
+  if (!validType) {
+    return NextResponse.json(
+      { success: false, message: "Select a valid active expense type." },
+      { status: 400 }
+    );
+  }
 
   if (!name) {
     return NextResponse.json(

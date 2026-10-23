@@ -3,16 +3,7 @@ import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type ExpenseCategory = "GROCERY" | "BODEGA" | "OUTLET";
 
-export type ExpenseType =
-  | "DELIVERY_EXPENSES"
-  | "CLEANING_SUPPLIES"
-  | "TRANSPORTATION_EXPENSES"
-  | "MARINATE_EXPENSES"
-  | "OFFICE_SUPPLIES"
-  | "REPAIR_AND_MAINTENANCE"
-  | "SALARIES"
-  | "INCENTIVES_AND_ALLOWANCES"
-  | "OTHERS";
+export type ExpenseType = string;
 
 export interface IExpense extends Document {
   _id: Types.ObjectId;
@@ -34,18 +25,6 @@ export interface IExpense extends Document {
 
 const expenseCategoryValues: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
 
-const expenseTypeValues: ExpenseType[] = [
-  "DELIVERY_EXPENSES",
-  "CLEANING_SUPPLIES",
-  "TRANSPORTATION_EXPENSES",
-  "MARINATE_EXPENSES",
-  "OFFICE_SUPPLIES",
-  "REPAIR_AND_MAINTENANCE",
-  "SALARIES",
-  "INCENTIVES_AND_ALLOWANCES",
-  "OTHERS",
-];
-
 const ExpenseSchema = new Schema<IExpense>(
   {
     name: {
@@ -63,9 +42,10 @@ const ExpenseSchema = new Schema<IExpense>(
 
     type: {
       type: String,
-      enum: expenseTypeValues,
       default: "OTHERS",
       required: true,
+      trim: true,
+      uppercase: true,
     },
 
     expenseDate: {

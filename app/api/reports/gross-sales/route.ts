@@ -229,27 +229,12 @@ export async function GET(request: NextRequest) {
     },
     { $group: { _id: "$type", total: { $sum: "$amount" } } },
   ]);
-  const expenseMap = new Map(
-    expenseRows.map((expense) => [
-      String(expense._id || "OTHERS"),
-      roundMoney(Number(expense.total || 0)),
-    ])
-  );
-  const expenseTypes = [
-    "DELIVERY_EXPENSES",
-    "CLEANING_SUPPLIES",
-    "TRANSPORTATION_EXPENSES",
-    "MARINATE_EXPENSES",
-    "OFFICE_SUPPLIES",
-    "REPAIR_AND_MAINTENANCE",
-    "SALARIES",
-    "INCENTIVES_AND_ALLOWANCES",
-    "OTHERS",
-  ];
-  const expenses = expenseTypes.map((type) => ({
-    type,
-    total: expenseMap.get(type) || 0,
-  }));
+  const expenses = expenseRows
+    .map((expense) => ({
+      type: String(expense._id || "OTHERS"),
+      total: roundMoney(Number(expense.total || 0)),
+    }))
+    .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type));
   const totalOperatingExpenses = roundMoney(
     expenses.reduce((sum, expense) => sum + expense.total, 0)
   );

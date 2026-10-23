@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCcw,
   Search,
+  Settings2,
   ShoppingBasket,
   Trash2,
 } from "lucide-react";
@@ -45,16 +46,16 @@ import { formatPeso } from "@/lib/utils";
 
 type ExpenseCategory = "GROCERY" | "BODEGA";
 
-type ExpenseType =
-  | "DELIVERY_EXPENSES"
-  | "CLEANING_SUPPLIES"
-  | "TRANSPORTATION_EXPENSES"
-  | "MARINATE_EXPENSES"
-  | "OFFICE_SUPPLIES"
-  | "REPAIR_AND_MAINTENANCE"
-  | "SALARIES"
-  | "INCENTIVES_AND_ALLOWANCES"
-  | "OTHERS";
+type ExpenseType = string;
+
+type ExpenseTypeOption = {
+  _id: string;
+  code: string;
+  name: string;
+  description: string;
+  isSystem: boolean;
+  isActive: boolean;
+};
 
 type ExpenseRow = {
   _id: string;
@@ -98,18 +99,6 @@ const expenseCategoryOptions: { label: string; value: ExpenseCategory; descripti
   },
 ];
 
-const expenseTypeOptions: { label: string; value: ExpenseType }[] = [
-  { label: "Delivery Expenses", value: "DELIVERY_EXPENSES" },
-  { label: "Cleaning Supplies", value: "CLEANING_SUPPLIES" },
-  { label: "Transportation Expenses", value: "TRANSPORTATION_EXPENSES" },
-  { label: "Marinate Expenses", value: "MARINATE_EXPENSES" },
-  { label: "Office Supplies", value: "OFFICE_SUPPLIES" },
-  { label: "Repair & Maintenance", value: "REPAIR_AND_MAINTENANCE" },
-  { label: "Salaries", value: "SALARIES" },
-  { label: "Incentives & Allowances", value: "INCENTIVES_AND_ALLOWANCES" },
-  { label: "Others", value: "OTHERS" },
-];
-
 const emptyForm = {
   name: "",
   expenseCategory: "BODEGA" as ExpenseCategory,
@@ -126,8 +115,8 @@ function getCategoryLabel(category: string) {
   );
 }
 
-function getTypeLabel(type: string) {
-  return expenseTypeOptions.find((item) => item.value === type)?.label || type;
+function getTypeLabel(type: string, options: ExpenseTypeOption[]) {
+  return options.find((item) => item.code === type)?.name || type.replaceAll("_", " ");
 }
 
 function formatDate(value?: string) {
@@ -145,6 +134,7 @@ function getCategoryTotal(
 }
 
 export function ExpensesBodegaPageClient() {
+  const [expenseTypes, setExpenseTypes] = useState<ExpenseTypeOption[]>([]);
   const [rows, setRows] = useState<ExpenseRow[]>([]);
   const [meta, setMeta] = useState<ApiMeta>({
     page: 1,
@@ -179,6 +169,10 @@ export function ExpensesBodegaPageClient() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [typesDialogOpen, setTypesDialogOpen] = useState(false);
+  const [typeForm, setTypeForm] = useState({ name: "", description: "" });
+  const [editingType, setEditingType] = useState<ExpenseTypeOption | null>(null);
+  const [isTypeSaving, setIsTypeSaving] = useState(false);
 
   const groceryTotal = getCategoryTotal(summary.byCategory, "GROCERY");
   const bodegaTotal = getCategoryTotal(summary.byCategory, "BODEGA");
@@ -191,13 +185,24 @@ export function ExpensesBodegaPageClient() {
       parts.push(`Category: ${getCategoryLabel(appliedFilters.expenseCategory)}`);
     }
     if (appliedFilters.type !== "ALL") {
-      parts.push(`Type: ${getTypeLabel(appliedFilters.type)}`);
+      parts.push(`Type: ${getTypeLabel(appliedFilters.type, expenseTypes)}`);
     }
     if (appliedFilters.dateFrom) parts.push(`From: ${appliedFilters.dateFrom}`);
     if (appliedFilters.dateTo) parts.push(`To: ${appliedFilters.dateTo}`);
 
     return parts.length ? parts.join(" | ") : "No filters applied";
-  }, [appliedFilters]);
+  }, [appliedFilters, expenseTypes]);
+
+  async function loadExpenseTypes() {
+    try {
+      const res = await fetch("/api/expense-types?includeInactive=true", { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Failed to load expense types.");
+      setExpenseTypes(json.data || []);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load expense types.");
+    }
+  }
 
   async function loadExpenses() {
     setIsLoading(true);
@@ -256,6 +261,12 @@ export function ExpensesBodegaPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, appliedFilters]);
 
+  useEffect(() => {
+    void loadExpenseTypes();
+  }, []);
+
+  const activeExpenseTypes = expenseTypes.filter((item) => item.isActive);
+
   function updateForm(name: keyof typeof emptyForm, value: string) {
     setForm((current) => ({
       ...current,
@@ -268,6 +279,9 @@ export function ExpensesBodegaPageClient() {
     setForm({
       ...emptyForm,
       expenseCategory: category,
+      type: activeExpenseTypes.some((item) => item.code === "OTHERS")
+        ? "OTHERS"
+        : activeExpenseTypes[0]?.code || "",
       expenseDate: new Date().toISOString().slice(0, 10),
     });
     setDialogOpen(true);
@@ -385,17 +399,76 @@ export function ExpensesBodegaPageClient() {
     }
   }
 
+  function openTypeManager() {
+    setEditingType(null);
+    setTypeForm({ name: "", description: "" });
+    setTypesDialogOpen(true);
+  }
+
+  function editExpenseType(item: ExpenseTypeOption) {
+    setEditingType(item);
+    setTypeForm({ name: item.name, description: item.description || "" });
+  }
+
+  async function saveExpenseType(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!typeForm.name.trim()) {
+      toast.error("Expense type name is required.");
+      return;
+    }
+
+    setIsTypeSaving(true);
+    try {
+      const res = await fetch(
+        editingType ? `/api/expense-types/${editingType._id}` : "/api/expense-types",
+        {
+          method: editingType ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(typeForm),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Failed to save expense type.");
+      toast.success(json.message || "Expense type saved successfully.");
+      setEditingType(null);
+      setTypeForm({ name: "", description: "" });
+      await loadExpenseTypes();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save expense type.");
+    } finally {
+      setIsTypeSaving(false);
+    }
+  }
+
+  async function removeExpenseType(item: ExpenseTypeOption) {
+    if (!window.confirm(`Remove "${item.name}" from future expense entries?`)) return;
+    try {
+      const res = await fetch(`/api/expense-types/${item._id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Failed to remove expense type.");
+      toast.success(json.message);
+      await loadExpenseTypes();
+      if (type === item.code) setType("ALL");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to remove expense type.");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <ModuleHeader
         title="Business Expenses"
         description="Track main-branch Grocery/Product and Bodega operating expenses. Outlet expenses are recorded in the outlet POS."
-        actions={
+        actions={<div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={openTypeManager} className="rounded-xl">
+            <Settings2 className="mr-2 h-4 w-4" />
+            Expense Types
+          </Button>
           <Button onClick={() => openAddDialog("BODEGA")} className="rounded-xl">
             <Plus className="mr-2 h-4 w-4" />
             Add Expense
           </Button>
-        }
+        </div>}
       />
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -482,9 +555,9 @@ export function ExpensesBodegaPageClient() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Types</SelectItem>
-                {expenseTypeOptions.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
+                {activeExpenseTypes.map((item) => (
+                  <SelectItem key={item.code} value={item.code}>
+                    {item.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -592,7 +665,7 @@ export function ExpensesBodegaPageClient() {
                           {getCategoryLabel(expense.expenseCategory)}
                         </Badge>
                       </TableCell>
-                      <TableCell>{getTypeLabel(expense.type)}</TableCell>
+                      <TableCell>{getTypeLabel(expense.type, expenseTypes)}</TableCell>
                       <TableCell>{formatDate(expense.expenseDate)}</TableCell>
                       <TableCell className="text-right font-semibold">
                         {formatPeso(expense.amount)}
@@ -700,9 +773,15 @@ export function ExpensesBodegaPageClient() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {expenseTypeOptions.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
+                    {activeExpenseTypes
+                      .concat(
+                        expenseTypes.filter(
+                          (item) => !item.isActive && item.code === form.type
+                        )
+                      )
+                      .map((item) => (
+                      <SelectItem key={item.code} value={item.code}>
+                        {item.name}{item.isActive ? "" : " (Inactive)"}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -765,6 +844,103 @@ export function ExpensesBodegaPageClient() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={typesDialogOpen} onOpenChange={setTypesDialogOpen}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black">Expense Type Setup</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Add and maintain the choices available in the Expense Type dropdown.
+            </p>
+          </DialogHeader>
+
+          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+            <form onSubmit={saveExpenseType} className="space-y-4 rounded-2xl border bg-slate-50 p-4">
+              <div>
+                <h3 className="font-bold">{editingType ? "Edit type" : "Add new type"}</h3>
+                <p className="text-xs text-muted-foreground">
+                  The internal code is generated automatically from the name.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input
+                  value={typeForm.name}
+                  onChange={(event) => setTypeForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Example: Utilities"
+                  maxLength={80}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Input
+                  value={typeForm.description}
+                  onChange={(event) => setTypeForm((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="Optional description"
+                  maxLength={200}
+                />
+              </div>
+              <div className="flex gap-2">
+                {editingType && (
+                  <Button type="button" variant="secondary" onClick={() => {
+                    setEditingType(null);
+                    setTypeForm({ name: "", description: "" });
+                  }}>
+                    Cancel edit
+                  </Button>
+                )}
+                <Button type="submit" disabled={isTypeSaving}>
+                  {isTypeSaving ? "Saving..." : editingType ? "Update Type" : "Add Type"}
+                </Button>
+              </div>
+            </form>
+
+            <div className="max-h-[430px] overflow-auto rounded-2xl border">
+              <Table>
+                <TableHeader className="sticky top-0 bg-slate-950">
+                  <TableRow>
+                    <TableHead className="text-white">Expense Type</TableHead>
+                    <TableHead className="text-white">Status</TableHead>
+                    <TableHead className="text-center text-white">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expenseTypes.map((item) => (
+                    <TableRow key={item._id} className={item.isActive ? "" : "opacity-60"}>
+                      <TableCell>
+                        <p className="font-semibold">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">{item.description || item.code}</p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={item.isActive ? "secondary" : "outline"}>
+                          {item.isActive ? "Active" : "Removed"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {item.isActive && (
+                          <div className="flex justify-center gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => editExpenseType(item)}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => void removeExpenseType(item)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setTypesDialogOpen(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
