@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
 
   const sales = await SaleModel.find({
     isVoided: false,
+    fulfillmentStatus: { $ne: "PENDING" },
     saleDate: { $gte: start, $lt: end },
     $nor: outletSaleMatchClauses(),
   })

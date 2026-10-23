@@ -93,6 +93,17 @@ async function handlePATCH(
   const scheduledDateInput = cleanString(body.scheduledDate);
   const remarks = cleanString(body.remarks);
 
+  if (outletId && outletId !== "NONE") {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Internal outlets must receive stock through a main sale and its linked stock transfer.",
+      },
+      { status: 400 }
+    );
+  }
+
   let outletObjectId: mongoose.Types.ObjectId | undefined;
 
   if (outletId && outletId !== "NONE") {

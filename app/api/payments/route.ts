@@ -247,6 +247,7 @@ async function handlePOST(req: NextRequest) {
       const unpaidSales = await SaleModel.find({
         customerId,
         isVoided: false,
+        fulfillmentStatus: { $ne: "PENDING" },
         balance: { $gt: 0 },
       })
         .sort({ saleDate: 1, createdAt: 1 })

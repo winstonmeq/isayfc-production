@@ -262,7 +262,6 @@ export function CustomerDeliveriesPageClient() {
   }, [items, bodegaProducts, products]);
 
   const selectedCustomer = customers.find((customer) => customer._id === form.customerId);
-  const selectedOutlet = outlets.find((outlet) => outlet._id === form.outletId);
 
   async function loadOptions() {
     const res = await fetch("/api/customer-deliveries/options", { cache: "no-store" });
@@ -411,11 +410,6 @@ export function CustomerDeliveriesPageClient() {
       return;
     }
 
-    if (!form.outletId) {
-      toast.error("Select an outlet to receive this delivery.");
-      return;
-    }
-
     const validItems = items.filter((item) => item.productId && numberValue(item.qty) > 0);
 
     if (validItems.length === 0) {
@@ -467,7 +461,7 @@ export function CustomerDeliveriesPageClient() {
 
   async function confirmDelivery(record: DeliveryRow) {
     const ok = window.confirm(
-      `Confirm ${record.deliveryCode}? This will deduct main inventory and add items to the selected outlet inventory.`
+      `Confirm ${record.deliveryCode}? This will deduct main inventory and record delivery to the external customer.`
     );
 
     if (!ok) return;
@@ -578,30 +572,6 @@ export function CustomerDeliveriesPageClient() {
                 </div>
               ) : (
                 <p className="text-xs text-slate-500">Select an existing customer or use the + button to add one.</p>
-              )}
-            </div>
-          </ErpField>
-          <ErpField label="Outlet Receiver">
-            <div className="space-y-2">
-              <Select
-                value={form.outletId}
-                onValueChange={(value) => setForm((current) => ({ ...current, outletId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={outlets.length ? "Select outlet" : "No outlets found"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {outlets.map((outlet) => (
-                    <SelectItem key={outlet._id} value={outlet._id}>
-                      {outlet.name} {outlet.code ? `(${outlet.code})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedOutlet ? (
-                <p className="text-xs text-slate-500">{selectedOutlet.address || "No outlet address"}</p>
-              ) : (
-                <p className="text-xs text-slate-500">Confirmed items will be added to this outlet inventory.</p>
               )}
             </div>
           </ErpField>

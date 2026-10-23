@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
 
   const saleFilter: Record<string, unknown> = {
     isVoided: false,
+    fulfillmentStatus: { $ne: "PENDING" },
     saleDate: { $gte: start, $lt: end },
   };
   if (source === "BODEGA" || source === "CHICKEN") {

@@ -2,7 +2,8 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type SaleSource = "CHICKEN" | "BODEGA" | "MIXED" | "OUTLET";
-export type SaleStatus = "UNPAID" | "PARTIAL" | "PAID" | "VOIDED";
+export type SaleStatus = "PENDING" | "UNPAID" | "PARTIAL" | "PAID" | "VOIDED";
+export type FulfillmentStatus = "DIRECT" | "PENDING" | "RECOGNIZED";
 export type SaleChannel = "WEB" | "MOBILE";
 export type PaymentMethod = "CASH" | "GCASH" | "CREDIT";
 
@@ -33,6 +34,8 @@ export interface ISale extends Document {
   totalQty: number;
   remarks?: string;
   status: SaleStatus;
+  fulfillmentStatus: FulfillmentStatus;
+  recognizedAt?: Date;
   createdBy?: Types.ObjectId;
   isVoided: boolean;
   createdAt: Date;
@@ -151,9 +154,18 @@ const SaleSchema = new Schema<ISale>(
 
     status: {
       type: String,
-      enum: ["UNPAID", "PARTIAL", "PAID", "VOIDED"],
+      enum: ["PENDING", "UNPAID", "PARTIAL", "PAID", "VOIDED"],
       default: "UNPAID",
     },
+
+    fulfillmentStatus: {
+      type: String,
+      enum: ["DIRECT", "PENDING", "RECOGNIZED"],
+      default: "DIRECT",
+      required: true,
+    },
+
+    recognizedAt: { type: Date },
 
     createdBy: {
       type: Schema.Types.ObjectId,
@@ -178,6 +190,7 @@ SaleSchema.index({ stockTransferId: 1 }, { sparse: true });
 SaleSchema.index({ saleDate: -1 });
 SaleSchema.index({ source: 1 });
 SaleSchema.index({ status: 1 });
+SaleSchema.index({ fulfillmentStatus: 1 });
 SaleSchema.index({ isVoided: 1 });
 // Shift / outlet reporting (cash-close, outlet-summary) query by these.
 SaleSchema.index({ shiftId: 1 });

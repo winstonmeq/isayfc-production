@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
 
   const saleFilter: Record<string, any> = {
     isVoided: false,
+    fulfillmentStatus: { $ne: "PENDING" },
   };
 
   if (source === "OUTLET") {

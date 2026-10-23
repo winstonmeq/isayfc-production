@@ -30,16 +30,6 @@ function baseCost(row: any) {
   }));
 }
 
-function transactionsUnsupported(error: unknown) {
-  const value = error as { code?: number; codeName?: string; message?: string };
-  const message = String(value?.message || "").toLowerCase();
-  return value?.code === 20
-    || value?.codeName === "IllegalOperation"
-    || message.includes("transaction numbers are only allowed")
-    || message.includes("only servers in a sharded cluster can start a new transaction")
-    || message.includes("only servers in a shared cluster can start a new transaction");
-}
-
 export async function POST(req: NextRequest) {
   const { session, response } = await requirePermission("pos.manage");
   if (response) return response;
@@ -144,15 +134,17 @@ export async function POST(req: NextRequest) {
 
   const mongoSession = await mongoose.startSession();
   try {
-    try {
-      await mongoSession.withTransaction(() => performMixing(mongoSession));
-    } catch (error) {
-      if (!transactionsUnsupported(error)) throw error;
-      await performMixing();
-    }
+    await mongoSession.withTransaction(() => performMixing(mongoSession));
     return NextResponse.json({ success: true, message: "Production batch saved with complete ingredient cost allocation." });
   } catch (error) {
-    return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Unable to save product mixing." }, { status: 409 });
+    const message = error instanceof Error ? error.message : "Unable to save product mixing.";
+    const transactionUnavailable = /transaction numbers are only allowed|replica set|sharded cluster|shared cluster/i.test(message);
+    return NextResponse.json({
+      success: false,
+      message: transactionUnavailable
+        ? "Product mixing requires MongoDB transaction support. Use MongoDB Atlas or a replica set; no stock was changed."
+        : message,
+    }, { status: transactionUnavailable ? 503 : 409 });
   } finally {
     await mongoSession.endSession();
   }

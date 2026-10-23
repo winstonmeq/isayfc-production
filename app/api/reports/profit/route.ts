@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
   //    the outlet stock ledger (component deductions) and is added separately.
   const sales = await SaleModel.find({
     isVoided: false,
+    fulfillmentStatus: { $ne: "PENDING" },
     saleDate: { $gte: start, $lt: end },
     $nor: outletSaleMatchClauses(),
   })

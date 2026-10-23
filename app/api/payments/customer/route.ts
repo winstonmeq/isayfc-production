@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
       {
         $match: {
           isVoided: false,
+          fulfillmentStatus: { $ne: "PENDING" },
           balance: { $gt: 0 },
         },
       },

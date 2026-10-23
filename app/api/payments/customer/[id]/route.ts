@@ -144,6 +144,7 @@ export async function GET(
   const overallSaleFilter = {
     ...customerMatch,
     ...notVoidedFilter(),
+    fulfillmentStatus: { $ne: "PENDING" as const },
   };
 
   const overallPaymentFilter = {

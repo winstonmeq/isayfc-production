@@ -152,6 +152,13 @@ export async function POST(
         fail(404, "Customer delivery not found.");
       }
 
+      if (delivery.outletId) {
+        fail(
+          400,
+          "This legacy outlet delivery cannot be confirmed. Create a main sale linked to the outlet and use its stock transfer instead."
+        );
+      }
+
       if (delivery.status !== "PENDING") {
         fail(400, "Only pending customer deliveries can be confirmed.");
       }

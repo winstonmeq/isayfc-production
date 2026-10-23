@@ -12,6 +12,7 @@ import {
 } from "@/lib/crud-utils";
 import { correctionReason, recordCorrection } from "@/lib/corrections";
 import { manilaDateString } from "@/lib/date-utils";
+import { syncDeliverySupplierInvoice } from "@/lib/supplier-invoicing";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import DeliveryModel from "@/models/Delivery";
@@ -370,6 +371,17 @@ async function handlePOST(req: NextRequest) {
           session: mongoSession,
         });
       }
+
+      await syncDeliverySupplierInvoice({
+        deliveryId: delivery._id,
+        supplierId: delivery.supplierId,
+        receiptNumber: delivery.receiptNumber,
+        deliveryCode: delivery.deliveryCode,
+        deliveryDate: delivery.deliveryDate,
+        totalAmount: delivery.totalAmount,
+        createdBy: authSession?.user?.id,
+        session: mongoSession,
+      });
 
       if (isLateEntry) {
         await recordCorrection({

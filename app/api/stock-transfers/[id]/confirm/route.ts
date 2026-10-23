@@ -11,6 +11,7 @@ import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
+import SaleModel from "@/models/Sale";
 import { packingSnapshot, toBaseUnitCost } from "@/lib/inventory-units";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +149,13 @@ async function handlePOST(
         }
 
         const varianceQty = item.qty - receivedQty;
+
+        if (transfer.saleId && varianceQty > 0) {
+          transferFail(
+            400,
+            `Outlet-sale transfer ${transfer.transferNumber} must be received in full before revenue is recognized. Ask the main branch to correct or cancel the transfer for ${item.productName}.`
+          );
+        }
 
         if (varianceQty > 0 && !itemRemarks) {
           transferFail(
@@ -307,6 +315,35 @@ async function handlePOST(
       transfer.outletRemarks = outletRemarks;
 
       await transfer.save({ session: mongoSession });
+
+      if (transfer.saleId) {
+        const recognizedAt = new Date();
+        const sale = await SaleModel.findOneAndUpdate(
+          {
+            _id: transfer.saleId,
+            isVoided: false,
+            $or: [
+              { fulfillmentStatus: "PENDING" },
+              { fulfillmentStatus: { $exists: false } },
+            ],
+          },
+          [
+            {
+              $set: {
+                fulfillmentStatus: "RECOGNIZED",
+                recognizedAt,
+                status: "UNPAID",
+                balance: { $max: [{ $subtract: ["$totalAmount", "$paidAmount"] }, 0] },
+              },
+            },
+          ],
+          { new: true, session: mongoSession }
+        );
+
+        if (!sale) {
+          transferFail(409, "The linked sale could not be recognized. No inventory changes were posted.");
+        }
+      }
     });
 
     return NextResponse.json({

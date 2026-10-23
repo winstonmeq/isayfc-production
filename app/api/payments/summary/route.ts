@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
       {
         $match: {
           isVoided: false,
+          fulfillmentStatus: { $ne: "PENDING" },
           customerId: {
             $in: customerIds,
           },

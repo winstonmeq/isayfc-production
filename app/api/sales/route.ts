@@ -29,6 +29,7 @@ import {
 } from "@/lib/inventory-units";
 import { correctionReason, recordCorrection } from "@/lib/corrections";
 import { manilaDateString } from "@/lib/date-utils";
+import { initialSaleFulfillment } from "@/lib/sale-fulfillment";
 import { getOutletCode, getSaleOrigin } from "@/lib/sale-origin";
 
 type SaleSource = "CHICKEN" | "BODEGA" | "MIXED";
@@ -597,19 +598,24 @@ async function handlePOST(req: NextRequest) {
         });
       }
 
+      const effectiveSaleDate = new Date(saleDate);
+      const fulfillment = initialSaleFulfillment(
+        Boolean(linkedOutletId),
+        totalAmount,
+        effectiveSaleDate
+      );
       const [sale] = await SaleModel.create(
         [
           {
             source,
             customerId,
-            saleDate: new Date(saleDate),
+            saleDate: effectiveSaleDate,
             receiptNumber,
             totalPacks,
             totalQty,
             totalAmount,
             paidAmount: 0,
-            balance: totalAmount,
-            status: "UNPAID",
+            ...fulfillment,
             remarks,
             createdBy: authSession?.user?.id,
             isVoided: false,

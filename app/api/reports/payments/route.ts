@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
   // --- A/R aging (open sale balances, as of now) ---
   const openSales = await SaleModel.find({
     isVoided: false,
+    fulfillmentStatus: { $ne: "PENDING" },
     balance: { $gt: 0 },
   })
     .populate("customerId", "name")

@@ -6,6 +6,10 @@ import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
+import {
+  syncDeliverySupplierInvoice,
+  voidDeliverySupplierInvoice,
+} from "@/lib/supplier-invoicing";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import DeliveryModel from "@/models/Delivery";
@@ -587,6 +591,17 @@ async function handlePATCH(
         });
       }
 
+      await syncDeliverySupplierInvoice({
+        deliveryId: delivery._id,
+        supplierId: delivery.supplierId,
+        receiptNumber: delivery.receiptNumber,
+        deliveryCode: delivery.deliveryCode,
+        deliveryDate: delivery.deliveryDate,
+        totalAmount: delivery.totalAmount,
+        createdBy: session?.user?.id,
+        session: mongoSession,
+      });
+
       await recordCorrection({
         entityType: "DELIVERY",
         entityId: delivery._id,
@@ -695,6 +710,8 @@ async function handleDELETE(
       if (!claimed) {
         fail(404, "Delivery not found.");
       }
+
+      await voidDeliverySupplierInvoice(claimed._id, mongoSession);
 
       await reverseDeliveryStock({
         deliveryId: id,

@@ -379,7 +379,7 @@ function activityDate(value: unknown) {
 
 async function recentSales() {
   const rows = await (SaleModel as any)
-    .find(notVoidedFilter())
+    .find({ ...notVoidedFilter(), fulfillmentStatus: { $ne: "PENDING" } })
     .select("receiptNumber totalAmount balance status saleDate createdAt")
     .sort({ createdAt: -1 })
     .limit(5)
@@ -556,7 +556,10 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   } = getDateRanges();
 
   const activeFilter = { isActive: true };
-  const saleFilter = notVoidedFilter();
+  const saleFilter = {
+    ...notVoidedFilter(),
+    fulfillmentStatus: { $ne: "PENDING" },
+  };
   const paymentFilter = notVoidedFilter();
   const deliveryFilter = notVoidedFilter();
   const purchaseBatchFilter = notVoidedFilter();

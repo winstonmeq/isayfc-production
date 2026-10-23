@@ -35,5 +35,15 @@ const SupplierInvoiceSchema = new Schema<ISupplierInvoice>({
 
 SupplierInvoiceSchema.index({ supplierId: 1, invoiceNumber: 1 }, { unique: true });
 SupplierInvoiceSchema.index({ dueDate: 1, status: 1 });
+SupplierInvoiceSchema.index(
+  { referenceType: 1, referenceId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      referenceType: "DELIVERY",
+      referenceId: { $type: "objectId" },
+    },
+  }
+);
 const SupplierInvoiceModel: Model<ISupplierInvoice> = mongoose.models.SupplierInvoice || mongoose.model<ISupplierInvoice>("SupplierInvoice", SupplierInvoiceSchema);
 export default SupplierInvoiceModel;
