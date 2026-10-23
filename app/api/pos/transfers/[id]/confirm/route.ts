@@ -7,6 +7,7 @@ import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 import { requirePermission } from "@/lib/require-permission";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
+import SaleModel from "@/models/Sale";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
 
@@ -104,6 +105,39 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       transfer.totalVarianceQty = 0;
       transfer.hasDiscrepancy = false;
       await transfer.save({ session: mongoSession });
+
+      if (transfer.saleId) {
+        const sale = await SaleModel.findOneAndUpdate(
+          {
+            _id: transfer.saleId,
+            isVoided: false,
+            $or: [
+              { fulfillmentStatus: "PENDING" },
+              { fulfillmentStatus: { $exists: false } },
+            ],
+          },
+          [
+            {
+              $set: {
+                fulfillmentStatus: "RECOGNIZED",
+                recognizedAt: new Date(),
+                status: "UNPAID",
+                balance: {
+                  $max: [{ $subtract: ["$totalAmount", "$paidAmount"] }, 0],
+                },
+              },
+            },
+          ],
+          { new: true, session: mongoSession }
+        );
+
+        if (!sale) {
+          throw new ApiError(
+            409,
+            "The linked main sale could not be recognized. No outlet stock was changed."
+          );
+        }
+      }
     });
     return NextResponse.json({ success: true, message: `Delivery ${transferNumber} received. Outlet stock was updated.` });
   } catch (error) {

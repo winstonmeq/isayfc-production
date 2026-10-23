@@ -3,23 +3,13 @@ import { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { addDays, startOfDayManila } from "@/lib/date-utils";
+import { ensureDefaultExpenseTypes, expenseTypeCode } from "@/lib/expense-types";
 import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 import { requirePermission } from "@/lib/require-permission";
 import ExpenseModel, { type ExpenseType } from "@/models/Expense";
+import ExpenseTypeModel from "@/models/ExpenseType";
 
 export const dynamic = "force-dynamic";
-
-const EXPENSE_TYPES: readonly ExpenseType[] = [
-  "DELIVERY_EXPENSES",
-  "CLEANING_SUPPLIES",
-  "TRANSPORTATION_EXPENSES",
-  "MARINATE_EXPENSES",
-  "OFFICE_SUPPLIES",
-  "REPAIR_AND_MAINTENANCE",
-  "SALARIES",
-  "INCENTIVES_AND_ALLOWANCES",
-  "OTHERS",
-];
 
 async function context(outletId: string, userId: string) {
   if (!isValidObjectId(outletId)) return null;
@@ -32,6 +22,7 @@ export async function GET(req: NextRequest) {
   const { session, response } = await requirePermission("pos.view");
   if (response) return response;
   await dbConnect();
+  await ensureDefaultExpenseTypes();
 
   const outletId = req.nextUrl.searchParams.get("outletId") || "";
   const current = await context(outletId, session!.user.id);
@@ -39,15 +30,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, message: "Select an authorized outlet." }, { status: 400 });
   }
   const dayStart = startOfDayManila();
-  const expenses = await ExpenseModel.find({
-    outletId,
-    expenseCategory: "OUTLET",
-    isActive: true,
-    expenseDate: { $gte: dayStart, $lt: addDays(dayStart, 1) },
-  })
-    .sort({ createdAt: -1 })
-    .select("name type amount expenseDate remarks")
-    .lean<Array<{ _id: { toString(): string }; name: string; type: string; amount: number; expenseDate: Date; remarks?: string }>>();
+  const [expenses, expenseTypes] = await Promise.all([
+    ExpenseModel.find({
+      outletId,
+      expenseCategory: "OUTLET",
+      isActive: true,
+      expenseDate: { $gte: dayStart, $lt: addDays(dayStart, 1) },
+    })
+      .sort({ createdAt: -1 })
+      .select("name type amount expenseDate remarks")
+      .lean<Array<{ _id: { toString(): string }; name: string; type: string; amount: number; expenseDate: Date; remarks?: string }>>(),
+    ExpenseTypeModel.find({ isActive: true }).sort({ name: 1 }).select("code name").lean(),
+  ]);
 
   return NextResponse.json({
     success: true,
@@ -59,6 +53,7 @@ export async function GET(req: NextRequest) {
       expenseDate: item.expenseDate,
       remarks: item.remarks || "",
     })),
+    expenseTypes: expenseTypes.map((item) => ({ code: item.code, name: item.name })),
     summary: { total: expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0) },
   });
 }
@@ -67,6 +62,7 @@ export async function POST(req: NextRequest) {
   const { session, response } = await requirePermission("pos.manage");
   if (response) return response;
   await dbConnect();
+  await ensureDefaultExpenseTypes();
 
   const body = await req.json().catch(() => null) as {
     outletId?: string;
@@ -82,14 +78,16 @@ export async function POST(req: NextRequest) {
   }
   const name = String(body?.name || "").trim();
   const amount = Number(body?.amount);
-  const requestedType = String(body?.type || "OTHERS") as ExpenseType;
-  const type = EXPENSE_TYPES.includes(requestedType) ? requestedType : "OTHERS";
+  const type = (expenseTypeCode(body?.type) || "OTHERS") as ExpenseType;
   const notes = String(body?.remarks || "").trim();
   if (!name) {
     return NextResponse.json({ success: false, message: "Expense description is required." }, { status: 400 });
   }
   if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ success: false, message: "Enter a valid expense amount." }, { status: 400 });
+  }
+  if (!(await ExpenseTypeModel.exists({ code: type, isActive: true }))) {
+    return NextResponse.json({ success: false, message: "Select a valid active expense type." }, { status: 400 });
   }
 
   const expense = await ExpenseModel.create({

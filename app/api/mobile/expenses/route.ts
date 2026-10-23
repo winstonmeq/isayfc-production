@@ -4,23 +4,13 @@ import mongoose from "mongoose";
 
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import connectDb from "@/lib/mongodb";
+import { ensureDefaultExpenseTypes, expenseTypeCode } from "@/lib/expense-types";
 import ExpenseModel from "@/models/Expense";
 import type { ExpenseType } from "@/models/Expense";
+import ExpenseTypeModel from "@/models/ExpenseType";
 import CashShiftModel from "@/models/CashShift";
 
 export const dynamic = "force-dynamic";
-
-const EXPENSE_TYPES: readonly ExpenseType[] = [
-  "DELIVERY_EXPENSES",
-  "CLEANING_SUPPLIES",
-  "TRANSPORTATION_EXPENSES",
-  "MARINATE_EXPENSES",
-  "OFFICE_SUPPLIES",
-  "REPAIR_AND_MAINTENANCE",
-  "SALARIES",
-  "INCENTIVES_AND_ALLOWANCES",
-  "OTHERS",
-];
 
 type ExpenseListRow = {
   _id: { toString: () => string };
@@ -39,6 +29,11 @@ export async function GET(req: NextRequest) {
   if (response) return response;
 
   await connectDb();
+  await ensureDefaultExpenseTypes();
+  const expenseTypes = await ExpenseTypeModel.find({ isActive: true })
+    .sort({ name: 1 })
+    .select("code name")
+    .lean();
 
   // Expenses recorded by this cashier for the current open shift.
   const shift = await CashShiftModel.findOne({
@@ -49,7 +44,12 @@ export async function GET(req: NextRequest) {
     .lean<{ _id: mongoose.Types.ObjectId }>();
 
   if (!shift) {
-    return NextResponse.json({ success: true, data: [], summary: { total: 0 } });
+    return NextResponse.json({
+      success: true,
+      data: [],
+      expenseTypes: expenseTypes.map((item) => ({ code: item.code, name: item.name })),
+      summary: { total: 0 },
+    });
   }
 
   const shiftId = shift._id.toString();
@@ -75,7 +75,12 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  return NextResponse.json({ success: true, data, summary: { total } });
+  return NextResponse.json({
+    success: true,
+    data,
+    expenseTypes: expenseTypes.map((item) => ({ code: item.code, name: item.name })),
+    summary: { total },
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -93,6 +98,7 @@ export async function POST(req: NextRequest) {
   }
 
   await connectDb();
+  await ensureDefaultExpenseTypes();
 
   let body: {
     name?: string;
@@ -112,15 +118,13 @@ export async function POST(req: NextRequest) {
 
   const name = String(body?.name || "").trim();
   const amount = Number(body?.amount);
-  const requestedType = String(body?.type);
+  const requestedType = expenseTypeCode(body?.type) || "OTHERS";
   const notes = String(body?.remarks || "").trim();
   const expenseDateInput = String(body?.expenseDate || "").trim();
   const expenseDate = expenseDateInput
     ? new Date(`${expenseDateInput}T00:00:00.000Z`)
     : new Date();
-  const type: ExpenseType = EXPENSE_TYPES.includes(requestedType as ExpenseType)
-    ? (requestedType as ExpenseType)
-    : "OTHERS";
+  const type = requestedType as ExpenseType;
 
   if (!name) {
     return NextResponse.json(
@@ -131,6 +135,12 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json(
       { success: false, message: "Enter a valid amount." },
+      { status: 400 }
+    );
+  }
+  if (!(await ExpenseTypeModel.exists({ code: type, isActive: true }))) {
+    return NextResponse.json(
+      { success: false, message: "Select a valid active expense type." },
       { status: 400 }
     );
   }
