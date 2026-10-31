@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatPeso } from "@/lib/utils";
+import { ErpPageHeader } from "@/components/erp/ErpShell";
 
 type PaymentSummaryRow = {
   _id: string;
@@ -28,12 +29,9 @@ type PaymentSummaryRow = {
   packs: number;
 };
 
-type CustomerGroup = "ALL" | "OUTLET" | "SALE";
-
 export function PaymentSummaryPageClient() {
   const [rows, setRows] = useState<PaymentSummaryRow[]>([]);
   const [search, setSearch] = useState("");
-  const [group, setGroup] = useState<CustomerGroup>("ALL");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -63,9 +61,7 @@ export function PaymentSummaryPageClient() {
       params.set("search", appliedSearch);
     }
 
-    if (group !== "ALL") {
-      params.set("group", group);
-    }
+    // Include outlet-customer balances owed to main, not outlet POS retail sales.
 
     try {
       const res = await fetch(`/api/payments/summary?${params.toString()}`, {
@@ -78,7 +74,7 @@ export function PaymentSummaryPageClient() {
         throw new Error(json.message || "Failed to load payment summary.");
       }
 
-      setRows(json.data || []);
+      setRows((json.data || []).filter((row: PaymentSummaryRow & { received?: number }) => row.sales !== 0 || row.paid !== 0 || row.balance !== 0 || Number(row.received || 0) !== 0));
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -93,7 +89,7 @@ export function PaymentSummaryPageClient() {
   useEffect(() => {
     void loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group, appliedSearch]);
+  }, [appliedSearch]);
 
   function applySearch() {
     setAppliedSearch(search.trim());
@@ -102,7 +98,6 @@ export function PaymentSummaryPageClient() {
   function resetSearch() {
     setSearch("");
     setAppliedSearch("");
-    setGroup("ALL");
   }
 
   function balanceClass(balance: number) {
@@ -113,29 +108,7 @@ export function PaymentSummaryPageClient() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant={group === "ALL" ? "default" : "outline"}
-          onClick={() => setGroup("ALL")}
-        >
-          All
-        </Button>
-
-        <Button
-          variant={group === "OUTLET" ? "default" : "outline"}
-          onClick={() => setGroup("OUTLET")}
-        >
-          Outlet
-        </Button>
-
-        <Button
-          variant={group === "SALE" ? "default" : "outline"}
-          onClick={() => setGroup("SALE")}
-        >
-          Sale
-        </Button>
-      </div>
-
+      <ErpPageHeader title="Customer Balances" />
       <div className="flex flex-wrap gap-2">
         <Input
           className="min-w-64 flex-1"
@@ -179,10 +152,7 @@ export function PaymentSummaryPageClient() {
                     Paid (₱)
                   </TableHead>
                   <TableHead className="text-center font-bold text-slate-900">
-                    Balance (₱)
-                  </TableHead>
-                  <TableHead className="text-center font-bold text-slate-900">
-                    Packs
+                    Outstanding Balance (₱)
                   </TableHead>
                   <TableHead className="text-center font-bold text-slate-900">
                     Action
@@ -193,17 +163,17 @@ export function PaymentSummaryPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center">
+                    <TableCell colSpan={5} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={5}
                       className="h-32 text-center text-muted-foreground"
                     >
-                      No customer payment summary found.
+                      No customer transactions found.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -235,17 +205,14 @@ export function PaymentSummaryPageClient() {
                       </TableCell>
 
                       <TableCell className="text-center">
-                        {row.packs.toLocaleString()}
-                      </TableCell>
-
-                      <TableCell className="text-center">
                         <Button
                           size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700"
+                          variant={row.balance > 0 ? "default" : "outline"}
+                          className={row.balance > 0 ? "bg-emerald-600 hover:bg-emerald-700" : ""}
                           asChild
                         >
-                          <Link href={`/payments/add?customerId=${row._id}`}>
-                            Record Payment
+                          <Link href={row.balance > 0 ? `/payments/add?customerId=${row._id}` : `/payments/history?customerId=${row._id}`}>
+                            {row.balance > 0 ? "Record Payment" : "View Transactions"}
                           </Link>
                         </Button>
                       </TableCell>
@@ -264,9 +231,6 @@ export function PaymentSummaryPageClient() {
                     </TableCell>
                     <TableCell className={`text-center ${balanceClass(totals.balance)}`}>
                       {formatPeso(totals.balance)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {totals.packs.toLocaleString()}
                     </TableCell>
                     <TableCell />
                   </TableRow>

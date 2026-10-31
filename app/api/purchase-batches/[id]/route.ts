@@ -10,6 +10,11 @@ import ProductModel from "@/models/Product";
 import InventoryTransactionModel from "@/models/InventoryTransaction";
 import PurchaseBatchModel from "@/models/PurchaseBatch";
 import PurchaseItemModel from "@/models/PurchaseItem";
+import SupplierModel from "@/models/Supplier";
+import SupplierInvoiceModel from "@/models/SupplierInvoice";
+import SupplierPaymentModel from "@/models/SupplierPayment";
+import { purchaseFinanceInput, purchaseFinanceSnapshot, samePurchaseLines } from "@/lib/purchase-finance";
+import { syncPurchaseInvoice, voidPurchaseInvoice } from "@/lib/purchase-supplier-invoice";
 
 type PurchaseItemInput = {
   productId: string;
@@ -20,6 +25,7 @@ type PurchaseItemInput = {
 function serializePurchaseBatch(batch: any, items: any[] = []) {
   return {
     _id: batch._id.toString(),
+    ...purchaseFinanceSnapshot(batch),
 
     datePurchased: batch.datePurchased
       ? new Date(batch.datePurchased).toISOString()
@@ -184,10 +190,10 @@ async function preparePurchaseItems(items: PurchaseItemInput[]) {
       };
     }
 
-    const subtotal = buyingPrice * quantity;
+    const subtotal = Math.round(buyingPrice * quantity * 100) / 100;
 
     totalItems += quantity;
-    totalAmount += subtotal;
+    totalAmount = Math.round((totalAmount + subtotal) * 100) / 100;
 
     preparedItems.push({
       product,
@@ -227,11 +233,12 @@ export async function GET(
   }
 
   await dbConnect();
+  void SupplierModel; void SupplierInvoiceModel;
 
   const batch = await PurchaseBatchModel.findOne({
     _id: id,
     isVoided: false,
-  }).lean();
+  }).populate("supplierId", "name").populate("supplierInvoiceId", "status paidAmount balance").lean();
 
   if (!batch) {
     return NextResponse.json(
@@ -278,7 +285,7 @@ async function handlePATCH(
 
   await dbConnect();
 
-  const batch = await PurchaseBatchModel.findOne({
+  let batch = await PurchaseBatchModel.findOne({
     _id: id,
     isVoided: false,
   });
@@ -294,6 +301,14 @@ async function handlePATCH(
   }
 
   const body = await req.json();
+  let finance;
+  try { finance = purchaseFinanceInput(body); }
+  catch (error) { return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Invalid invoice details." }, { status: 400 }); }
+  if (finance.paymentMode === "CASH") {
+    const paymentAccess = await requirePermission("accounts-payable.manage");
+    if (paymentAccess.response) return paymentAccess.response;
+  }
+  await Promise.all([SupplierInvoiceModel.init(), SupplierPaymentModel.init()]);
 
   const datePurchased = cleanString(body.datePurchased);
   const remarks = cleanString(body.remarks);
@@ -333,20 +348,27 @@ async function handlePATCH(
 
   try {
     await mongoSession.withTransaction(async () => {
-      await reversePurchaseStock(
-        id,
-        mongoSession,
-        transactionDate,
-        session?.user?.id
-      );
-
-      await PurchaseItemModel.deleteMany({ purchaseBatchId: id }).session(mongoSession);
+      batch = await PurchaseBatchModel.findOne({ _id: id, isVoided: false }).session(mongoSession);
+      if (!batch) throw new Error("Purchase batch was voided or removed. Refresh before editing.");
+      const oldLines = await PurchaseItemModel.find({ purchaseBatchId: id }).session(mongoSession);
+      const stockChanged = batch.datePurchased.getTime() !== transactionDate.getTime() || !samePurchaseLines(oldLines, prepared.preparedItems || []);
+      if (stockChanged) {
+        await reversePurchaseStock(id, mongoSession, transactionDate, session?.user?.id);
+        await PurchaseItemModel.deleteMany({ purchaseBatchId: id }).session(mongoSession);
+      }
 
       batch.datePurchased = transactionDate;
       batch.totalItems = prepared.totalItems || 0;
       batch.totalAmount = prepared.totalAmount || 0;
       batch.remarks = remarks;
+      batch.supplierId = new mongoose.Types.ObjectId(finance.supplierId);
+      batch.invoiceNumber = finance.invoiceNumber;
+      batch.dueDate = finance.dueDate;
+      batch.paymentMode = finance.paymentMode as "CASH" | "CREDIT";
+      const invoice = await syncPurchaseInvoice(batch._id, finance, batch.totalAmount, session!.user.id, mongoSession);
+      batch.supplierInvoiceId = invoice._id;
       await batch.save({ session: mongoSession });
+      if (!stockChanged) return;
 
       const purchaseItemsToInsert = [];
       const inventoryTransactions = [];
@@ -395,6 +417,8 @@ async function handlePATCH(
       await PurchaseItemModel.insertMany(purchaseItemsToInsert, { session: mongoSession });
       await InventoryTransactionModel.insertMany(inventoryTransactions, { session: mongoSession });
     });
+  } catch (error) {
+    return NextResponse.json({ success: false, message: (error as { code?: number }).code === 11000 ? "This supplier invoice number already exists. No stock was changed." : error instanceof Error ? error.message : "Unable to update purchase." }, { status: 409 });
   } finally {
     await mongoSession.endSession();
   }
@@ -453,15 +477,20 @@ async function handleDELETE(
   const mongoSession = await mongoose.startSession();
   try {
     await mongoSession.withTransaction(async () => {
+      const current = await PurchaseBatchModel.findOne({ _id: id, isVoided: false }).session(mongoSession);
+      if (!current) throw new Error("Purchase batch was already voided.");
+      await voidPurchaseInvoice(current._id, mongoSession);
       await reversePurchaseStock(
         id,
         mongoSession,
         new Date(),
         session?.user?.id
       );
-      batch.isVoided = true;
-      await batch.save({ session: mongoSession });
+      current.isVoided = true;
+      await current.save({ session: mongoSession });
     });
+  } catch (error) {
+    return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Unable to void purchase." }, { status: 409 });
   } finally {
     await mongoSession.endSession();
   }

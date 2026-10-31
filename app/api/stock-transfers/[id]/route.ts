@@ -19,6 +19,7 @@ import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import OutletModel from "@/models/Outlet";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
+import SaleModel from "@/models/Sale";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -275,7 +276,8 @@ async function handleDELETE(
         .session(mongoSession)
         .lean();
 
-      if (transferBeforeCancel?.saleId && transferBeforeCancel.status === "DRAFT") {
+      const internalOrder = transferBeforeCancel?.saleId ? await SaleModel.findOne({ _id: transferBeforeCancel.saleId, transactionType: "INTERNAL_TRANSFER", isVoided: false }).session(mongoSession) : null;
+      if (transferBeforeCancel?.saleId && transferBeforeCancel.status === "DRAFT" && !internalOrder) {
         transferFail(
           400,
           "This draft was generated from a sale. Void the linked sale to cancel both records."
@@ -317,6 +319,14 @@ async function handleDELETE(
       }
 
       cancelledNumber = transfer.transferNumber;
+      if (internalOrder) {
+        if (internalOrder.paidAmount > 0) transferFail(409, "Review the existing payment before cancelling this internal delivery.");
+        internalOrder.isVoided = true;
+        internalOrder.status = "VOIDED";
+        internalOrder.balance = 0;
+        await internalOrder.save({ session: mongoSession });
+        linkedToSale = false;
+      }
 
       // If stock already left the bodega, restore it.
       if (transfer.status === "IN_TRANSIT") {

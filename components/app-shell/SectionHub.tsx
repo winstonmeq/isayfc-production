@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, CheckCircle2, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { appNavItems, type AppNavItem } from "@/components/app-shell/nav-config";
 import { cn } from "@/lib/utils";
+import { isOutletRoute } from "@/lib/outlet-navigation";
+import { canonicalMainSaleRoute } from "@/lib/main-sales-entry";
 import { ModuleSurface } from "./ModuleSurface";
 
 type SectionName = NonNullable<AppNavItem["section"]>;
@@ -60,6 +62,7 @@ function firstHref(item: AppNavItem) {
 }
 
 export function SectionHub({ section }: { section: SectionName }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const details = sectionDetails[section];
@@ -99,8 +102,18 @@ export function SectionHub({ section }: { section: SectionName }) {
     )
     .filter((action) => action.href !== "/dashboard");
   const selectedHref = searchParams.get("module");
+  useEffect(() => {
+    // Old workspace bookmarks must open the actual outlet module, not silently
+    // fall back to the first main-system module after the navigation move.
+    if (selectedHref && isOutletRoute(selectedHref)) router.replace(selectedHref);
+    else if (selectedHref && canonicalMainSaleRoute(selectedHref) !== selectedHref) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("module", canonicalMainSaleRoute(selectedHref));
+      router.replace(`/operations?${params}`);
+    }
+  }, [selectedHref, router, searchParams]);
   const selectedAction =
-    actions.find((action) => action.href === selectedHref) || actions[0];
+    actions.find((action) => action.href === canonicalMainSaleRoute(selectedHref || "")) || actions[0];
   const selectedActionHref = selectedAction?.href;
   const sectionHref = `/${section.toLowerCase()}`;
   const [recentModules, setRecentModules] = useState<string[]>([]);
@@ -116,7 +129,7 @@ export function SectionHub({ section }: { section: SectionName }) {
     });
   }, [selectedActionHref]);
 
-  if (status === "loading") {
+  if (status === "loading" || (selectedHref && (isOutletRoute(selectedHref) || canonicalMainSaleRoute(selectedHref) !== selectedHref))) {
     return (
       <div className="grid min-h-[55vh] place-items-center text-sm font-semibold text-slate-500">
         Preparing your workspace…

@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   CheckCheck,
@@ -22,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -406,7 +407,7 @@ export function IncomingDeliveriesPageClient() {
           if (!open) setConfirmTarget(null);
         }}
       >
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <EntryDialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Confirm {confirmTarget?.transferNumber}
@@ -555,7 +556,7 @@ export function IncomingDeliveriesPageClient() {
               Confirm & Receive Into Inventory
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
 
       <TransferDetailDialog detail={detail} onClose={() => setDetail(null)} />

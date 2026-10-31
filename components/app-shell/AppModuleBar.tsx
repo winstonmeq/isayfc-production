@@ -18,6 +18,7 @@ import {
 import { useMemo } from "react";
 
 import { cn } from "@/lib/utils";
+import { isOutletRoute } from "@/lib/outlet-navigation";
 import { appNavItems, type AppNavItem } from "./nav-config";
 
 type SectionName = NonNullable<AppNavItem["section"]>;
@@ -67,7 +68,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       routes: [
         "/slicing",
         "/slicing/new",
-        "/slicing/daily-history",
+        "/slicing/reconciliation",
         "/slicing/standard-packing",
       ],
     },
@@ -76,9 +77,8 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       icon: ShoppingCart,
       routes: [
         "/sales/history",
-        "/sales",
-        "/sales/grocery",
         "/sales/all",
+        "/sales/discounts",
         "/sales/lines",
         "/stock-transfers",
       ],
@@ -86,21 +86,20 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
   ],
   Finance: [
     {
-      title: "Collections",
+      title: "Finance",
       icon: CircleDollarSign,
       routes: [
-        "/payments",
-        "/payments/pos-collections",
-        "/payments/add",
         "/payments/history",
+        "/payments",
+        "/payments/add",
         "/accounts-payable",
+        "/supplier-payment-history",
       ],
     },
     {
       title: "Profitability",
       icon: FileChartColumn,
       routes: [
-        "/outlet-summary",
         "/profit/chicken-slicing",
       ],
     },
@@ -115,8 +114,6 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       routes: [
         "/inventory/bodega",
         "/inventory/products",
-        "/outlet-inventory",
-        "/stock-counts",
         "/inventory-adjustments",
       ],
     },
@@ -126,11 +123,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       routes: [
         "/reports/gross-sales",
         "/reports/sales",
-        "/reports/outlet-pos",
         "/reports/inventory",
-        "/reports/inventory-movements",
-        "/reports/monthly-inventory",
-        "/reports/inventory-reconciliation",
         "/reports/payments",
         "/reports/profit",
       ],
@@ -240,7 +233,14 @@ export function AppModuleBar() {
       )
     ) || groups[0];
 
-  if (pathname === "/pos" || pathname.startsWith("/pos/")) return null;
+  if (isOutletRoute(pathname, selectedModule || "")) {
+    const outletModules = appNavItems.find((item) => item.title === "Outlet Operations")?.children || [];
+    return <nav aria-label="Outlet Operations" className="no-print sticky top-16 z-30 flex gap-1 overflow-x-auto border-b bg-slate-50 px-5 py-2">
+      {outletModules.filter((item) => isAdmin || !item.permission || permissions.includes(item.permission)).map((item) => (
+        <Link key={item.href} href={item.href} className={cn("shrink-0 rounded-lg px-3 py-2 text-sm font-bold", (selectedModule || pathname) === item.href ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white")}>{item.title}</Link>
+      ))}
+    </nav>;
+  }
 
   if (status === "loading" || !activeGroup) {
     return <div className="h-11 border-b bg-white" />;

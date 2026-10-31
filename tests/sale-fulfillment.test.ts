@@ -26,3 +26,9 @@ test("direct external sale is recognized immediately", () => {
   assert.equal(isRevenueRecognized(state.fulfillmentStatus), true);
   assert.equal(isRevenueRecognized(undefined), true); // legacy recognized rows
 });
+
+test("a fully discounted direct sale has no outstanding payment", () => {
+  const state = initialSaleFulfillment(false, 0, new Date("2026-10-31"));
+  assert.equal(state.balance, 0);
+  assert.equal(state.status, "PAID");
+});

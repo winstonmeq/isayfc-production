@@ -37,6 +37,11 @@ function serializeSale(sale: any, lines: any[] = []) {
     source: sale.source,
     saleSource: getSaleOrigin(sale),
     totalAmount: sale.totalAmount || 0,
+    subtotal: Number(sale.subtotal ?? sale.totalAmount ?? 0),
+    discountName: sale.discountName || "",
+    discountType: sale.discountType,
+    discountValue: Number(sale.discountValue || 0),
+    discountAmount: Number(sale.discountAmount || 0),
     paidAmount: sale.paidAmount || 0,
     balance: sale.balance || 0,
     totalPacks: sale.totalPacks || 0,
@@ -53,6 +58,13 @@ function serializeSale(sale: any, lines: any[] = []) {
       qty: line.qty || 0,
       price: line.price || 0,
       lineTotal: line.lineTotal || 0,
+      grossLineTotal: Number(line.grossLineTotal ?? line.lineTotal ?? 0),
+      discountAmount: Number(line.discountAmount || 0),
+      discountId: line.discountId?.toString?.() || "",
+      discountName: line.discountName || "",
+      discountType: line.discountType,
+      discountValue: Number(line.discountValue || 0),
+      discountBasis: line.discountBasis || "PER_ROW",
       stockUnit: line.stockUnit,
       packSize: line.packSize || 0,
       stockPcsOut: line.stockPcsOut || 0,
@@ -134,6 +146,9 @@ async function handleDELETE(
 
   try {
     await mongoSession.withTransaction(async () => {
+      if (await SaleModel.exists({ _id: id, source: "OUTLET" }).session(mongoSession)) {
+        fail(409, "Outlet sales cannot be voided from main sales. Employee balances and outlet inventory require an outlet-specific correction.");
+      }
       const linkedTransfer = await StockTransferModel.findOne({ saleId: id })
         .session(mongoSession);
 

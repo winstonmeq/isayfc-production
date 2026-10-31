@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { roundMoney } from "@/lib/report-utils";
+import { inventoryReportScope, belongsToInventoryScope } from "@/lib/outlet-navigation";
 import ProductModel from "@/models/Product";
 import CategoryModel from "@/models/Category";
 import BodegaProductModel from "@/models/BodegaProduct";
@@ -304,7 +305,11 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const allRows = [...groceryRows, ...bodegaRows, ...outletRows].sort((a, b) =>
+  const scope = inventoryReportScope(searchParams.get("scope"));
+  const scopedRows = [...groceryRows, ...bodegaRows, ...outletRows].filter((row) => belongsToInventoryScope(row.source, scope));
+  const locationOptions = [...new Set(scopedRows.map((row) => row.location))].sort();
+  const location = searchParams.get("location");
+  const allRows = scopedRows.filter((row) => !location || row.location === location).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
   const categoryOptions = [
@@ -391,6 +396,7 @@ export async function GET(req: NextRequest) {
       hour12: true,
     }).format(new Date()),
     rows,
+    locationOptions,
     categories,
     categoryOptions,
     grand: {

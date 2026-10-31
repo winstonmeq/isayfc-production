@@ -1,3 +1,4 @@
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 // app/api/reports/payments/route.ts
 //
 // Standard Payments Report: a collections register (payments received in the
@@ -16,6 +17,7 @@ import { parseReportRange, roundMoney } from "@/lib/report-utils";
 import { manilaDateString } from "@/lib/date-utils";
 import PaymentModel from "@/models/Payment";
 import SaleModel from "@/models/Sale";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import CustomerModel from "@/models/Customer";
 
 export const dynamic = "force-dynamic";
@@ -106,6 +108,7 @@ export async function GET(req: NextRequest) {
 
   // --- A/R aging (open sale balances, as of now) ---
   const openSales = await SaleModel.find({
+    $nor: [...outletSaleMatchClauses(), ...internalOutletMatchClauses()],
     isVoided: false,
     fulfillmentStatus: { $ne: "PENDING" },
     balance: { $gt: 0 },

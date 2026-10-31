@@ -1,6 +1,8 @@
 // components/master-data/MasterDataPage.tsx
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Pencil, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -14,7 +16,6 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -466,16 +467,16 @@ export function MasterDataPage({
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <EntryDialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {editingItem ? `Edit ${resourceName}` : `Add ${resourceName}`}
             </DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
             {fields.map((field) => (
-              <div key={field.name} className="space-y-2">
+              <div key={field.name} className={field.inputType === "textarea" ? "space-y-2 sm:col-span-2" : "space-y-2"}>
                 <Label htmlFor={field.name}>
                   {field.label}
                   {field.required ? (
@@ -548,7 +549,7 @@ export function MasterDataPage({
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </div>
   );

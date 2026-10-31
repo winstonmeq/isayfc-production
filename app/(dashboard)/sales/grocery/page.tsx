@@ -1,6 +1,6 @@
 // app/(dashboard)/sales/grocery/page.tsx
-import { SaleGroceryPageClient } from "@/components/sales/SaleGroceryPageClient";
+import { redirect } from "next/navigation";
 
 export default function SaleGroceryPage() {
-  return <SaleGroceryPageClient />;
+  redirect("/sales/all");
 }

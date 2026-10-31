@@ -247,15 +247,13 @@ export function SliceHistoryPageClient() {
   return (
     <ErpPage>
       <ErpPageHeader
-        eyebrow="Production"
         title="Slicing History"
-        description="Daily production history for slicing activities. Profit and price information stays hidden from this employee-facing page."
         actions={
           <>
             <Button asChild>
               <Link href="/slicing/new">
                 <PlusCircle className="mr-2 h-4 w-4" />
-                Add New Slicing
+                Add Slicing
               </Link>
             </Button>
             <Button variant="secondary" onClick={() => window.print()}>
@@ -267,7 +265,7 @@ export function SliceHistoryPageClient() {
       />
 
       <ErpToolbar>
-        <ErpField label="Show Entries">
+        <ErpField label="Rows">
           <Select
             value={limit}
             onValueChange={(value) => {
@@ -301,10 +299,10 @@ export function SliceHistoryPageClient() {
             </SelectContent>
           </Select>
         </ErpField>
-        <ErpField label="Date Begin">
+        <ErpField label="Date From">
           <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         </ErpField>
-        <ErpField label="Date End">
+        <ErpField label="Date To">
           <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
         </ErpField>
         <div className="flex items-end gap-2">
@@ -319,7 +317,7 @@ export function SliceHistoryPageClient() {
         </div>
       </ErpToolbar>
 
-      <ErpSection title="Slicing Transactions" description="Detailed line-level slicing activity.">
+      <ErpSection title="Slicing Transactions">
         {isLoading ? (
           <div className="flex h-56 items-center justify-center">
             <Loader2 className="h-7 w-7 animate-spin text-slate-500" />
@@ -333,7 +331,7 @@ export function SliceHistoryPageClient() {
                 <TableHeader className="bg-slate-950">
                   <TableRow>
                     <TableHead className="text-white">Date</TableHead>
-                    <TableHead className="text-white">Main Product</TableHead>
+                    <TableHead className="text-white">Whole Chicken</TableHead>
                     <TableHead className="text-white">Sliced Product</TableHead>
                     <TableHead className="text-right text-white">Heads</TableHead>
                     <TableHead className="text-right text-white">Bags</TableHead>
@@ -379,8 +377,9 @@ export function SliceHistoryPageClient() {
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button size="icon" variant="ghost" onClick={() => handleDelete(record)}>
+                          <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleDelete(record)}>
                             <Trash2 className="h-4 w-4 text-red-600" />
+                            Void
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -389,7 +388,7 @@ export function SliceHistoryPageClient() {
                 </TableBody>
                 <TableFooter className="bg-slate-100 font-bold text-slate-950">
                   <TableRow>
-                    <TableCell>Total</TableCell>
+                    <TableCell>Page Total</TableCell>
                     <TableCell>—</TableCell>
                     <TableCell>—</TableCell>
                     <TableCell className="text-right">{formatWholeNumber(tableTotals.heads)}</TableCell>
@@ -434,8 +433,9 @@ export function SliceHistoryPageClient() {
                         <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{formatDate(record.slicingDate)}</p>
                         <h3 className="mt-1 font-black text-slate-950">{record.mainProductName} to {record.slicedProductName}</h3>
                       </div>
-                      <Button size="icon" variant="ghost" onClick={() => handleDelete(record)}>
+                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleDelete(record)}>
                         <Trash2 className="h-4 w-4 text-red-600" />
+                        Void
                       </Button>
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3">

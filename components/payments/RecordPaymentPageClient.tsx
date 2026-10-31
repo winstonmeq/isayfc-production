@@ -1,15 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { EntryActions } from "@/components/erp/EntryForm";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Eye,
   Loader2,
-  Printer,
-  RefreshCcw,
   Save,
-  Search,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatPeso } from "@/lib/utils";
+import { manilaDateString } from "@/lib/date-utils";
 
 type Props = {
   initialCustomerId?: string;
@@ -71,7 +68,7 @@ type CustomerDetail = {
     totalPacks: number;
   };
   recentSales: RecentSale[];
-  recentPayments: RecentPayment[];
+  unpaidSales: RecentSale[];
 };
 
 type RecentSale = {
@@ -86,37 +83,21 @@ type RecentSale = {
   status: string;
 };
 
-type RecentPayment = {
-  _id: string;
-  paymentDate?: string;
-  amount: number;
-  appliedAmount: number;
-  unappliedAmount: number;
-  referenceNumber: string;
-  receiptImageUrl: string;
-  remarks: string;
-};
-
 export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const detailRequest = useRef(0);
 
   const [customers, setCustomers] = useState<CustomerSummary[]>([]);
   const [customerId, setCustomerId] = useState(initialCustomerId);
   const [paymentDate, setPaymentDate] = useState(
-    new Date().toISOString().slice(0, 10)
+    manilaDateString()
   );
   const [amount, setAmount] = useState("0");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [remarks, setRemarks] = useState("");
   const [receiptImage, setReceiptImage] = useState<File | null>(null);
 
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [appliedFilters, setAppliedFilters] = useState({
-    dateFrom: "",
-    dateTo: "",
-  });
-
+  const [acceptAdvance, setAcceptAdvance] = useState(false);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
 
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
@@ -152,6 +133,7 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
   }
 
   async function loadCustomerDetail() {
+    const request = ++detailRequest.current;
     if (!customerId) {
       setDetail(null);
       return;
@@ -159,19 +141,9 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
 
     setIsLoadingDetail(true);
 
-    const params = new URLSearchParams();
-
-    if (appliedFilters.dateFrom) {
-      params.set("dateFrom", appliedFilters.dateFrom);
-    }
-
-    if (appliedFilters.dateTo) {
-      params.set("dateTo", appliedFilters.dateTo);
-    }
-
     try {
       const res = await fetch(
-        `/api/payments/customer/${customerId}?${params.toString()}`,
+        `/api/payments/customer/${customerId}`,
         {
           cache: "no-store",
         }
@@ -183,15 +155,17 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
         throw new Error(json.message || "Failed to load customer payment data.");
       }
 
-      setDetail(json);
+      if (request === detailRequest.current) setDetail(json);
     } catch (error) {
+      if (request !== detailRequest.current) return;
+      setDetail(null);
       toast.error(
         error instanceof Error
           ? error.message
           : "Failed to load customer payment data."
       );
     } finally {
-      setIsLoadingDetail(false);
+      if (request === detailRequest.current) setIsLoadingDetail(false);
     }
   }
 
@@ -202,23 +176,7 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
   useEffect(() => {
     void loadCustomerDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId, appliedFilters]);
-
-  function applyFilters() {
-    setAppliedFilters({
-      dateFrom,
-      dateTo,
-    });
-  }
-
-  function clearFilters() {
-    setDateFrom("");
-    setDateTo("");
-    setAppliedFilters({
-      dateFrom: "",
-      dateTo: "",
-    });
-  }
+  }, [customerId]);
 
   function formatDate(value?: string) {
     if (!value) return "—";
@@ -249,6 +207,10 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
       return;
     }
 
+    if (isSaving || isLoadingCustomers || isLoadingDetail || !selectedCustomer || !detail) return;
+    if (Number(amount) > selectedCustomer.balance && !acceptAdvance) {
+      toast.error("Confirm the advance / excess credit before saving."); return;
+    }
     const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Manila",
       year: "numeric",
@@ -295,6 +257,7 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
       toast.success(json.message || "Payment saved successfully.");
 
       setAmount("0");
+      setAcceptAdvance(false);
       setReferenceNumber("");
       setRemarks("");
       setReceiptImage(null);
@@ -311,76 +274,6 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
       );
     } finally {
       setIsSaving(false);
-    }
-  }
-
-  async function voidPayment(paymentId: string) {
-    const confirmed = window.confirm(
-      "Void this payment? This will reverse its applied amount from sales."
-    );
-
-    if (!confirmed) return;
-    const reason = window.prompt("Reason for voiding this payment:")?.trim();
-    if (!reason || reason.length < 5) {
-      toast.error("Enter a correction reason of at least 5 characters.");
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/payments/${paymentId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.message || "Failed to void payment.");
-      }
-
-      toast.success(json.message || "Payment voided successfully.");
-
-      await loadCustomers();
-      await loadCustomerDetail();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to void payment."
-      );
-    }
-  }
-
-  async function voidSale(saleId: string) {
-    const confirmed = window.confirm(
-      "Delete this sale? This will reverse stock if the sale has no payment."
-    );
-
-    if (!confirmed) return;
-    const reason = window.prompt("Reason for voiding this sale:")?.trim();
-    if (!reason || reason.length < 5) {
-      toast.error("Enter a correction reason of at least 5 characters.");
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/sales/${saleId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.message || "Failed to delete sale.");
-      }
-
-      toast.success(json.message || "Sale deleted successfully.");
-
-      await loadCustomers();
-      await loadCustomerDetail();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete sale.");
     }
   }
 
@@ -401,8 +294,8 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
 
                 <Select
                   value={customerId}
-                  onValueChange={(value) => setCustomerId(value)}
-                  disabled={isLoadingCustomers}
+                  onValueChange={(value) => { setCustomerId(value); setDetail(null); setAcceptAdvance(false); }}
+                  disabled={isLoadingCustomers || isSaving}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="-- Select customer --" />
@@ -447,7 +340,7 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
                   min="0"
                   step="0.01"
                   value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
+                  onChange={(event) => { setAmount(event.target.value); setAcceptAdvance(false); }}
                   required
                 />
               </div>
@@ -479,7 +372,7 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
               </div>
 
               <div className="space-y-2">
-                <Label>Payment Remarks</Label>
+                <Label>Remarks</Label>
                 <Input
                   value={remarks}
                   onChange={(event) => setRemarks(event.target.value)}
@@ -487,364 +380,33 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            {selectedCustomer && Number(amount) > selectedCustomer.balance && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><p>{selectedCustomer.balance <= 0 ? "This customer has no outstanding balance. This payment will be an advance." : "This payment exceeds the outstanding balance. The excess will remain as unapplied credit."}</p><label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={acceptAdvance} onChange={event => setAcceptAdvance(event.target.checked)} />I confirm recording the advance / excess credit.</label></div>}
+            {selectedCustomer && selectedCustomer.balance <= 0 && Number(amount) <= 0 && <p role="status" className="text-sm text-amber-800">No outstanding balance. Any new payment will be an advance.</p>}
+            <EntryActions>
               <Button
                 type="submit"
                 className="bg-emerald-600 hover:bg-emerald-700"
-                disabled={isSaving}
+                disabled={isSaving || isLoadingCustomers || isLoadingDetail || !selectedCustomer || !detail || Number(amount) <= 0 || (Number(amount) > selectedCustomer.balance && !acceptAdvance)}
               >
                 {isSaving ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="mr-2 h-4 w-4" />
                 )}
-                Save Payment
+                Record Payment
               </Button>
-            </div>
+            </EntryActions>
           </form>
         </CardContent>
       </Card>
 
-      {customerId ? (
-        <>
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Filter (Sales Date / Payment Date)</CardTitle>
-            </CardHeader>
-
-            <CardContent className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto]">
-              <div className="space-y-2">
-                <Label>Date From</Label>
-                <Input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(event) => setDateFrom(event.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Date To</Label>
-                <Input
-                  type="date"
-                  value={dateTo}
-                  onChange={(event) => setDateTo(event.target.value)}
-                />
-              </div>
-
-              <div className="flex items-end">
-                <Button variant="outline" onClick={applyFilters}>
-                  <Search className="mr-2 h-4 w-4" />
-                  Apply Filter
-                </Button>
-              </div>
-
-              <div className="flex items-end">
-                <Button variant="secondary" onClick={clearFilters}>
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                  Clear
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between border-b">
-              <CardTitle>
-                Customer Summary: {detail?.customer?.name || selectedCustomer?.customer || "—"}
-              </CardTitle>
-
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
-                <Printer className="mr-2 h-4 w-4" />
-                Print
-              </Button>
-            </CardHeader>
-
-            <CardContent className="space-y-5 p-5">
-              {isLoadingDetail ? (
-                <div className="flex h-32 items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : detail ? (
-                <>
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-center">
-                            Total Sales (Overall)
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Total Paid (Overall)
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Balance (Overall)
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Total Packs Sold (Overall)
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-
-                      <TableBody>
-                        <TableRow>
-                          <TableCell className="text-center">
-                            {formatPeso(detail.overall.totalSales)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {formatPeso(detail.overall.totalPaid)}
-                          </TableCell>
-                          <TableCell
-                            className={`text-center ${balanceClass(
-                              detail.overall.balance
-                            )}`}
-                          >
-                            {formatPeso(detail.overall.balance)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {detail.overall.totalPacks.toLocaleString()}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-sm font-semibold">
-                      Filtered Totals{" "}
-                      <span className="font-normal text-muted-foreground">
-                        {appliedFilters.dateFrom || appliedFilters.dateTo
-                          ? "(filter applied)"
-                          : "(no filter applied)"}
-                      </span>
-                    </p>
-
-                    <div className="overflow-x-auto rounded-lg border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-center">
-                              Total Sales (Filtered)
-                            </TableHead>
-                            <TableHead className="text-center">
-                              Total Paid (Filtered)
-                            </TableHead>
-                            <TableHead className="text-center">
-                              Balance (Filtered)
-                            </TableHead>
-                            <TableHead className="text-center">
-                              Total Packs Sold (Filtered)
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-
-                        <TableBody>
-                          <TableRow>
-                            <TableCell className="text-center">
-                              {formatPeso(detail.filtered.totalSales)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {formatPeso(detail.filtered.totalPaid)}
-                            </TableCell>
-                            <TableCell
-                              className={`text-center ${balanceClass(
-                                detail.filtered.balance
-                              )}`}
-                            >
-                              {formatPeso(detail.filtered.balance)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {detail.filtered.totalPacks.toLocaleString()}
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          {detail ? (
-            <div className="grid gap-5 xl:grid-cols-2">
-              <Card>
-                <CardHeader className="border-b">
-                  <CardTitle>Recent Sales Orders</CardTitle>
-                </CardHeader>
-
-                <CardContent className="p-4">
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                      <TableHeader className="bg-slate-900">
-                        <TableRow>
-                          <TableHead className="text-center text-white">
-                            Date
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Receipt #
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Total
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Packs
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Remarks
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Action
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-
-                      <TableBody>
-                        {detail.recentSales.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={6}
-                              className="h-24 text-center text-muted-foreground"
-                            >
-                              No sales found for the selected date range.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          detail.recentSales.map((sale) => (
-                            <TableRow key={sale._id}>
-                              <TableCell className="text-center">
-                                {formatDate(sale.saleDate)}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {sale.receiptNumber}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {formatPeso(sale.totalAmount)}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {sale.totalPacks.toLocaleString()}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {sale.remarks || sale.status || "—"}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <div className="flex justify-center gap-2">
-                                  <Button size="sm" variant="outline" asChild>
-                                    <Link href={`/sales/history`}>
-                                      <Eye className="mr-1 h-4 w-4" />
-                                      View
-                                    </Link>
-                                  </Button>
-
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => voidSale(sale._id)}
-                                  >
-                                    Delete
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="border-b">
-                  <CardTitle>Recent Payments</CardTitle>
-                </CardHeader>
-
-                <CardContent className="p-4">
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                      <TableHeader className="bg-slate-900">
-                        <TableRow>
-                          <TableHead className="text-center text-white">
-                            Date
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Reference
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Amount
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Applied
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Receipt
-                          </TableHead>
-                          <TableHead className="text-center text-white">
-                            Action
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-
-                      <TableBody>
-                        {detail.recentPayments.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={6}
-                              className="h-24 text-center text-muted-foreground"
-                            >
-                              No payments found for the selected date range.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          detail.recentPayments.map((payment) => (
-                            <TableRow key={payment._id}>
-                              <TableCell className="text-center">
-                                {formatDate(payment.paymentDate)}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {payment.referenceNumber || "—"}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {formatPeso(payment.amount)}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {formatPeso(payment.appliedAmount)}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {payment.receiptImageUrl ? (
-                                  <a
-                                    href={payment.receiptImageUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-blue-600 underline"
-                                  >
-                                    View
-                                  </a>
-                                ) : (
-                                  "—"
-                                )}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => voidPayment(payment._id)}
-                                >
-                                  <Trash2 className="mr-1 h-4 w-4" />
-                                  Void
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          ) : null}
-        </>
-      ) : null}
+      {customerId && <Card><CardHeader><CardTitle>Unpaid Invoices</CardTitle></CardHeader><CardContent>
+        {isLoadingDetail ? <p role="status">Loading invoices…</p> : !detail ? <p>Unable to load invoices. Select the customer again before recording payment.</p> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Receipt / Invoice</TableHead><TableHead className="text-right">Amount</TableHead><TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Outstanding</TableHead></TableRow></TableHeader><TableBody>
+        {(detail.unpaidSales || []).map(sale => <TableRow key={sale._id}><TableCell>{formatDate(sale.saleDate)}</TableCell><TableCell>{sale.receiptNumber}</TableCell><TableCell className="text-right">{formatPeso(sale.totalAmount)}</TableCell><TableCell className="text-right">{formatPeso(sale.paidAmount)}</TableCell><TableCell className="text-right font-bold">{formatPeso(sale.balance)}</TableCell></TableRow>)}
+        {!detail.unpaidSales?.length && <TableRow><TableCell colSpan={5} className="py-8 text-center">No unpaid invoices.</TableCell></TableRow>}
+        </TableBody></Table></div>}
+        <p className="mt-3 text-sm text-slate-500">Payments are applied automatically to eligible unpaid sales. Any excess remains unapplied credit.</p>
+      </CardContent></Card>}
     </div>
   );
 }

@@ -20,8 +20,8 @@ export function calculateProductionBatchCost(args: {
   for (const ingredient of args.ingredients) {
     const quantity = Number(ingredient.quantity);
     const unitCost = Number(ingredient.unitCost);
-    if (!ingredient.inventoryId || !Number.isInteger(quantity) || quantity < 1) {
-      throw new Error("Every ingredient needs a valid whole quantity.");
+    if (!ingredient.inventoryId || !Number.isFinite(quantity) || quantity <= 0 || quantity > Number.MAX_SAFE_INTEGER) {
+      throw new Error("Every ingredient needs a valid positive quantity.");
     }
     if (!Number.isFinite(unitCost) || unitCost < 0) {
       throw new Error("Every ingredient needs a valid unit cost.");

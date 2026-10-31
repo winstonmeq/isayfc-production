@@ -1,3 +1,4 @@
+import { weightedCompanyCost } from "@/lib/company-cost";
 // app/api/stock-transfers/[id]/confirm/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId } from "mongoose";
@@ -12,6 +13,7 @@ import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
 import SaleModel from "@/models/Sale";
+import { outletSaleRecognitionUpdate } from "@/lib/outlet-sale-recognition";
 import { packingSnapshot, toBaseUnitCost } from "@/lib/inventory-units";
 
 export const dynamic = "force-dynamic";
@@ -204,7 +206,7 @@ async function handlePOST(
         // inventory so mixing and POS COGS use the outlet's true acquisition
         // cost instead of the main branch's supplier cost.
         const transferPrice =
-          Number(item.sellingPrice || 0) > 0
+          transfer.saleId || Number(item.sellingPrice || 0) > 0
             ? Number(item.sellingPrice)
             : Number(item.buyingPrice || 0);
         const transferPacking = packingSnapshot({
@@ -244,6 +246,7 @@ async function handlePOST(
                 newStock
               : incomingBaseCost;
 
+          existingInventory.companyUnitCost = weightedCompanyCost(previousStock, existingInventory.companyUnitCost, receivedPcs, item.companyUnitCost);
           existingInventory.stockQty = newStock;
           existingInventory.unitLabel = baseUnit;
           existingInventory.packSize = packSize;
@@ -266,6 +269,7 @@ async function handlePOST(
                 unitLabel: baseUnit,
                 packSize,
                 lowStockAlert: 0,
+                companyUnitCost: item.companyUnitCost,
                 buyingPrice: transferPrice,
                 sellingPrice: item.sellingPrice,
                 remarks: "",
@@ -317,31 +321,14 @@ async function handlePOST(
       await transfer.save({ session: mongoSession });
 
       if (transfer.saleId) {
-        const recognizedAt = new Date();
         const sale = await SaleModel.findOneAndUpdate(
-          {
-            _id: transfer.saleId,
-            isVoided: false,
-            $or: [
-              { fulfillmentStatus: "PENDING" },
-              { fulfillmentStatus: { $exists: false } },
-            ],
-          },
-          [
-            {
-              $set: {
-                fulfillmentStatus: "RECOGNIZED",
-                recognizedAt,
-                status: "UNPAID",
-                balance: { $max: [{ $subtract: ["$totalAmount", "$paidAmount"] }, 0] },
-              },
-            },
-          ],
-          { new: true, session: mongoSession }
+          { _id: transfer.saleId, isVoided: false, transactionType: { $ne: "INTERNAL_TRANSFER" },
+            $or: [{ fulfillmentStatus: "PENDING" }, { fulfillmentStatus: { $exists: false } }] },
+          outletSaleRecognitionUpdate(),
+          { new: true, session: mongoSession, updatePipeline: true }
         );
-
         if (!sale) {
-          transferFail(409, "The linked sale could not be recognized. No inventory changes were posted.");
+          throw new StockTransferError(409, "The linked sale could not be recognized. Check its status; older internal records require review. No stock changes were posted.");
         }
       }
     });

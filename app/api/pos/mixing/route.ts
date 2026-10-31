@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validIngredientQuantity } from "@/lib/business-flow";
 import mongoose, { ClientSession, Types, isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { packingSnapshot, toBaseUnitCost } from "@/lib/inventory-units";
 import { calculateProductionBatchCost } from "@/lib/production-costing";
+import { productionCompanyCost, weightedCompanyCost } from "@/lib/company-cost";
 import { requirePermission } from "@/lib/require-permission";
-import OutletModel from "@/models/Outlet";
+import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletMenuItemModel from "@/models/OutletMenuItem";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
-import UserModel from "@/models/User";
 
 export const dynamic = "force-dynamic";
-
-async function authorizedOutlet(userId: string, outletId: string) {
-  if (!isValidObjectId(outletId)) return null;
-  const user = await UserModel.findById(userId).select("role outletId").lean<any>();
-  const admin = String(user?.role || "").toUpperCase() === "ADMIN";
-  if (!admin && String(user?.outletId || "") !== outletId) return null;
-  return OutletModel.findOne({ _id: outletId, isActive: true, status: "ACTIVE" }).lean();
-}
 
 function baseCost(row: any) {
   const baseUnit = row.productSource === "GROCERY" ? "QTY" : row.unitLabel === "HEAD" ? "HEAD" : "PCS";
@@ -36,40 +29,40 @@ export async function POST(req: NextRequest) {
   await dbConnect();
   const body = await req.json().catch(() => null) as any;
   const outletId = String(body?.outletId || "");
-  if (!(await authorizedOutlet(session!.user.id, outletId))) {
+  if (!isValidObjectId(outletId) || !(await findAuthorizedPosOutlet(session!.user.id, outletId))) {
     return NextResponse.json({ success: false, message: "Select an authorized outlet." }, { status: 400 });
   }
   const menuId = String(body?.menuItemId || "");
-  const outputQty = Math.trunc(Number(body?.outputQty || 0));
+  const outputQty = Number(body?.outputQty || 0);
   const requestedSources = Array.isArray(body?.sources) && body.sources.length > 0
     ? body.sources
     : [{ inventoryId: body?.sourceInventoryId, quantity: body?.sourceQty }];
   const quantitiesByInventory = new Map<string, number>();
   for (const requested of requestedSources) {
     const inventoryId = String(requested?.inventoryId || "");
-    const quantity = Math.trunc(Number(requested?.quantity ?? requested?.qty ?? 0));
-    if (!isValidObjectId(inventoryId) || quantity < 1) {
-      return NextResponse.json({ success: false, message: "Every ingredient must have a valid whole quantity." }, { status: 400 });
+    const quantity = Number(requested?.quantity ?? requested?.qty ?? 0);
+    if (!isValidObjectId(inventoryId) || !Number.isFinite(quantity) || quantity <= 0) {
+      return NextResponse.json({ success: false, message: "Every ingredient must have a valid positive quantity." }, { status: 400 });
     }
     quantitiesByInventory.set(inventoryId, (quantitiesByInventory.get(inventoryId) || 0) + quantity);
   }
   const ingredients = [...quantitiesByInventory].map(([inventoryId, quantity]) => ({ inventoryId, quantity }));
-  if (!isValidObjectId(menuId) || ingredients.length < 1 || outputQty < 1) {
+  if (!isValidObjectId(menuId) || ingredients.length < 1 || !Number.isSafeInteger(outputQty) || outputQty < 1) {
     return NextResponse.json({ success: false, message: "Select at least one ingredient and an output product, then enter valid whole quantities." }, { status: 400 });
   }
 
   async function performMixing(mongoSession?: ClientSession) {
       const sessionOptions = mongoSession ? { session: mongoSession } : {};
-      const [sources, menu] = await Promise.all([
-        OutletInventoryModel.find({ _id: { $in: ingredients.map((item) => item.inventoryId) }, outletId, isActive: true }).session(mongoSession || null),
-        OutletMenuItemModel.findOne({ _id: menuId, outletId, isActive: true }).session(mongoSession || null),
-      ]);
+      // Commands sharing a transaction session must execute sequentially.
+      const sources = await OutletInventoryModel.find({ _id: { $in: ingredients.map((item) => item.inventoryId) }, outletId, isActive: true }).session(mongoSession || null);
+      const menu = await OutletMenuItemModel.findOne({ _id: menuId, outletId, isActive: true }).session(mongoSession || null);
       if (!menu || sources.length !== ingredients.length) throw new Error("One or more selected mixing products are unavailable.");
 
       const sourceById = new Map(sources.map((source) => [String(source._id), source]));
       for (const ingredient of ingredients) {
         const source = sourceById.get(ingredient.inventoryId);
         if (!source) throw new Error("One or more selected mixing products are unavailable.");
+        if (!validIngredientQuantity(ingredient.quantity, source.unitLabel)) throw new Error(`${source.productName}: pieces and heads must be whole; measured ingredients must have a positive quantity.`);
         if (Number(source.stockQty || 0) < ingredient.quantity) {
           throw new Error(`${source.productName} has only ${source.stockQty} available.`);
         }
@@ -86,7 +79,7 @@ export async function POST(req: NextRequest) {
       });
 
       let target = await OutletInventoryModel.findOne({ outletId, productId: menu._id, isActive: true }).session(mongoSession || null);
-      if (!target) target = await OutletInventoryModel.findOne({ outletId, productName: menu.name, isActive: true }).session(mongoSession || null);
+      // Names are not identities: a raw ingredient can share the menu name.
       if (target && quantitiesByInventory.has(String(target._id))) {
         throw new Error("The output product cannot also be used as an ingredient in the same batch.");
       }
@@ -101,6 +94,8 @@ export async function POST(req: NextRequest) {
         target = created[0];
       }
       const targetBefore = Number(target.stockQty || 0);
+      target.companyUnitCost = weightedCompanyCost(targetBefore, target.companyUnitCost, outputQty,
+        productionCompanyCost(ingredients.map(ingredient => ({ quantity: ingredient.quantity, companyUnitCost: sourceById.get(ingredient.inventoryId)?.companyUnitCost })), outputQty));
       target.originType = "OUTLET_PRODUCTION";
       const existingUnitCost = baseCost(target);
       const weighted = calculateProductionBatchCost({
@@ -115,6 +110,9 @@ export async function POST(req: NextRequest) {
       });
       target.stockQty = targetBefore + outputQty;
       target.buyingPrice = weighted.weightedUnitCost;
+      target.unitLabel = "QTY";
+      target.packSize = 0;
+      target.sellingPrice = Number(menu.price || 0);
       await target.save(sessionOptions);
 
       const now = new Date();

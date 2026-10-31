@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import connectDb from "@/lib/mongodb";
 import { ensureDefaultExpenseTypes, expenseTypeCode } from "@/lib/expense-types";
+import { parseExpenseDate } from "@/lib/expense-date";
 import ExpenseModel from "@/models/Expense";
 import type { ExpenseType } from "@/models/Expense";
 import ExpenseTypeModel from "@/models/ExpenseType";
@@ -122,8 +123,14 @@ export async function POST(req: NextRequest) {
   const notes = String(body?.remarks || "").trim();
   const expenseDateInput = String(body?.expenseDate || "").trim();
   const expenseDate = expenseDateInput
-    ? new Date(`${expenseDateInput}T00:00:00.000Z`)
+    ? parseExpenseDate(expenseDateInput)
     : new Date();
+  if (!expenseDate) {
+    return NextResponse.json(
+      { success: false, message: "Enter a valid expense date." },
+      { status: 400 }
+    );
+  }
   const type = requestedType as ExpenseType;
 
   if (!name) {
@@ -214,11 +221,5 @@ export async function POST(req: NextRequest) {
     );
   } finally {
     await mongoSession.endSession();
-  }
-  if (Number.isNaN(expenseDate.getTime())) {
-    return NextResponse.json(
-      { success: false, message: "Enter a valid expense date." },
-      { status: 400 }
-    );
   }
 }

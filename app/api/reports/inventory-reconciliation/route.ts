@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inventoryReportScope, belongsToInventoryScope } from "@/lib/outlet-navigation";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
@@ -63,7 +64,7 @@ function result(
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const { response } = await requirePermission("reports.inventory");
   if (response) return response;
 
@@ -158,7 +159,9 @@ export async function GET() {
     }, customerById.get(id(inventory._id)) || []));
   }
 
-  const summary = rows.reduce((acc, row) => {
+  const scope = inventoryReportScope(new URL(request.url).searchParams.get("scope"));
+  const scopedRows = rows.filter((row) => belongsToInventoryScope(row.source, scope));
+  const summary = scopedRows.reduce((acc, row) => {
     acc[row.status] += 1;
     return acc;
   }, { OK: 0, NO_LEDGER: 0, MISMATCH: 0, BROKEN_CHAIN: 0 });
@@ -166,11 +169,11 @@ export async function GET() {
   return NextResponse.json({
     success: true,
     reconciledAt: new Date().toISOString(),
-    summary: { total: rows.length, ...summary },
+    summary: { total: scopedRows.length, ...summary },
     balanced:
       summary.MISMATCH === 0 &&
       summary.BROKEN_CHAIN === 0 &&
       summary.NO_LEDGER === 0,
-    data: rows,
+    data: scopedRows,
   });
 }

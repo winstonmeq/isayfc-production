@@ -1,4 +1,5 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
+import { menuStock } from "@/lib/business-flow";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId } from "mongoose";
 
@@ -13,6 +14,7 @@ import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import UserModel from "@/models/User";
+import { OutletEmployee } from "@/models/OutletEmployeeFinance";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,9 @@ export async function POST(req: NextRequest) {
     isLateEntry?: boolean;
     originalSaleAt?: string;
     lateEntryReason?: string;
+    paymentMethod?: string;
+    employeeId?: string;
+    idempotencyKey?: string;
   };
   const outletId = String(body?.outletId || "");
   const user = await UserModel.findById(session!.user.id).select("role outletId").lean<any>();
@@ -53,11 +58,28 @@ export async function POST(req: NextRequest) {
   if (!cart.length) {
     return NextResponse.json({ success: false, message: "Cart is empty." }, { status: 400 });
   }
+  const paymentMethod = String(body?.paymentMethod || "CASH");
+  if (!["CASH", "CREDIT"].includes(paymentMethod)) return NextResponse.json({ success: false, message: "Select cash or employee credit." }, { status: 400 });
+  const employeeId = String(body?.employeeId || "");
+  if (paymentMethod === "CREDIT" && !isValidObjectId(employeeId)) return NextResponse.json({ success: false, message: "Select the employee taking credit." }, { status: 400 });
+  const idempotencyKey = String(body?.idempotencyKey || "");
+  if (paymentMethod === "CREDIT" && !/^[\w-]{16,100}$/.test(idempotencyKey)) return NextResponse.json({ success: false, message: "Refresh and retry with a valid transaction key." }, { status: 400 });
+  const entryHash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
 
   const mongoSession = await mongoose.startSession();
   try {
     let result: Record<string, unknown> | null = null;
     await mongoSession.withTransaction(async () => {
+      if (idempotencyKey) {
+        const previous = await SaleModel.findOne({ outletId, idempotencyKey }).session(mongoSession);
+        if (previous) {
+          if (previous.entryHash !== entryHash) throw new PosError(409, "This transaction key was already used. Reload sales before entering a different sale.");
+          result = { id: String(previous._id), receiptNumber: previous.receiptNumber, totalAmount: previous.totalAmount, totalQty: previous.totalQty, change: previous.change || 0, saleDate: previous.saleDate.toISOString(), paymentMethod: previous.paymentMethod, employeeName: previous.employeeName };
+          return;
+        }
+      }
+      const employee = paymentMethod === "CREDIT" ? await OutletEmployee.findOne({ _id: employeeId, outletId, isActive: true }).session(mongoSession) : null;
+      if (paymentMethod === "CREDIT" && !employee) throw new PosError(400, "Select an active employee from this outlet.");
       const encodedAt = new Date();
       const isLateEntry = body?.isLateEntry === true;
       let saleAt = encodedAt;
@@ -82,13 +104,8 @@ export async function POST(req: NextRequest) {
       const inventory = await OutletInventoryModel.find({
         outletId,
         isActive: true,
-        $or: [
-          { productId: { $in: menuItems.map((row) => row._id) } },
-          { productName: { $in: menuItems.map((row) => row.name) } },
-        ],
+        productId: { $in: menuItems.map((row) => row._id) },
       }).session(mongoSession);
-      const byId = new Map(inventory.map((row) => [row.productId.toString(), row]));
-      const byName = new Map(inventory.map((row) => [row.productName.trim().toUpperCase(), row]));
 
       const lines: any[] = [];
       const deductions = new Map<string, { inventory: any; qty: number }>();
@@ -97,9 +114,9 @@ export async function POST(req: NextRequest) {
       for (const cartLine of cart) {
         const menu = menuById.get(String(cartLine.menuItemId));
         if (!menu) throw new PosError(404, "A menu item is unavailable.");
-        const qty = Math.trunc(Number(cartLine.qty || 0));
-        if (!Number.isFinite(qty) || qty < 1) throw new PosError(400, `Invalid quantity for ${menu.name}.`);
-        const finished = byId.get(menu._id.toString()) || byName.get(menu.name.trim().toUpperCase());
+        const qty = Number(cartLine.qty || 0);
+        if (!Number.isSafeInteger(qty) || qty < 1) throw new PosError(400, `Invalid quantity for ${menu.name}.`);
+        const finished = menuStock(inventory, menu._id);
         if (!finished) throw new PosError(409, `${menu.name} has no finished outlet stock.`);
         const current = Number(finished.stockQty || 0);
         const accumulated = deductions.get(finished._id.toString())?.qty || 0;
@@ -123,6 +140,7 @@ export async function POST(req: NextRequest) {
         lines.push({
           source: "OUTLET",
           outletInventoryId: finished._id,
+          companyUnitCost: finished.companyUnitCost,
           menuItemId: menu._id,
           productName: menu.name,
           categoryName: menu.category,
@@ -141,8 +159,9 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const cashReceived = Number(body?.cashReceived);
-      if (!Number.isFinite(cashReceived) || cashReceived < totalAmount) {
+      totalAmount = Math.round(totalAmount * 100) / 100;
+      const cashReceived = paymentMethod === "CREDIT" ? 0 : Number(body?.cashReceived);
+      if (paymentMethod === "CASH" && (!Number.isFinite(cashReceived) || cashReceived < totalAmount)) {
         throw new PosError(400, `Cash received must be at least ${totalAmount.toFixed(2)}.`);
       }
       const receiptNumber = `POS-${manilaDateString(saleAt).replaceAll("-", "")}-${randomUUID().slice(0, 8).toUpperCase()}`;
@@ -155,14 +174,16 @@ export async function POST(req: NextRequest) {
         source: "OUTLET",
         outletId,
         channel: "WEB",
-        paymentMethod: "CASH",
+        paymentMethod,
+        ...(employee ? { employeeId: employee._id, employeeName: employee.name } : {}),
+        ...(idempotencyKey ? { idempotencyKey, entryHash } : {}),
         cashReceived,
-        change: cashReceived - totalAmount,
+        change: paymentMethod === "CASH" ? cashReceived - totalAmount : 0,
         totalAmount,
-        paidAmount: totalAmount,
-        balance: 0,
+        paidAmount: paymentMethod === "CASH" ? totalAmount : 0,
+        balance: paymentMethod === "CREDIT" ? totalAmount : 0,
         totalQty,
-        status: "PAID",
+        status: paymentMethod === "CREDIT" && totalAmount > 0 ? "UNPAID" : "PAID",
         remarks: `WEB POS OUTLET:${outletId} ${String(body?.remarks || "").trim()}${auditRemark}`,
         createdBy: session!.user.id,
       }], { session: mongoSession });
@@ -201,7 +222,7 @@ export async function POST(req: NextRequest) {
           createdBy: session!.user.id,
         }], { session: mongoSession });
       }
-      result = { id: sale._id.toString(), receiptNumber, totalAmount, totalQty, change: cashReceived - totalAmount, saleDate: saleAt.toISOString(), encodedAt: encodedAt.toISOString(), isLateEntry };
+      result = { id: sale._id.toString(), receiptNumber, totalAmount, totalQty, change: paymentMethod === "CASH" ? cashReceived - totalAmount : 0, saleDate: saleAt.toISOString(), encodedAt: encodedAt.toISOString(), isLateEntry, paymentMethod, employeeName: employee?.name };
     });
     return NextResponse.json({ success: true, message: "Sale recorded.", sale: result });
   } catch (error) {

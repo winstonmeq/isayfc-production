@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { inventoryReportScope, belongsToInventoryScope } from "@/lib/outlet-navigation";
 
 import dbConnect from "@/lib/mongodb";
 import {
@@ -122,6 +123,7 @@ export async function GET(req: NextRequest) {
   void OutletModel;
 
   const { searchParams } = new URL(req.url);
+  const scope = inventoryReportScope(searchParams.get("scope"));
   const { start, end } = parseReportRange(searchParams);
 
   const [
@@ -335,7 +337,11 @@ export async function GET(req: NextRequest) {
       row.otherOut;
   }
 
+  const locationOptions = [...new Set([...rows.values()].filter((row) => belongsToInventoryScope(row.source, scope)).map((row) => row.location))].sort();
+  const location = searchParams.get("location");
   const data = [...rows.values()]
+    .filter((row) => belongsToInventoryScope(row.source, scope))
+    .filter((row) => !location || row.location === location)
     .filter(
       (row) =>
         row.opening !== 0 ||
@@ -373,6 +379,7 @@ export async function GET(req: NextRequest) {
     range: { start: start.toISOString(), end: end.toISOString() },
     generatedAt: manilaDateString(),
     data,
+    locationOptions,
     summary,
   });
 }

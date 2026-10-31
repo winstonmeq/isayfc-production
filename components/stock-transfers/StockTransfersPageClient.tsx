@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -38,7 +40,6 @@ import {
 } from "@/components/ui/command";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -83,6 +84,7 @@ type ProductOption = {
   packSize: number;
   unitLabel: "PACK" | "HEAD" | "PCS" | "QTY";
   stockDisplay: string;
+  sellingPrice: number;
 };
 
 type ApiMeta = { page: number; limit: number; total: number; totalPages: number };
@@ -316,6 +318,7 @@ export function StockTransfersPageClient() {
           _id: string;
           name: string;
           stockQty?: number;
+          sellingPrice?: number;
           baseUnit?: "HEAD" | "PCS";
           packSize?: number;
           stockDisplay?: string;
@@ -344,6 +347,7 @@ export function StockTransfersPageClient() {
             source: "BODEGA",
             id: p._id,
             name: p.name,
+            sellingPrice: Number(p.sellingPrice || 0),
             standardPackingId: packing?._id,
             packingLabel,
             stock,
@@ -361,6 +365,7 @@ export function StockTransfersPageClient() {
           _id: string;
           name: string;
           stockPcs?: number;
+          unitPrice?: number;
         }>) {
           const stock = Number(p.stockPcs || 0);
 
@@ -370,6 +375,7 @@ export function StockTransfersPageClient() {
             id: p._id,
             name: p.name,
             stock,
+            sellingPrice: Number(p.unitPrice || 0),
             packSize: 0,
             unitLabel: "QTY",
             stockDisplay: `${stock} in stock`,
@@ -701,6 +707,7 @@ export function StockTransfersPageClient() {
                 <TableHead className="text-right">Items</TableHead>
                 <TableHead className="text-right">Qty Sent</TableHead>
                 <TableHead className="text-right">Qty Received</TableHead>
+                <TableHead className="text-right">Transaction Amount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -708,14 +715,14 @@ export function StockTransfersPageClient() {
             <TableBody>
               {isLoading && transfers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-10 text-center">
+                  <TableCell colSpan={10} className="py-10 text-center">
                     <Loader2 className="mx-auto size-5 animate-spin text-slate-400" />
                   </TableCell>
                 </TableRow>
               ) : transfers.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={10}
                     className="py-10 text-center text-slate-500"
                   >
                     <Truck className="mx-auto mb-2 size-6" />
@@ -750,6 +757,7 @@ export function StockTransfersPageClient() {
                         ? transfer.totalReceivedQty
                         : "-"}
                     </TableCell>
+                    <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">₱{Number(transfer.transactionAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
                         <StatusBadge status={transfer.status} />
@@ -873,7 +881,7 @@ export function StockTransfersPageClient() {
       </Card>
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-h-[92vh] w-[95vw] max-w-[95vw] overflow-y-auto sm:max-w-3xl lg:max-w-5xl">
+        <EntryDialogContent className="max-h-[92vh] w-[95vw] max-w-[95vw] overflow-y-auto sm:max-w-3xl lg:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Edit Manual Delivery" : "Administrator Manual Delivery"}
@@ -918,9 +926,11 @@ export function StockTransfersPageClient() {
             <div className="space-y-2">
               <Label>Products</Label>
 
-              <div className="hidden gap-2 px-1 text-xs font-semibold text-slate-500 sm:grid sm:grid-cols-[1fr_180px_40px]">
+              <div className="hidden gap-2 px-1 text-xs font-semibold text-slate-500 sm:grid sm:grid-cols-[minmax(200px,1fr)_160px_120px_140px_40px]">
                 <span>Product</span>
                 <span>Quantity</span>
+                <span>Unit Price</span>
+                <span>Line Amount</span>
                 <span />
               </div>
 
@@ -936,7 +946,7 @@ export function StockTransfersPageClient() {
                 return (
                   <div
                     key={index}
-                    className="grid gap-2 sm:grid-cols-[1fr_180px_40px]"
+                    className="grid items-start gap-2 sm:grid-cols-[minmax(200px,1fr)_160px_120px_140px_40px]"
                   >
                     <div>
                       <TransferProductPicker
@@ -983,6 +993,8 @@ export function StockTransfersPageClient() {
                       ) : null}
                     </div>
 
+                    <div className="py-3 text-sm tabular-nums"><span className="sm:hidden">Unit Price: </span>₱{Number(selected?.sellingPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span className="block text-xs text-slate-500">per {isPack ? "pack" : selected?.unitLabel === "HEAD" ? "head" : "unit"}</span></div>
+                    <div className="py-3 font-semibold tabular-nums"><span className="sm:hidden">Amount: </span>₱{((Number(selected?.sellingPrice) || 0) * (Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -1011,6 +1023,7 @@ export function StockTransfersPageClient() {
               </Button>
             </div>
 
+            <div className="flex justify-between rounded-lg border bg-slate-50 p-4 font-bold"><span>Total Delivery Amount</span><span>₱{formItems.reduce((sum, item) => sum + (Number(productByKey.get(item.key)?.sellingPrice) || 0) * Math.max(0, Number(item.qty) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
             <div className="space-y-1.5">
               <Label>Remarks</Label>
               <Textarea
@@ -1040,7 +1053,7 @@ export function StockTransfersPageClient() {
               Save & Dispatch
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
 
       <TransferDetailDialog detail={detail} onClose={() => setDetail(null)} />

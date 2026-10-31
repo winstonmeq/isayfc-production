@@ -1,6 +1,8 @@
 // components/roles/RolesPageClient.tsx
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useState } from "react";
 import {
   Loader2,
@@ -19,7 +21,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -388,7 +389,7 @@ export function RolesPageClient() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+        <EntryDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl font-black">
               <ShieldCheck className="h-6 w-6" />
@@ -502,10 +503,10 @@ export function RolesPageClient() {
               {isSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              {editingRole ? "Update Role" : "Save Role"}
+              {editingRole ? "Save" : "Save"}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </div>
   );

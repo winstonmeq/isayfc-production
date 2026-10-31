@@ -1,12 +1,12 @@
-import { DailySlicingHistoryPageClient } from "@/components/slicing/DailySlicingHistoryPageClient";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata = {
-  title: "Daily Slicing History",
+  title: "Slicing History",
 };
 
 export default function DailySlicingHistoryPage() {
-  return <DailySlicingHistoryPageClient />;
+  redirect("/slicing");
 }

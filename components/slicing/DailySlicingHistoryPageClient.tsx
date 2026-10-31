@@ -344,55 +344,6 @@ export function DailySlicingHistoryPageClient() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Card className="border-blue-100 bg-gradient-to-br from-blue-50 to-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-blue-900">Daily Records</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-blue-950">{formatWhole(summary.dayCount)}</p>
-            <p className="text-xs text-blue-700">{formatWhole(summary.batchCount)} slicing batches</p>
-          </CardContent>
-        </Card>
-        <Card className="border-emerald-100 bg-gradient-to-br from-emerald-50 to-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-emerald-900">Actual Output</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-emerald-950">{formatWhole(summary.actualSlicedPcs)}</p>
-            <p className="text-xs text-emerald-700">pcs sliced</p>
-          </CardContent>
-        </Card>
-        <Card className="border-violet-100 bg-gradient-to-br from-violet-50 to-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-violet-900">Packed Output</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-violet-950">{formatWhole(summary.actualPacks)}</p>
-            <p className="text-xs text-violet-700">packs + {formatWhole(summary.butal)} loose pcs</p>
-          </CardContent>
-        </Card>
-        <Card className="border-amber-100 bg-gradient-to-br from-amber-50 to-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-amber-900">Input Used</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-amber-950">{formatWhole(summary.heads)}</p>
-            <p className="text-xs text-amber-700">heads / {formatDecimal(summary.kilos)} kilos</p>
-          </CardContent>
-        </Card>
-        <Card className="border-slate-200 bg-gradient-to-br from-slate-50 to-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-900">Yield</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-slate-950">{formatPercent(summary.yieldRate)}</p>
-            <p className={cn("text-xs", summary.variance < 0 ? "text-red-700" : "text-emerald-700")}>
-              Variance {summary.variance > 0 ? "+" : ""}{formatWhole(Math.abs(summary.variance))} pcs
-            </p>
-          </CardContent>
-        </Card>
-      </div>
 
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="gap-1 border-b bg-slate-50/70">

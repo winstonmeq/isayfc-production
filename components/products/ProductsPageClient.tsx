@@ -1,6 +1,8 @@
 // components/products/ProductsPageClient.tsx
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useState } from "react";
 import {
   Loader2,
@@ -23,7 +25,6 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -550,7 +551,7 @@ export function ProductsPageClient() {
       </Card>
 
       <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <EntryDialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingProduct ? "Edit Product" : "Add Product"}
@@ -674,11 +675,11 @@ export function ProductsPageClient() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
 
       <Dialog open={stockDialogOpen} onOpenChange={setStockDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <EntryDialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Add Stock: {stockProduct?.name}</DialogTitle>
           </DialogHeader>
@@ -751,7 +752,7 @@ export function ProductsPageClient() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </div>
   );

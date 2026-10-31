@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Pencil, Plus, Trash2, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +9,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -377,7 +378,7 @@ export function OutletMenuPageClient() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[92vh] w-[95vw] max-w-[95vw] overflow-y-auto sm:max-w-2xl">
+        <EntryDialogContent className="max-h-[92vh] w-[95vw] max-w-[95vw] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editing ? "Edit Menu Item" : "Add Menu Item"}
@@ -542,7 +543,7 @@ export function OutletMenuPageClient() {
               )}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </div>
   );

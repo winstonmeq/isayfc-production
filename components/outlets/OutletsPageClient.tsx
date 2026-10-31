@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useState } from "react";
 import { Loader2, Pencil, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,7 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -409,7 +410,7 @@ export function OutletsPageClient() {
       </ErpSection>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <EntryDialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingOutlet ? "Edit Outlet" : "Add Outlet"}</DialogTitle>
           </DialogHeader>
@@ -488,11 +489,11 @@ export function OutletsPageClient() {
               </Button>
               <Button type="submit" disabled={isSaving}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isSaving ? "Saving..." : "Save Outlet"}
+                {isSaving ? "Saving..." : "Save"}
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </ErpPage>
   );

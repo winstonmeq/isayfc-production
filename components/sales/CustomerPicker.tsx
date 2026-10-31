@@ -23,6 +23,7 @@ export type CustomerOption = {
   _id: string;
   name: string;
   outletName?: string;
+  outletId?: string;
 };
 
 export function CustomerPicker({

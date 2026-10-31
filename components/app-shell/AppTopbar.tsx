@@ -8,6 +8,7 @@ import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, UserCircle2 } from "lucide
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { isOutletRoute, OUTLET_ROUTES } from "@/lib/outlet-navigation";
 import { appNavItems, type AppNavItem } from "./nav-config";
 
 type Props = {
@@ -54,8 +55,8 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       pathname === route ||
       pathname.startsWith(`${route}/`)
   );
-  const isPosModule = pathname === "/pos" || pathname.startsWith("/pos/");
-  const isCollectionsModule = ["/payments", "/accounts-payable"].some(
+  const isPosModule = isOutletRoute(pathname, selectedModule);
+  const isCollectionsModule = ["/payments", "/accounts-payable", "/supplier-payment-history"].some(
     (route) =>
       selectedModule === route ||
       selectedModule.startsWith(`${route}/`) ||
@@ -63,7 +64,6 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       pathname.startsWith(`${route}/`)
   );
   const isProfitabilityModule = [
-    "/outlet-summary",
     "/profit/chicken-slicing",
   ].some(
     (route) =>
@@ -77,7 +77,6 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
   const isInventoryModule = [
     "/inventory/bodega",
     "/inventory/products",
-    "/outlet-inventory",
     "/stock-counts",
     "/inventory-adjustments",
   ].some(
@@ -87,7 +86,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       pathname === route ||
       pathname.startsWith(`${route}/`)
   );
-  const currentArea = selectedModule.startsWith("/reports/")
+  const currentArea = isPosModule ? "Outlet Operations" : selectedModule.startsWith("/reports/")
     ? "Reports"
     : ["/users", "/roles", "/audit-logs", "/corrections"].includes(selectedModule)
       ? "Users"
@@ -96,11 +95,11 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
         : isProductionModule
           ? "Production"
           : isPosModule
-            ? "Outlet POS"
+            ? "Outlet Operations"
           : isSalesModule
             ? "Sales"
             : isCollectionsModule
-              ? "Collections"
+              ? "Finance"
               : isProfitabilityModule
                 ? "Profitability"
                 : isExpensesModule
@@ -241,11 +240,11 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           },
         ]
       : []),
-    ...((isAdmin || permissions.includes("pos.view"))
+    ...(canAccessAnyRoute(OUTLET_ROUTES)
       ? [
           {
-            label: "POS",
-            href: "/pos",
+            label: "Outlet Operations",
+            href: appNavItems.find((item) => item.title === "Outlet Operations")?.children?.find((child) => isAdmin || !child.permission || permissions.includes(child.permission))?.href || "/pos",
             active: isPosModule,
           },
         ]
@@ -253,20 +252,19 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
     ...(canAccessAnyFinanceRoute(["/payments", "/accounts-payable"])
       ? [
           {
-            label: "Collections",
+            label: "Finance",
             href: `/finance?module=${encodeURIComponent("/payments")}`,
-            active: isCollectionsModule,
+            active: !isPosModule && isCollectionsModule,
           },
         ]
       : []),
     ...(canAccessAnyFinanceRoute([
-      "/outlet-summary",
       "/profit/chicken-slicing",
     ])
       ? [
           {
             label: "Profitability",
-            href: `/finance?module=${encodeURIComponent("/outlet-summary")}`,
+            href: `/finance?module=${encodeURIComponent("/profit/chicken-slicing")}`,
             active: isProfitabilityModule,
           },
         ]
@@ -283,7 +281,6 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
     ...(canAccessAnyFinanceRoute([
       "/inventory/bodega",
       "/inventory/products",
-      "/outlet-inventory",
       "/stock-counts",
       "/inventory-adjustments",
     ])
@@ -300,7 +297,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           {
             label: "Reports",
             href: `/finance?module=${encodeURIComponent(firstReport)}`,
-            active: selectedModule.startsWith("/reports/"),
+            active: !isPosModule && (selectedModule.startsWith("/reports/") || pathname.startsWith("/reports/")),
           },
         ]
       : []),

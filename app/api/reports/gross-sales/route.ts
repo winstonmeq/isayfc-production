@@ -1,8 +1,12 @@
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 import { NextRequest, NextResponse } from "next/server";
+import { recognizedSaleRange } from "@/lib/business-flow";
 import { Types } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { manilaDateString } from "@/lib/date-utils";
+import { getExpenseTypeNames } from "@/lib/expense-types";
+import { salesReportAmounts } from "@/lib/sales-report-amounts";
 import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import { parseReportRange, roundMoney } from "@/lib/report-utils";
 import { requirePermission } from "@/lib/require-permission";
@@ -22,6 +26,8 @@ type SaleLineRow = {
   qty?: number;
   price?: number;
   lineTotal?: number;
+  grossLineTotal?: number;
+  discountAmount?: number;
   unitCost?: number;
   stockUnit?: string;
   packSize?: number;
@@ -40,6 +46,7 @@ type ProductBucket = {
   pieceRevenue: number;
   stockUnitsOut: number;
   cogs: number;
+  discounts: number;
 };
 
 type StockRollForward = {
@@ -59,8 +66,8 @@ export async function GET(request: NextRequest) {
   const sales = await SaleModel.find({
     isVoided: false,
     fulfillmentStatus: { $ne: "PENDING" },
-    saleDate: { $gte: start, $lt: end },
-    $nor: outletSaleMatchClauses(),
+    $expr: recognizedSaleRange(start, end),
+    $nor: [...outletSaleMatchClauses(), ...internalOutletMatchClauses()],
   })
     .select("_id")
     .lean<Array<{ _id: Types.ObjectId }>>();
@@ -70,7 +77,7 @@ export async function GET(request: NextRequest) {
   const lines = saleIds.length
     ? await SaleLineModel.find({ saleId: { $in: saleIds } })
         .select(
-          "source categoryName productName qty price lineTotal unitCost stockUnit packSize stockPcsOut baseQty"
+          "source categoryName productName qty price lineTotal grossLineTotal discountAmount unitCost stockUnit packSize stockPcsOut baseQty"
         )
         .lean<SaleLineRow[]>()
     : [];
@@ -92,10 +99,13 @@ export async function GET(request: NextRequest) {
       pieceRevenue: 0,
       stockUnitsOut: 0,
       cogs: 0,
+      discounts: 0,
     };
 
     const qty = Number(line.qty || 0);
-    const revenue = Number(line.lineTotal || 0);
+    const amounts = salesReportAmounts(line);
+    const revenue = amounts.grossSales;
+    bucket.discounts = roundMoney(bucket.discounts + amounts.discounts);
     const stockUnits = Number(line.baseQty ?? line.stockPcsOut ?? qty);
     if (line.stockUnit === "PACK") {
       bucket.packUnits += qty;
@@ -173,6 +183,7 @@ export async function GET(request: NextRequest) {
   const products = [...buckets.values()]
     .map((bucket) => {
       const grossSales = roundMoney(bucket.packRevenue + bucket.pieceRevenue);
+      const netSales = roundMoney(grossSales - bucket.discounts);
       const cogs = roundMoney(bucket.cogs);
       const rollForward =
         bucket.source === "CHICKEN"
@@ -192,8 +203,9 @@ export async function GET(request: NextRequest) {
             ? roundMoney(bucket.pieceRevenue / bucket.pieceUnits)
             : 0,
         grossSales,
+        netSales,
         cogs,
-        grossProfit: roundMoney(grossSales - cogs),
+        grossProfit: roundMoney(netSales - cogs),
         beginningInventory: rollForward?.beginning || 0,
         processedChickenCuts: rollForward?.processed || 0,
         endingInventory: rollForward?.ending || 0,
@@ -210,8 +222,10 @@ export async function GET(request: NextRequest) {
   const productCogs = roundMoney(
     products.reduce((sum, product) => sum + product.cogs, 0)
   );
+  const discounts = roundMoney(products.reduce((sum, product) => sum + product.discounts, 0));
+  const netSales = roundMoney(grossSales - discounts);
   const totalCogs = roundMoney(productCogs + outletCogs);
-  const grossProfit = roundMoney(grossSales - totalCogs);
+  const grossProfit = roundMoney(netSales - totalCogs);
 
   const expenseRows = await ExpenseModel.aggregate<{
     _id: string;
@@ -230,9 +244,11 @@ export async function GET(request: NextRequest) {
     },
     { $group: { _id: "$type", total: { $sum: "$amount" } } },
   ]);
+  const expenseNames = await getExpenseTypeNames();
   const expenses = expenseRows
     .map((expense) => ({
       type: String(expense._id || "OTHERS"),
+      name: expenseNames.get(String(expense._id || "OTHERS")) || String(expense._id || "OTHERS").replaceAll("_", " "),
       total: roundMoney(Number(expense.total || 0)),
     }))
     .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type));
@@ -252,6 +268,8 @@ export async function GET(request: NextRequest) {
       pieceUnits: products.reduce((sum, product) => sum + product.pieceUnits, 0),
       pieceSales: roundMoney(products.reduce((sum, product) => sum + product.pieceRevenue, 0)),
       grossSales,
+      discounts,
+      netSales,
       beginningInventory: products.reduce(
         (sum, product) => sum + product.beginningInventory,
         0
@@ -270,7 +288,7 @@ export async function GET(request: NextRequest) {
       grossProfit,
       totalOperatingExpenses,
       netIncome,
-      profitabilityRatio: grossSales > 0 ? Math.round((netIncome / grossSales) * 10000) / 100 : 0,
+      profitabilityRatio: netSales > 0 ? Math.round((netIncome / netSales) * 10000) / 100 : 0,
     },
     expenses,
   });

@@ -229,16 +229,10 @@ export async function POST(req: NextRequest) {
       const finishedInventories = await OutletInventoryModel.find({
         outletId,
         isActive: true,
-        $or: [
-          { productId: { $in: menuItems.map((m) => m._id) } },
-          { productName: { $in: menuItems.map((m) => m.name) } },
-        ],
+        productId: { $in: menuItems.map((m) => m._id) },
       }).session(mongoSession);
       const finishedByMenuId = new Map(
         finishedInventories.map((inv) => [inv.productId.toString(), inv])
-      );
-      const finishedByName = new Map(
-        finishedInventories.map((inv) => [inv.productName.trim().toUpperCase(), inv])
       );
 
       // 2) Build sale lines + accumulate stock deductions.
@@ -260,8 +254,8 @@ export async function POST(req: NextRequest) {
         const menu = menuById.get(String(c.menuItemId));
         if (!menu) throw new ApiError(404, "A menu item was not found or is unavailable.");
 
-        const qty = Math.trunc(Number(c.qty || 0));
-        if (!Number.isFinite(qty) || qty < 1) {
+        const qty = Number(c.qty || 0);
+        if (!Number.isSafeInteger(qty) || qty < 1) {
           throw new ApiError(400, `Invalid quantity for ${menu.name}.`);
         }
 
@@ -270,8 +264,7 @@ export async function POST(req: NextRequest) {
         totalQty += qty;
 
         const finishedInventory =
-          finishedByMenuId.get(menu._id.toString()) ||
-          finishedByName.get(menu.name.trim().toUpperCase());
+          finishedByMenuId.get(menu._id.toString());
 
         if (!finishedInventory) {
           throw new ApiError(
@@ -283,6 +276,7 @@ export async function POST(req: NextRequest) {
         lines.push({
           source: "OUTLET",
           outletInventoryId: finishedInventory._id,
+          companyUnitCost: finishedInventory.companyUnitCost,
           menuItemId: menu._id,
           productName: menu.name,
           categoryName: menu.category,

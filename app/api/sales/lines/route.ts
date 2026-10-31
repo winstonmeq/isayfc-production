@@ -1,3 +1,4 @@
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 // app/api/sales/lines/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
@@ -51,11 +52,7 @@ function getPrice(line: any) {
 }
 
 function getLineTotal(line: any) {
-  const savedTotal = Number(line.lineTotal ?? line.totalAmount ?? 0);
-
-  if (savedTotal > 0) return savedTotal;
-
-  return getQty(line) * getPrice(line);
+  return Number(line.lineTotal ?? line.totalAmount ?? getQty(line) * getPrice(line));
 }
 
 export async function GET(req: NextRequest) {
@@ -139,6 +136,7 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  saleFilter.$and = [...(saleFilter.$and || []), { $nor: internalOutletMatchClauses() }];
   const sales = await SaleModel.find(saleFilter)
     .populate("customerId", "name")
     .populate("outletId", "name code")
@@ -281,6 +279,10 @@ export async function GET(req: NextRequest) {
         qty,
         price,
         lineTotal,
+        grossLineTotal: Number(line.grossLineTotal ?? line.lineTotal ?? 0),
+        discountAmount: Number(line.discountAmount || 0),
+        discountName: line.discountName || "",
+        discountBasis: line.discountBasis || "PER_ROW",
         remarks: line.remarks || sale.remarks || "",
       };
     })
@@ -315,12 +317,14 @@ export async function GET(req: NextRequest) {
       rows: sum.rows + 1,
       totalQty: sum.totalQty + Number(line.qty || 0),
       totalPrice: sum.totalPrice + Number(line.price || 0),
+      totalDiscount: sum.totalDiscount + Number(line.discountAmount || 0),
       totalAmount: sum.totalAmount + Number(line.lineTotal || 0),
     }),
     {
       rows: 0,
       totalQty: 0,
       totalPrice: 0,
+      totalDiscount: 0,
       totalAmount: 0,
     }
   );

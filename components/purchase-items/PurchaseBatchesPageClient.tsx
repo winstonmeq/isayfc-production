@@ -57,6 +57,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn, formatPeso } from "@/lib/utils";
+import { useSession } from "next-auth/react";
+import { manilaDateString } from "@/lib/date-utils";
 
 type ProductOption = {
   _id: string;
@@ -73,6 +75,17 @@ type PurchaseBatch = {
   totalItems: number;
   totalAmount: number;
   remarks?: string;
+  productNames?: string[];
+  lineCount?: number;
+  createdByName?: string;
+  supplierId?: string;
+  supplierName?: string;
+  invoiceNumber?: string;
+  dueDate?: string;
+  paymentMode?: "CASH" | "CREDIT";
+  invoiceStatus?: string;
+  paidAmount?: number;
+  balance?: number | null;
 };
 
 type PurchaseBatchDetail = PurchaseBatch & {
@@ -119,10 +132,12 @@ function ProductPicker({
   products,
   value,
   onSelect,
+  disabled = false,
 }: {
   products: ProductOption[];
   value: string;
   onSelect: (value: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const selectedProduct = products.find((product) => product._id === value);
@@ -134,6 +149,7 @@ function ProductPicker({
           type="button"
           variant="outline"
           role="combobox"
+          disabled={disabled}
           aria-expanded={open}
           className="w-full justify-between bg-white font-normal"
         >
@@ -189,6 +205,14 @@ function formatDate(value?: string) {
 }
 
 export function PurchaseBatchesPageClient() {
+  const { data: session } = useSession();
+  const role = String(session?.user?.roleName || session?.user?.role || "").toUpperCase();
+  const canPay = role === "ADMIN" || session?.user?.permissions?.includes("accounts-payable.manage");
+  const [suppliers, setSuppliers] = useState<Array<{ _id: string; name: string }>>([]);
+  const [supplierId, setSupplierId] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [paymentMode, setPaymentMode] = useState<"CASH" | "CREDIT">("CREDIT");
   const [batches, setBatches] = useState<PurchaseBatch[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
 
@@ -215,7 +239,7 @@ export function PurchaseBatchesPageClient() {
   });
 
   const [datePurchased, setDatePurchased] = useState(
-    new Date().toISOString().slice(0, 10)
+    manilaDateString()
   );
 
   const [remarks, setRemarks] = useState("");
@@ -241,9 +265,21 @@ export function PurchaseBatchesPageClient() {
       const price = Number(item.buyingPrice) || 0;
       const qty = Number(item.quantity) || 0;
 
-      return sum + price * qty;
+      return Math.round((sum + Math.round(price * qty * 100) / 100) * 100) / 100;
     }, 0);
   }, [items]);
+
+  async function loadSuppliers() {
+    const rows: Array<{ _id: string; name: string }> = [];
+    let page = 1, pages = 1;
+    do {
+      const response = await fetch(`/api/suppliers?limit=100&page=${page}`, { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) { toast.error(result.message || "Unable to load suppliers."); return; }
+      rows.push(...(result.data || [])); pages = Number(result.meta?.totalPages || 1); page++;
+    } while (page <= pages);
+    setSuppliers(rows);
+  }
 
   async function loadProducts() {
     try {
@@ -360,6 +396,7 @@ export function PurchaseBatchesPageClient() {
 
   useEffect(() => {
     void loadProducts();
+    void loadSuppliers();
   }, []);
 
   useEffect(() => {
@@ -368,8 +405,9 @@ export function PurchaseBatchesPageClient() {
   }, [page, limit, appliedFilters]);
 
   function resetForm() {
+    setSupplierId(""); setInvoiceNumber(""); setDueDate(""); setPaymentMode("CREDIT");
     setEditingId(null);
-    setDatePurchased(new Date().toISOString().slice(0, 10));
+    setDatePurchased(manilaDateString());
     setRemarks("");
     setItems([{ ...emptyItem }, { ...emptyItem }, { ...emptyItem }]);
   }
@@ -396,6 +434,10 @@ export function PurchaseBatchesPageClient() {
     setEditingId(data._id);
     setDatePurchased(formatDate(data.datePurchased));
     setRemarks(data.remarks || "");
+    setSupplierId(data.supplierId || "");
+    setInvoiceNumber(data.invoiceNumber || "");
+    setDueDate(data.dueDate ? formatDate(data.dueDate) : formatDate(data.datePurchased));
+    setPaymentMode(data.paymentMode || "CREDIT");
 
     setItems(
       data.items.length > 0
@@ -511,6 +553,8 @@ export function PurchaseBatchesPageClient() {
       }
     }
 
+    if (!supplierId || !invoiceNumber.trim()) { toast.error("Supplier and invoice/receipt number are required."); return; }
+    if (paymentMode === "CASH" && !canPay) { toast.error("Accounts Payable payment permission is required for cash settlement."); return; }
     setIsSaving(true);
 
     try {
@@ -524,6 +568,7 @@ export function PurchaseBatchesPageClient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          supplierId, invoiceNumber: invoiceNumber.trim(), dueDate: dueDate || datePurchased, paymentMode,
           datePurchased,
           remarks,
           items: validItems,
@@ -694,29 +739,36 @@ export function PurchaseBatchesPageClient() {
               <TableHeader className="bg-slate-950">
                 <TableRow>
                   <TableHead className="text-white">Date Purchased</TableHead>
+                  <TableHead className="text-white">Supplier</TableHead>
+                  <TableHead className="text-white">Invoice / Due Date</TableHead>
+                  <TableHead className="text-white">Products</TableHead>
+                  <TableHead className="text-center text-white">Product Lines</TableHead>
                   <TableHead className="text-right text-white">
-                    Total Items
+                    Total Quantity
                   </TableHead>
                   <TableHead className="text-right text-white">
                     Total Amount
                   </TableHead>
-                  <TableHead className="text-center text-white">
-                    Action
-                  </TableHead>
+                  <TableHead className="text-white">Remarks</TableHead>
+                  <TableHead className="text-center text-white">Invoice Status</TableHead>
+                  <TableHead className="text-right text-white">Paid</TableHead>
+                  <TableHead className="text-right text-white">Balance</TableHead>
+                  <TableHead className="text-white">Recorded By</TableHead>
+                  <TableHead className="text-center text-white">Action</TableHead>
                 </TableRow>
               </TableHeader>
 
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-36 text-center">
+                    <TableCell colSpan={13} className="h-36 text-center">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" />
                     </TableCell>
                   </TableRow>
                 ) : batches.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={13}
                       className="h-36 text-center text-slate-500"
                     >
                       No purchase batches found.
@@ -731,6 +783,10 @@ export function PurchaseBatchesPageClient() {
                           {formatDate(batch.datePurchased)}
                         </div>
                       </TableCell>
+                      <TableCell>{batch.supplierName || "Not linked — use Edit"}</TableCell>
+                      <TableCell>{batch.invoiceNumber || "—"}{batch.dueDate && <p className="text-xs text-slate-500">Due: {formatDate(batch.dueDate)}</p>}</TableCell>
+                      <TableCell className="min-w-[180px] whitespace-normal">{batch.productNames?.length ? batch.productNames.join(", ") : "—"}</TableCell>
+                      <TableCell className="text-center">{batch.lineCount || 0}</TableCell>
 
                       <TableCell className="text-right">
                         {Number(batch.totalItems || 0).toLocaleString()}
@@ -739,6 +795,11 @@ export function PurchaseBatchesPageClient() {
                       <TableCell className="text-right font-semibold">
                         {formatPeso(Number(batch.totalAmount || 0))}
                       </TableCell>
+                      <TableCell className="max-w-xs whitespace-normal">{batch.remarks || "—"}</TableCell>
+                      <TableCell className="text-center">{batch.invoiceStatus || "NOT LINKED"}</TableCell>
+                      <TableCell className="text-right">{batch.balance === null || batch.balance === undefined ? "—" : formatPeso(batch.paidAmount || 0)}</TableCell>
+                      <TableCell className="text-right">{batch.balance === null || batch.balance === undefined ? "—" : formatPeso(batch.balance)}</TableCell>
+                      <TableCell>{batch.createdByName || "—"}</TableCell>
 
                       <TableCell>
                         <div className="flex justify-center gap-2">
@@ -806,162 +867,84 @@ export function PurchaseBatchesPageClient() {
       </Card>
 
       <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black">
-              {editingId ? "Edit Purchase Batch" : "Add Purchase Batch"}
-            </DialogTitle>
-            <DialogDescription>
-              Select products, quantity, and buying price. Saving will update
-              product stock.
-            </DialogDescription>
+        <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+          <DialogHeader className="shrink-0 border-b px-5 py-4">
+            <DialogTitle className="text-xl font-bold">{editingId ? "Edit Purchase" : "New Purchase"}</DialogTitle>
+            <DialogDescription className="sr-only">Purchase details and product items.</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Date Purchased</Label>
-                <Input
-                  type="date"
-                  value={datePurchased}
-                  onChange={(event) => setDatePurchased(event.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Remarks</Label>
-                <Input
-                  value={remarks}
-                  onChange={(event) => setRemarks(event.target.value)}
-                  placeholder="Optional remarks"
-                />
-              </div>
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="space-y-1 text-sm font-medium">
+                <span>Supplier *</span>
+                <select className="h-10 w-full rounded-lg border bg-white px-3" value={supplierId} onChange={(event) => setSupplierId(event.target.value)} disabled={isSaving}>
+                  <option value="">Select supplier</option>
+                  {suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1 text-sm font-medium">
+                <span>Purchase Date *</span>
+                <Input type="date" value={datePurchased} onChange={(event) => setDatePurchased(event.target.value)} disabled={isSaving} />
+              </label>
+              <label className="space-y-1 text-sm font-medium">
+                <span>Payment</span>
+                <select className="h-10 w-full rounded-lg border bg-white px-3" value={paymentMode} onChange={(event) => setPaymentMode(event.target.value as "CASH" | "CREDIT")} disabled={isSaving}>
+                  <option value="CREDIT">Credit</option>
+                  <option value="CASH" disabled={!canPay}>Cash — Pay Now</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-sm font-medium">
+                <span>Invoice / Receipt # *</span>
+                <Input value={invoiceNumber} maxLength={120} onChange={(event) => setInvoiceNumber(event.target.value)} disabled={isSaving} />
+              </label>
+              <label className="space-y-1 text-sm font-medium">
+                <span>Due Date *</span>
+                <Input type="date" min={datePurchased} value={dueDate || datePurchased} onChange={(event) => setDueDate(event.target.value)} disabled={isSaving} />
+              </label>
+              <label className="space-y-1 text-sm font-medium">
+                <span>Remarks</span>
+                <Input value={remarks} onChange={(event) => setRemarks(event.target.value)} placeholder="Optional" disabled={isSaving} />
+              </label>
             </div>
 
-            <div className="space-y-3">
-              {items.map((item, index) => {
-                const selectedProduct = products.find(
-                  (product) => product._id === item.productId
-                );
-
-                const subtotal =
-                  (Number(item.buyingPrice) || 0) *
-                  (Number(item.quantity) || 0);
-
-                return (
-                  <div
-                    key={index}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
-                      <div className="space-y-1">
-                        <Label>Product</Label>
-                        <ProductPicker
-                          products={products}
-                          value={item.productId}
-                          onSelect={(value) =>
-                            updateItem(index, "productId", value)
-                          }
-                        />
-
-                        {selectedProduct ? (
-                          <p className="text-xs text-slate-500">
-                            Current stock: {getProductStock(selectedProduct)}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label>Buying Price</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.buyingPrice}
-                          onChange={(event) =>
-                            updateItem(index, "buyingPrice", event.target.value)
-                          }
-                          className="bg-white"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label>Quantity</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.quantity}
-                          onChange={(event) =>
-                            updateItem(index, "quantity", event.target.value)
-                          }
-                          className="bg-white"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label>Subtotal</Label>
-                        <Input
-                          value={subtotal.toFixed(2)}
-                          disabled
-                          className="bg-white"
-                        />
-                      </div>
-
-                      <div className="flex items-end">
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          onClick={() => removeItemRow(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+            <div className="overflow-hidden rounded-xl border">
+              <div aria-hidden="true" className="hidden grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_40px] gap-3 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 md:grid">
+                <span>Product</span><span className="text-center">Unit Cost</span><span className="text-center">Qty</span><span className="text-center">Subtotal</span><span />
+              </div>
+              <div className="divide-y">
+                {items.map((item, index) => {
+                  const subtotal = Math.round((Number(item.buyingPrice) || 0) * (Number(item.quantity) || 0) * 100) / 100;
+                  return <div key={index} className="grid items-end gap-3 p-3 md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_40px]">
+                    <div className="min-w-0">
+                      <span className="mb-1 block text-xs font-medium md:sr-only">Product</span>
+                      <ProductPicker products={products} value={item.productId} disabled={isSaving} onSelect={(value) => updateItem(index, "productId", value)} />
                     </div>
-                  </div>
-                );
-              })}
+                    <label className="min-w-0">
+                      <span className="mb-1 block text-xs font-medium md:sr-only">Unit Cost</span>
+                      <Input aria-label={`Unit cost for product ${index + 1}`} type="number" min="0" step="0.01" value={item.buyingPrice} onChange={(event) => updateItem(index, "buyingPrice", event.target.value)} className="text-center" disabled={isSaving} />
+                    </label>
+                    <label className="min-w-0">
+                      <span className="mb-1 block text-xs font-medium md:sr-only">Qty</span>
+                      <Input aria-label={`Quantity for product ${index + 1}`} type="number" min="0" step="0.01" value={item.quantity} onChange={(event) => updateItem(index, "quantity", event.target.value)} className="text-center" disabled={isSaving} />
+                    </label>
+                    <div className="min-w-0">
+                      <span className="mb-1 block text-xs font-medium md:sr-only">Subtotal</span>
+                      <output aria-label={`Subtotal for product ${index + 1}`} className="flex h-10 items-center justify-center rounded-lg bg-slate-50 px-2 text-sm font-semibold tabular-nums">{formatPeso(subtotal)}</output>
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" aria-label={`Remove product ${index + 1}`} disabled={isSaving} onClick={() => removeItemRow(index)} className="text-red-600 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></Button>
+                  </div>;
+                })}
+              </div>
             </div>
-
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full rounded-xl"
-              onClick={addItemRow}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add More Product
-            </Button>
-
-            <div className="rounded-2xl bg-slate-950 p-5 text-white">
-              <p className="text-sm text-white/70">Total Purchase Amount</p>
-              <p className="text-3xl font-black">{formatPeso(totalAmount)}</p>
-            </div>
+            <Button type="button" variant="outline" onClick={addItemRow} disabled={isSaving}><Plus className="mr-2 h-4 w-4" />Add Product</Button>
           </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={isSaving}
-              onClick={() => setFormDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-
-            <Button
-              type="button"
-              disabled={isSaving}
-              onClick={savePurchaseBatch}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              {isSaving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <PackagePlus className="mr-2 h-4 w-4" />
-              )}
-              {editingId ? "Update Purchase Batch" : "Save Purchase Batch"}
-            </Button>
+          <DialogFooter className="mx-0 mb-0 shrink-0 items-center gap-3 rounded-none bg-white px-5 py-4 sm:justify-between">
+            <div aria-live="polite" className="mr-auto flex items-baseline gap-3"><span className="text-sm text-slate-500">Total</span><strong className="text-2xl font-bold tabular-nums">{formatPeso(totalAmount)}</strong></div>
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button type="button" variant="outline" disabled={isSaving} onClick={() => setFormDialogOpen(false)}>Cancel</Button>
+              <Button type="button" disabled={isSaving} onClick={savePurchaseBatch} className="min-w-28 flex-1 bg-emerald-600 hover:bg-emerald-700">{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isSaving ? "Saving…" : "Save"}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

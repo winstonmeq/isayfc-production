@@ -1,11 +1,7 @@
-// app/api/reports/sales/route.ts
-//
-// Standard Sales Report: a sales register (one row per sale, dated, with daily
-// subtotals and a grand total), a cash-vs-credit split, and summaries grouped
-// by product and by category. Reads the shared report date range.
-//
-// "Net" here equals gross — the system records no per-sale discount, so we do
-// not show a discount column that would always be zero.
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+// Main-company sales register with daily totals, product/category summaries,
+// and discount analysis. All amounts come from posted sales snapshots.
+// Gross sales less sales discounts equals net sales; outlet POS is separate.
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -23,6 +19,8 @@ import {
   outletSaleMatchClauses,
 } from "@/lib/sale-origin";
 import { getMainSalesReportSource } from "@/lib/report-scope";
+import { recognizedSaleRange } from "@/lib/business-flow";
+import { salesReportAmounts, discountReportSummary } from "@/lib/sales-report-amounts";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -42,25 +40,25 @@ export async function GET(req: NextRequest) {
   const saleFilter: Record<string, unknown> = {
     isVoided: false,
     fulfillmentStatus: { $ne: "PENDING" },
-    saleDate: { $gte: start, $lt: end },
+    $expr: recognizedSaleRange(start, end),
   };
   if (source === "BODEGA" || source === "CHICKEN") {
     // A mixed receipt belongs in both product-type reports. The line-level
     // filtering below limits its quantities and peso values to the selected
     // product type.
     saleFilter.source = { $in: [source, "MIXED"] };
-    saleFilter.$nor = outletSaleMatchClauses();
+    saleFilter.$nor = [...outletSaleMatchClauses(), ...internalOutletMatchClauses()];
   } else {
     // "All" is the main-company register. Outlet POS revenue is reported
     // separately so transferred inventory is not counted as revenue twice.
-    saleFilter.$nor = outletSaleMatchClauses();
+    saleFilter.$nor = [...outletSaleMatchClauses(), ...internalOutletMatchClauses()];
   }
 
   const sales = await SaleModel.find(saleFilter)
     .populate("customerId", "name")
     .populate("outletId", "name code")
     .select(
-      "receiptNumber saleDate source totalQty totalAmount paidAmount balance status customerId outletId channel paymentMethod"
+      "receiptNumber saleDate recognizedAt source totalQty totalAmount subtotal discountAmount paidAmount balance status customerId outletId channel paymentMethod"
     )
     .sort({ saleDate: 1, createdAt: 1 })
     .lean<
@@ -68,9 +66,12 @@ export async function GET(req: NextRequest) {
         _id: { toString: () => string };
         receiptNumber?: string;
         saleDate?: Date;
+        recognizedAt?: Date;
         source?: string;
         totalQty?: number;
         totalAmount?: number;
+        subtotal?: number;
+        discountAmount?: number;
         paidAmount?: number;
         balance?: number;
         status?: string;
@@ -91,7 +92,7 @@ export async function GET(req: NextRequest) {
             ? { source }
             : {}),
         })
-          .select("saleId source qty stockUnit stockPcsOut baseQty lineTotal")
+          .select("saleId source qty stockUnit stockPcsOut baseQty lineTotal grossLineTotal discountAmount discountName")
           .lean<
             Array<{
               saleId: { toString: () => string };
@@ -101,9 +102,14 @@ export async function GET(req: NextRequest) {
               stockPcsOut?: number;
               baseQty?: number;
               lineTotal?: number;
+              grossLineTotal?: number;
+              discountAmount?: number;
+              discountName?: string;
             }>
           >();
   type SoldBreakdown = {
+    grossSales: number;
+    discounts: number;
     source: "CHICKEN" | "GROCERY" | "OUTLET";
     packs: number;
     pcsOut: number;
@@ -124,6 +130,8 @@ export async function GET(req: NextRequest) {
           : "GROCERY";
     const saleBreakdown = quantityBySale.get(saleId) || new Map();
     const current = saleBreakdown.get(displaySource) || {
+      grossSales: 0,
+      discounts: 0,
       source: displaySource,
       packs: 0,
       pcsOut: 0,
@@ -139,6 +147,9 @@ export async function GET(req: NextRequest) {
     current.totalAmount = roundMoney(
       current.totalAmount + Number(line.lineTotal || 0)
     );
+    const amounts = salesReportAmounts(line);
+    current.grossSales = roundMoney(current.grossSales + amounts.grossSales);
+    current.discounts = roundMoney(current.discounts + amounts.discounts);
     saleBreakdown.set(displaySource, current);
     quantityBySale.set(saleId, saleBreakdown);
   }
@@ -159,6 +170,8 @@ export async function GET(req: NextRequest) {
 
   // --- Register rows + daily subtotals ---
   type RegisterRow = {
+    grossSales: number;
+    discounts: number;
     id: string;
     saleId: string;
     receiptNumber: string;
@@ -178,7 +191,7 @@ export async function GET(req: NextRequest) {
   };
 
   const rows: RegisterRow[] = sales.flatMap((s) => {
-    const date = s.saleDate ? new Date(s.saleDate) : null;
+    const date = s.recognizedAt || s.saleDate ? new Date((s.recognizedAt || s.saleDate)!) : null;
     const saleId = s._id.toString();
     const origin = getSaleOrigin(s);
     const saleTotal = roundMoney(Number(s.totalAmount || 0));
@@ -197,6 +210,8 @@ export async function GET(req: NextRequest) {
             pcsOut: 0,
             quantity: Number(s.totalQty || 0),
             totalAmount: saleTotal,
+            grossSales: salesReportAmounts(s).grossSales,
+            discounts: salesReportAmounts(s).discounts,
           },
         ];
 
@@ -237,6 +252,8 @@ export async function GET(req: NextRequest) {
       quantity: number;
       qtyDisplay: string;
       total: number;
+      grossSales: number;
+      discounts: number;
       paid: number;
       balance: number;
     }
@@ -253,6 +270,8 @@ export async function GET(req: NextRequest) {
         quantity: 0,
         qtyDisplay: "0",
         total: 0,
+        grossSales: 0,
+        discounts: 0,
         paid: 0,
         balance: 0,
       };
@@ -265,6 +284,8 @@ export async function GET(req: NextRequest) {
     cur.quantity += r.quantity;
     cur.qtyDisplay = formatSoldQuantity(cur);
     cur.total = roundMoney(cur.total + r.totalAmount);
+    cur.grossSales = roundMoney(cur.grossSales + r.grossSales);
+    cur.discounts = roundMoney(cur.discounts + r.discounts);
     cur.paid = roundMoney(cur.paid + r.paidAmount);
     cur.balance = roundMoney(cur.balance + r.balance);
     dailyMap.set(r.day, cur);
@@ -281,6 +302,8 @@ export async function GET(req: NextRequest) {
       acc.quantity += r.quantity;
       acc.qtyDisplay = formatSoldQuantity(acc);
       acc.total = roundMoney(acc.total + r.totalAmount);
+      acc.grossSales = roundMoney(acc.grossSales + r.grossSales);
+      acc.discounts = roundMoney(acc.discounts + r.discounts);
       acc.paid = roundMoney(acc.paid + r.paidAmount);
       acc.balance = roundMoney(acc.balance + r.balance);
       return acc;
@@ -293,6 +316,8 @@ export async function GET(req: NextRequest) {
       quantity: 0,
       qtyDisplay: "0",
       total: 0,
+      grossSales: 0,
+      discounts: 0,
       paid: 0,
       balance: 0,
     }
@@ -319,6 +344,8 @@ export async function GET(req: NextRequest) {
     _id: { name?: string; unit?: string };
     qty?: number;
     total?: number;
+    grossSales?: number;
+    discounts?: number;
     count?: number;
   };
 
@@ -338,11 +365,12 @@ export async function GET(req: NextRequest) {
                 _id: { name: "$productName", unit: "$stockUnit" },
                 qty: { $sum: "$qty" },
                 total: { $sum: "$lineTotal" },
+                grossSales: { $sum: { $add: [{ $ifNull: ["$lineTotal", 0] }, { $ifNull: ["$discountAmount", 0] }] } },
+                discounts: { $sum: { $ifNull: ["$discountAmount", 0] } },
                 count: { $sum: 1 },
               },
             },
             { $sort: { total: -1 } },
-            { $limit: 200 },
           ]),
           SaleLineModel.aggregate<LineAgg>([
             { $match: selectedLineMatch },
@@ -351,6 +379,8 @@ export async function GET(req: NextRequest) {
                 _id: { name: "$categoryName", unit: "$stockUnit" },
                 qty: { $sum: "$qty" },
                 total: { $sum: "$lineTotal" },
+                grossSales: { $sum: { $add: [{ $ifNull: ["$lineTotal", 0] }, { $ifNull: ["$discountAmount", 0] }] } },
+                discounts: { $sum: { $ifNull: ["$discountAmount", 0] } },
                 count: { $sum: 1 },
               },
             },
@@ -376,6 +406,8 @@ export async function GET(req: NextRequest) {
       qty: Number(a.qty || 0),
       unit: a._id?.unit === "PACK" ? "packs" : "qty",
       total: roundMoney(Number(a.total || 0)),
+      grossSales: roundMoney(Number(a.grossSales || 0)),
+      discounts: roundMoney(Number(a.discounts || 0)),
       count: Number(a.count || 0),
     }));
 
@@ -442,6 +474,7 @@ export async function GET(req: NextRequest) {
     daily,
     grand,
     split,
+    discountSummary: discountReportSummary(registerLines),
     byProduct: mapAgg(byProduct),
     byCategory: mapAgg(byCategory),
     chickenCuts: {

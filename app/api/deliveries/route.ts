@@ -19,6 +19,7 @@ import DeliveryModel from "@/models/Delivery";
 import DeliveryItemModel from "@/models/DeliveryItem";
 import StandardPackingModel from "@/models/StandardPacking";
 import SupplierModel from "@/models/Supplier";
+import { deliveryProductsById, deliveryProductMatch } from "@/lib/delivery-products";
 
 type DeliveryItemInput = {
   categoryId?: string;
@@ -84,6 +85,13 @@ export async function GET(req: NextRequest) {
     isVoided: false,
   };
 
+  const productMatch = deliveryProductMatch(searchParams.get("product"));
+  if (productMatch) {
+    // Apply before pagination/counting, using historical line-item names.
+    const deliveryIds = await DeliveryItemModel.distinct("deliveryId", productMatch);
+    filter._id = { $in: deliveryIds };
+  }
+
   if (deliveryCode) {
     filter.deliveryCode = {
       $regex: escapeRegex(deliveryCode),
@@ -120,9 +128,14 @@ export async function GET(req: NextRequest) {
     DeliveryModel.countDocuments(filter),
   ]);
 
+  // One batched lookup for the current page, not one request per delivery.
+  const lines = items.length ? await DeliveryItemModel.find({ deliveryId: { $in: items.map((item) => item._id) } })
+    .select("deliveryId productName").sort({ _id: 1 }).lean() : [];
+  const productsByDelivery = deliveryProductsById(lines);
+
   return NextResponse.json({
     success: true,
-    data: items.map(serializeDelivery),
+    data: items.map((item) => ({ ...serializeDelivery(item), productNames: productsByDelivery.get(String(item._id)) || [] })),
     meta: {
       page,
       limit,

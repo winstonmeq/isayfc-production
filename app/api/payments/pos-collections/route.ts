@@ -62,6 +62,8 @@ export async function GET(req: NextRequest) {
         $group: {
           _id: null,
           totalSales: { $sum: "$totalAmount" },
+          // Settlement to date for these sales, not cash received in this period.
+          // Actual dated collections remain in the outlet cash ledger.
           totalPaid: { $sum: "$paidAmount" },
           transactionCount: { $sum: 1 },
         },
@@ -94,7 +96,8 @@ export async function GET(req: NextRequest) {
       paymentMethod: sale.paymentMethod || "CASH",
       totalAmount: Number(sale.totalAmount || 0),
       paidAmount: Number(sale.paidAmount || 0),
-      cashReceived: Number(sale.cashReceived ?? sale.paidAmount ?? 0),
+      balance: Number(sale.balance ?? Math.max(0, Number(sale.totalAmount || 0) - Number(sale.paidAmount || 0))),
+      cashReceived: sale.paymentMethod === "CREDIT" ? 0 : Number(sale.cashReceived ?? sale.paidAmount ?? 0),
       change: Number(sale.change || 0),
       status: sale.status || "PAID",
     })),

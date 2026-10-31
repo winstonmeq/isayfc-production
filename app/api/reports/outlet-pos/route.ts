@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId, Types } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
+import { reportOutletDirectory } from "@/lib/business-flow";
 import { manilaDateString } from "@/lib/date-utils";
 import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import { parseReportRange, roundMoney } from "@/lib/report-utils";
@@ -41,10 +42,9 @@ export async function GET(req: NextRequest) {
   }
 
   const [outlets, sales] = await Promise.all([
-    OutletModel.find({ isActive: true }).select("name code").sort({ name: 1 }).lean<any[]>(),
+    OutletModel.find({}).select("name code").sort({ name: 1 }).lean<any[]>(),
     SaleModel.find(saleFilter)
-      .populate("outletId", "name code")
-      .select("receiptNumber saleDate outletId totalQty totalAmount paidAmount paymentMethod status")
+      .select("receiptNumber saleDate outletId totalQty totalAmount paidAmount paymentMethod status employeeName")
       .sort({ saleDate: 1, createdAt: 1 })
       .lean<any[]>(),
   ]);
@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
         .lean<any[]>()
     : [];
   const linesBySale = new Map<string, any[]>();
+  const outletsById = new Map(outlets.map((outlet) => [String(outlet._id), outlet]));
   for (const line of lines) {
     const key = String(line.saleId);
     linesBySale.set(key, [...(linesBySale.get(key) || []), line]);
@@ -68,9 +69,9 @@ export async function GET(req: NextRequest) {
       id: String(sale._id),
       saleDate: sale.saleDate,
       receiptNumber: sale.receiptNumber || "",
-      outletId: String(sale.outletId?._id || sale.outletId || ""),
-      outletName: sale.outletId?.name || "Unassigned outlet",
-      outletCode: sale.outletId?.code || "",
+      outletId: String(sale.outletId || ""),
+      outletName: outletsById.get(String(sale.outletId))?.name || "Deleted / unassigned outlet",
+      outletCode: outletsById.get(String(sale.outletId))?.code || "",
       qty: Number(sale.totalQty || 0),
       items: saleLines.map((line) => line.productName).filter(Boolean).join(", "),
       sales: salesAmount,
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
       grossProfit: roundMoney(salesAmount - cogs),
       paid: roundMoney(Number(sale.paidAmount || 0)),
       paymentMethod: sale.paymentMethod || "CASH",
+      employeeName: sale.employeeName || "",
       status: sale.status || "PAID",
     };
   });
@@ -93,8 +95,9 @@ export async function GET(req: NextRequest) {
     { $group: { _id: "$outletId", total: { $sum: "$amount" } } },
   ]);
   const expenseByOutlet = new Map(expenses.map((row) => [String(row._id || ""), roundMoney(Number(row.total || 0))]));
+  const reportOutlets = reportOutletDirectory(outlets, rows.map((row) => row.outletId), expenses.map((row) => String(row._id || "")));
 
-  const outletRows = outlets
+  const outletRows = reportOutlets
     .filter((outlet) => !outletId || outletId === "ALL" || String(outlet._id) === outletId)
     .map((outlet) => {
       const id = String(outlet._id);
@@ -116,5 +119,5 @@ export async function GET(req: NextRequest) {
     productMap.set(key, current);
   }
 
-  return NextResponse.json({ success: true, range: { start: start.toISOString(), end: end.toISOString() }, generatedAt: manilaDateString(), outlets: outlets.map((outlet) => ({ id: String(outlet._id), name: outlet.name, code: outlet.code })), rows, outletRows, products: [...productMap.values()].map((row) => ({ ...row, grossProfit: roundMoney(row.sales - row.cogs) })).sort((a, b) => b.sales - a.sales), totals });
+  return NextResponse.json({ success: true, range: { start: start.toISOString(), end: end.toISOString() }, generatedAt: manilaDateString(), outlets: reportOutlets.filter((outlet) => String(outlet._id)).map((outlet) => ({ id: String(outlet._id), name: outlet.name, code: outlet.code })), rows, outletRows, products: [...productMap.values()].map((row) => ({ ...row, grossProfit: roundMoney(row.sales - row.cogs) })).sort((a, b) => b.sales - a.sales), totals });
 }

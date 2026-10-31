@@ -11,6 +11,7 @@ import { manilaDateString } from "@/lib/date-utils";
 import {
   packingSnapshot,
   toBaseQuantity,
+  toBaseUnitCost,
 } from "@/lib/inventory-units";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
@@ -304,7 +305,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
           _id: Types.ObjectId;
           name?: string;
           buyingPrice?: number;
-          sellingPrice?: number;
+          unitPrice?: number;
           categoryId?: { name?: string } | Types.ObjectId | null;
         }>();
 
@@ -321,7 +322,8 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
         packSize: 0,
         unitLabel: "QTY" as const,
         buyingPrice: Number(product.buyingPrice || 0),
-        sellingPrice: Number(product.sellingPrice || 0),
+        sellingPrice: Number(product.unitPrice || 0),
+        companyUnitCost: Number(product.buyingPrice || 0),
         qty,
         qtyPcs: qty,
         baseUnit: "QTY" as const,
@@ -405,6 +407,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       unitLabel: (isPack ? "PACK" : baseUnit) as "PACK" | "HEAD" | "PCS",
       buyingPrice: Number(product.buyingPrice || 0),
       sellingPrice: Number(product.sellingPrice || 0),
+      companyUnitCost: toBaseUnitCost(Number(product.buyingPrice || 0), packing),
       qty,
       qtyPcs: toBaseQuantity(qty, packing),
       baseUnit,

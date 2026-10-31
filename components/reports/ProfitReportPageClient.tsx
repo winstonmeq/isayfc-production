@@ -12,11 +12,11 @@ import {
   type Preset,
 } from "./ReportShell";
 
-type ExpenseRow = { type: string; total: number; count: number };
+type ExpenseRow = { type: string; name?: string; total: number; count: number };
 type ProfitReport = {
   range: { start: string; end: string };
   generatedAt: string;
-  revenue: { total: number; chicken: number; grocery: number };
+  revenue: { total: number; chicken: number; grocery: number; grossSales: number; grossChicken: number; grossGrocery: number; discounts: number; chickenDiscounts: number; groceryDiscounts: number };
   cogs: { total: number; chicken: number; grocery: number };
   grossProfit: number;
   grossMarginPct: number;
@@ -89,7 +89,7 @@ export function ProfitReportPageClient() {
       ) : !data ? null : (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Revenue" value={peso(data.revenue.total)} />
+            <StatCard label="Net Sales" value={peso(data.revenue.total)} />
             <StatCard
               label="Gross Profit"
               value={peso(data.grossProfit)}
@@ -111,9 +111,13 @@ export function ProfitReportPageClient() {
             <table className="w-full text-sm">
               <tbody>
                 <SectionHeader label="Revenue" />
-                <Line label="Chicken Sales" value={data.revenue.chicken} indent />
-                <Line label="Grocery Sales" value={data.revenue.grocery} indent />
-                <Subtotal label="Total Revenue" value={data.revenue.total} />
+                <Line label="Chicken Gross Sales" value={data.revenue.grossChicken} indent />
+                <Line label="Grocery Gross Sales" value={data.revenue.grossGrocery} indent />
+                <Subtotal label="Gross Sales" value={data.revenue.grossSales} />
+                <Line label="Less: Chicken Sales Discounts" value={data.revenue.chickenDiscounts} indent negative />
+                <Line label="Less: Grocery Sales Discounts" value={data.revenue.groceryDiscounts} indent negative />
+                <Subtotal label="Total Sales Discounts" value={data.revenue.discounts} negative />
+                <Subtotal label="Net Sales" value={data.revenue.total} />
 
                 <SectionHeader label="Cost of Goods Sold" />
                 <Line label="Chicken COGS" value={data.cogs.chicken} indent negative />
@@ -138,7 +142,7 @@ export function ProfitReportPageClient() {
                   data.expenses.map((e) => (
                     <Line
                       key={e.type}
-                      label={`${e.type.replaceAll("_", " ")} (${e.count})`}
+                      label={`${e.name || e.type.replaceAll("_", " ")} (${e.count})`}
                       value={e.total}
                       indent
                       negative
@@ -171,8 +175,8 @@ export function ProfitReportPageClient() {
           </div>
 
           <p className="text-xs text-slate-400">
-            Cost of goods uses each product&apos;s current buying price. Net
-            profit = gross profit − operating expenses for the period.
+            Net sales = gross sales − sales discounts. Gross profit = net sales − cost of goods sold.
+            Sales discounts are deducted from revenue once and are excluded from operating expenses.
           </p>
         </>
       )}

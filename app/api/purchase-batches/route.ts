@@ -14,6 +14,13 @@ import ProductModel from "@/models/Product";
 import InventoryTransactionModel from "@/models/InventoryTransaction";
 import PurchaseBatchModel from "@/models/PurchaseBatch";
 import PurchaseItemModel from "@/models/PurchaseItem";
+import UserModel from "@/models/User";
+import { purchaseBatchSummaries } from "@/lib/purchase-batch-summary";
+import SupplierModel from "@/models/Supplier";
+import SupplierInvoiceModel from "@/models/SupplierInvoice";
+import SupplierPaymentModel from "@/models/SupplierPayment";
+import { purchaseFinanceInput, purchaseFinanceSnapshot } from "@/lib/purchase-finance";
+import { syncPurchaseInvoice } from "@/lib/purchase-supplier-invoice";
 
 type PurchaseItemInput = {
   productId: string;
@@ -24,6 +31,7 @@ type PurchaseItemInput = {
 function serializePurchaseBatch(batch: any) {
   return {
     _id: batch._id.toString(),
+    ...purchaseFinanceSnapshot(batch),
 
     datePurchased: batch.datePurchased
       ? new Date(batch.datePurchased).toISOString()
@@ -49,6 +57,8 @@ export async function GET(req: NextRequest) {
   if (response) return response;
 
   await dbConnect();
+  void UserModel;
+  void SupplierModel; void SupplierInvoiceModel;
 
   const { searchParams } = new URL(req.url);
   const { page, limit, skip } = getPagination(searchParams);
@@ -88,6 +98,9 @@ export async function GET(req: NextRequest) {
 
   const [items, total, summary] = await Promise.all([
     PurchaseBatchModel.find(filter)
+      .populate("createdBy", "name username")
+      .populate("supplierId", "name")
+      .populate("supplierInvoiceId", "status paidAmount balance")
       .sort({ datePurchased: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -116,6 +129,10 @@ export async function GET(req: NextRequest) {
     ]),
   ]);
 
+  const lines = items.length ? await PurchaseItemModel.find({ purchaseBatchId: { $in: items.map((item) => item._id) } })
+    .select("purchaseBatchId productName").sort({ _id: 1 }).lean() : [];
+  const itemSummaries = purchaseBatchSummaries(lines);
+
   const summaryData = summary[0] || {
     filteredBatches: 0,
     totalItems: 0,
@@ -124,7 +141,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    data: items.map(serializePurchaseBatch),
+    data: items.map((item: any) => ({
+      ...serializePurchaseBatch(item),
+      ...(itemSummaries.get(String(item._id)) || { productNames: [], lineCount: 0 }),
+      createdByName: item.createdBy?.name || item.createdBy?.username || "",
+    })),
     summary: {
       filteredBatches: Number(summaryData.filteredBatches || 0),
       totalItems: Number(summaryData.totalItems || 0),
@@ -147,6 +168,14 @@ async function handlePOST(req: NextRequest) {
   await dbConnect();
 
   const body = await req.json();
+  let finance;
+  try { finance = purchaseFinanceInput(body); }
+  catch (error) { return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Invalid invoice details." }, { status: 400 }); }
+  if (finance.paymentMode === "CASH") {
+    const paymentAccess = await requirePermission("accounts-payable.manage");
+    if (paymentAccess.response) return paymentAccess.response;
+  }
+  await Promise.all([SupplierInvoiceModel.init(), SupplierPaymentModel.init()]);
 
   const datePurchased = cleanString(body.datePurchased);
   const remarks = cleanString(body.remarks);
@@ -238,10 +267,10 @@ async function handlePOST(req: NextRequest) {
       );
     }
 
-    const subtotal = buyingPrice * quantity;
+    const subtotal = Math.round(buyingPrice * quantity * 100) / 100;
 
     totalItems += quantity;
-    totalAmount += subtotal;
+    totalAmount = Math.round((totalAmount + subtotal) * 100) / 100;
 
     preparedItems.push({
       product,
@@ -262,6 +291,10 @@ async function handlePOST(req: NextRequest) {
       [batch] = await PurchaseBatchModel.create(
         [{
           datePurchased: transactionDate,
+          supplierId: finance.supplierId,
+          invoiceNumber: finance.invoiceNumber,
+          dueDate: finance.dueDate,
+          paymentMode: finance.paymentMode,
           totalItems,
           totalAmount,
           remarks,
@@ -316,7 +349,12 @@ async function handlePOST(req: NextRequest) {
 
       await PurchaseItemModel.insertMany(purchaseItemsToInsert, { session: mongoSession });
       await InventoryTransactionModel.insertMany(inventoryTransactions, { session: mongoSession });
+      const invoice = await syncPurchaseInvoice(batch._id, finance, totalAmount, session!.user.id, mongoSession);
+      batch.supplierInvoiceId = invoice._id;
+      await batch.save({ session: mongoSession });
     });
+  } catch (error) {
+    return NextResponse.json({ success: false, message: (error as { code?: number }).code === 11000 ? "This supplier invoice number already exists. No stock was changed." : error instanceof Error ? error.message : "Unable to save purchase." }, { status: 409 });
   } finally {
     await mongoSession.endSession();
   }

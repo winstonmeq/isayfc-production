@@ -1,6 +1,6 @@
 // app/(dashboard)/sales/page.tsx
-import { SellChickenPageClient } from "@/components/sales/SellChickenPageClient";
+import { redirect } from "next/navigation";
 
 export default function SalesPage() {
-  return <SellChickenPageClient />;
+  redirect("/sales/all");
 }

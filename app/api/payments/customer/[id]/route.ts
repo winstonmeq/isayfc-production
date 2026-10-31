@@ -1,3 +1,4 @@
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 // app/api/payments/customer/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId, Types } from "mongoose";
@@ -8,6 +9,7 @@ import { cleanString } from "@/lib/crud-utils";
 import CustomerModel from "@/models/Customer";
 import PaymentModel from "@/models/Payment";
 import SaleModel from "@/models/Sale";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 
 function notVoidedFilter() {
   return {
@@ -145,6 +147,7 @@ export async function GET(
     ...customerMatch,
     ...notVoidedFilter(),
     fulfillmentStatus: { $ne: "PENDING" as const },
+    $nor: [...outletSaleMatchClauses(), ...internalOutletMatchClauses()],
   };
 
   const overallPaymentFilter = {
@@ -233,6 +236,7 @@ export async function GET(
     },
 
     recentSales: recentSales.map(formatSale),
+    unpaidSales: overallSalesRecords.filter(sale => Number(sale.balance || 0) > 0).map(formatSale),
     recentPayments: recentPayments.map(formatPayment),
   });
 }

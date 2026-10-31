@@ -258,8 +258,7 @@ export async function GET(req: NextRequest) {
     .sort({ category: 1, sortOrder: 1, name: 1 })
     .lean<OutletMenuRow[]>();
 
-  // Pull current raw stock for this outlet so we can show availability of
-  // mapped components.
+  // Availability must match sales: finished menu stock, never raw ingredients.
   const inventory = await OutletInventoryModel.find({
     outletId: user.outlet.id,
     isActive: true,
@@ -267,26 +266,12 @@ export async function GET(req: NextRequest) {
     .select("productSource productId stockQty")
     .lean<OutletInventoryStockRow[]>();
 
-  const stockByKey = new Map<string, number>();
+  const stockByMenuId = new Map<string, number>();
   for (const inv of inventory) {
-    stockByKey.set(
-      `${inv.productSource}:${inv.productId?.toString?.()}`,
+    stockByMenuId.set(
+      String(inv.productId),
       Number(inv.stockQty || 0)
     );
-  }
-
-  // How many of each menu item can be made from current stock (min across
-  // its components). null = unlimited (no stock mapping).
-  function makeableCount(components: OutletMenuComponentRow[] = []): number | null {
-    if (!components || components.length === 0) return null;
-    let min = Infinity;
-    for (const c of components) {
-      const per = Number(c.qtyPerSale || 0);
-      if (per <= 0) continue;
-      const have = stockByKey.get(`${c.productSource}:${c.productId?.toString?.()}`) || 0;
-      min = Math.min(min, Math.floor(have / per));
-    }
-    return min === Infinity ? null : min;
   }
 
   const serialized: SerializedMenuItem[] = items.map((it) => ({
@@ -296,7 +281,7 @@ export async function GET(req: NextRequest) {
     price: Number(it.price || 0),
     imageUrl: it.imageUrl || "",
     isAvailable: it.isAvailable !== false,
-    makeable: makeableCount(it.components), // number or null (unlimited)
+    makeable: Math.max(0, Math.floor(stockByMenuId.get(String(it._id)) || 0)),
     components: (it.components || []).map((c) => ({
       productSource: c.productSource,
       productId: c.productId?.toString?.() || "",

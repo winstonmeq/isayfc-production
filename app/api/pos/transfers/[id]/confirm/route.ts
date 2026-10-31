@@ -1,3 +1,4 @@
+import { weightedCompanyCost } from "@/lib/company-cost";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId } from "mongoose";
 
@@ -8,6 +9,7 @@ import { requirePermission } from "@/lib/require-permission";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import SaleModel from "@/models/Sale";
+import { outletSaleRecognitionUpdate } from "@/lib/outlet-sale-recognition";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
 
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
         const productId = source === "GROCERY" ? item.productId : item.bodegaProductId;
         if (!productId) throw new ApiError(400, `${item.productName} has no valid product reference.`);
-        const transferPrice = Number(item.sellingPrice || 0) > 0 ? Number(item.sellingPrice) : Number(item.buyingPrice || 0);
+        const transferPrice = transfer.saleId || Number(item.sellingPrice || 0) > 0 ? Number(item.sellingPrice || 0) : Number(item.buyingPrice || 0);
         const incomingBaseCost = toBaseUnitCost(transferPrice, packingSnapshot({ unit: item.unitLabel, baseUnit, multiplier }));
         const existing = await OutletInventoryModel.findOne({ outletId, productSource: source, productId, isActive: true }).session(mongoSession);
 
@@ -74,6 +76,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           newStock = previousStock + receivedBaseQty;
           const existingBaseCost = toBaseUnitCost(existing.buyingPrice, packingSnapshot({ unit: Number(existing.packSize || 0) > 0 ? "PACK" : baseUnit, baseUnit, multiplier: existing.packSize }));
           const averageBaseCost = newStock > 0 ? (previousStock * existingBaseCost + receivedBaseQty * incomingBaseCost) / newStock : incomingBaseCost;
+          existing.companyUnitCost = weightedCompanyCost(previousStock, existing.companyUnitCost, receivedBaseQty, item.companyUnitCost);
           existing.stockQty = newStock;
           existing.unitLabel = baseUnit;
           existing.packSize = packSize;
@@ -85,6 +88,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           const [created] = await OutletInventoryModel.create([{
             outletId, productSource: source, productId, productName: item.productName,
             categoryName: item.categoryName, stockQty: receivedBaseQty, unitLabel: baseUnit,
+            companyUnitCost: item.companyUnitCost,
             packSize, buyingPrice: transferPrice, sellingPrice: Number(item.sellingPrice || 0),
             lowStockAlert: 0, createdBy: session!.user.id,
           }], { session: mongoSession });
@@ -108,34 +112,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
       if (transfer.saleId) {
         const sale = await SaleModel.findOneAndUpdate(
-          {
-            _id: transfer.saleId,
-            isVoided: false,
-            $or: [
-              { fulfillmentStatus: "PENDING" },
-              { fulfillmentStatus: { $exists: false } },
-            ],
-          },
-          [
-            {
-              $set: {
-                fulfillmentStatus: "RECOGNIZED",
-                recognizedAt: new Date(),
-                status: "UNPAID",
-                balance: {
-                  $max: [{ $subtract: ["$totalAmount", "$paidAmount"] }, 0],
-                },
-              },
-            },
-          ],
-          { new: true, session: mongoSession }
+          { _id: transfer.saleId, isVoided: false, transactionType: { $ne: "INTERNAL_TRANSFER" },
+            $or: [{ fulfillmentStatus: "PENDING" }, { fulfillmentStatus: { $exists: false } }] },
+          outletSaleRecognitionUpdate(),
+          { new: true, session: mongoSession, updatePipeline: true }
         );
-
         if (!sale) {
-          throw new ApiError(
-            409,
-            "The linked main sale could not be recognized. No outlet stock was changed."
-          );
+          throw new ApiError(409, "The linked sale could not be recognized. Check its status; older internal records require review. No stock changes were posted.");
         }
       }
     });

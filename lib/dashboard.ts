@@ -9,6 +9,8 @@ import OutletInventoryModel from "@/models/OutletInventory";
 import PaymentModel from "@/models/Payment";
 import PurchaseBatchModel from "@/models/PurchaseBatch";
 import SaleModel from "@/models/Sale";
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import SupplierModel from "@/models/Supplier";
 import SlicingBatchModel from "@/models/SlicingBatch";
 import StandardPackingModel from "@/models/StandardPacking";
@@ -379,7 +381,7 @@ function activityDate(value: unknown) {
 
 async function recentSales() {
   const rows = await (SaleModel as any)
-    .find({ ...notVoidedFilter(), fulfillmentStatus: { $ne: "PENDING" } })
+    .find({ ...notVoidedFilter(), fulfillmentStatus: { $ne: "PENDING" }, $nor: [...internalOutletMatchClauses(), ...outletSaleMatchClauses()] })
     .select("receiptNumber totalAmount balance status saleDate createdAt")
     .sort({ createdAt: -1 })
     .limit(5)
@@ -559,6 +561,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const saleFilter = {
     ...notVoidedFilter(),
     fulfillmentStatus: { $ne: "PENDING" },
+    $nor: [...internalOutletMatchClauses(), ...outletSaleMatchClauses()],
   };
   const paymentFilter = notVoidedFilter();
   const deliveryFilter = notVoidedFilter();

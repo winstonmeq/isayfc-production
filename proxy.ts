@@ -8,6 +8,10 @@ type PageRule = {
 };
 
 const PAGE_RULES: PageRule[] = [
+  { prefix: "/pos/reports", permission: "reports.inventory" },
+  { prefix: "/pos", permission: "pos.view" },
+  { prefix: "/reports/outlet-pos", permission: "reports.sales" },
+  { prefix: "/reports/internal-outlets", permission: "reports.profit" },
   { prefix: "/profit/chicken-slicing", permission: "reports.profit" },
   { prefix: "/reports/chicken-slicing", permission: "reports.profit" },
   { exact: "/dashboard", permission: "dashboard.view" },
@@ -22,9 +26,11 @@ const PAGE_RULES: PageRule[] = [
   { prefix: "/bodega-products", permission: "bodega-products.view" },
   { prefix: "/purchase-items", permission: "purchase-items.view" },
   { prefix: "/deliveries", permission: "supplier-deliveries.view" },
+  { prefix: "/supplier-payment-history", permission: "accounts-payable.view" },
   { prefix: "/slicing/new", permission: "slicing.manage" },
   { prefix: "/slicing/standard-packing", permission: "standard-packing.view" },
   { prefix: "/slicing", permission: "slicing.view" },
+  { prefix: "/sales/discounts", permission: "discounts.manage" },
   { prefix: "/sales/history", permission: "sales.view" },
   { prefix: "/sales/lines", permission: "sales-lines.view" },
   { prefix: "/sales/all", permission: "sales.manage" },
@@ -121,6 +127,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/pos/:path*",
     "/profit/:path*",
     "/dashboard/:path*",
     "/outlets/:path*",
@@ -135,6 +142,7 @@ export const config = {
     "/purchase-items/:path*",
     "/deliveries/:path*",
     "/slicing/:path*",
+    "/supplier-payment-history/:path*",
     "/sales/:path*",
     "/payments/:path*",
     "/inventory/:path*",

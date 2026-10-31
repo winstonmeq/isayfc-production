@@ -2,7 +2,7 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type OutletInventorySource = "BODEGA" | "GROCERY";
-export type OutletInventoryOrigin = "TRANSFER" | "OUTLET_PRODUCTION";
+export type OutletInventoryOrigin = "TRANSFER" | "OUTLET_PRODUCTION" | "OUTSIDE_PURCHASE";
 export type OutletInventoryUnit = "HEAD" | "PCS" | "PACK" | "QTY" | "KG" | "BAG";
 
 export interface IOutletInventory extends Document {
@@ -14,6 +14,7 @@ export interface IOutletInventory extends Document {
   productName: string;
   categoryName?: string;
   stockQty: number;
+  companyUnitCost?: number;
   unitLabel: OutletInventoryUnit;
   packSize: number;
   lowStockAlert: number;
@@ -45,7 +46,7 @@ const OutletInventorySchema = new Schema<IOutletInventory>(
     // users whether this stock was received or manufactured at the outlet.
     originType: {
       type: String,
-      enum: ["TRANSFER", "OUTLET_PRODUCTION"],
+      enum: ["TRANSFER", "OUTLET_PRODUCTION", "OUTSIDE_PURCHASE"],
       default: "TRANSFER",
       required: true,
     },
@@ -102,6 +103,8 @@ const OutletInventorySchema = new Schema<IOutletInventory>(
       default: 0,
       min: 0,
     },
+    // Original company cost per base unit, excluding internal markup.
+    companyUnitCost: { type: Number, min: 0 },
 
     sellingPrice: {
       type: Number,

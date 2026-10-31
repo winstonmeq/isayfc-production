@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { menuStock } from "@/lib/business-flow";
+import { OutletEmployeeCash } from "@/models/OutletEmployeeFinance";
+import { outletCashSummary } from "@/lib/employee-finance";
 
 import { sumShiftExpenses, sumShiftSales } from "@/lib/cash-shift";
 import { addDays, startOfDayManila } from "@/lib/date-utils";
@@ -63,7 +66,7 @@ export async function GET(req: NextRequest) {
   const outletId = outlet._id.toString();
   const dayStart = startOfDayManila();
   const dayEnd = addDays(dayStart, 1);
-  const [menu, inventory, shift, recentSales, dailySales, dailyExpenses] = await Promise.all([
+  const [menu, inventory, shift, recentSales, dailySales, dailyExpenses, employeeCash] = await Promise.all([
     OutletMenuItemModel.find({ outletId, isActive: true, isAvailable: true })
       .sort({ category: 1, sortOrder: 1, name: 1 })
       .lean<any[]>(),
@@ -76,11 +79,12 @@ export async function GET(req: NextRequest) {
       .lean<any[]>(),
     SaleModel.find({ outletId, source: "OUTLET", isVoided: { $ne: true }, saleDate: { $gte: dayStart, $lt: dayEnd } })
       .sort({ saleDate: 1, createdAt: 1 })
-      .select("receiptNumber totalAmount totalQty paidAmount saleDate shiftId")
+      .select("receiptNumber totalAmount totalQty paidAmount saleDate shiftId paymentMethod employeeName")
       .lean<any[]>(),
     ExpenseModel.find({ outletId, expenseCategory: "OUTLET", isActive: true, expenseDate: { $gte: dayStart, $lt: dayEnd } })
       .select("amount")
       .lean<any[]>(),
+    OutletEmployeeCash.find({ outletId, businessDate: { $gte: dayStart, $lt: dayEnd } }).select("kind amount").lean(),
   ]);
 
   const dailySaleIds = dailySales.map((row) => row._id);
@@ -100,10 +104,8 @@ export async function GET(req: NextRequest) {
   }
   const dailyExpenseTotal = dailyExpenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
-  const inventoryByProduct = new Map(inventory.map((row) => [String(row.productId), row]));
-  const inventoryByName = new Map(inventory.map((row) => [String(row.productName || "").trim().toUpperCase(), row]));
   const menuRows = menu.map((row) => {
-    const stock = inventoryByProduct.get(row._id.toString()) || inventoryByName.get(String(row.name || "").trim().toUpperCase());
+    const stock = menuStock(inventory, row._id);
     return {
       id: row._id.toString(),
       name: row.name,
@@ -146,7 +148,7 @@ export async function GET(req: NextRequest) {
       packSize: Number(row.packSize || 0),
       buyingPrice: Number(row.buyingPrice || 0),
       productSource:
-        row.originType === "OUTLET_PRODUCTION" ||
+        row.originType === "OUTSIDE_PURCHASE" ? "OUTSIDE PURCHASE" : row.originType === "OUTLET_PRODUCTION" ||
         String(row.remarks || "").includes("MIXING OUTPUT")
           ? String((outlet as any).code || (outlet as any).name || "OUTLET").toUpperCase()
           : row.productSource,
@@ -160,6 +162,12 @@ export async function GET(req: NextRequest) {
       createdAt: row.createdAt,
     })),
     dailyReport: {
+      cash: outletCashSummary(
+        dailySales.filter((sale) => sale.paymentMethod === "CASH").reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0),
+        employeeCash.filter((row) => row.kind === "EMPLOYEE_COLLECTION").reduce((sum, row) => sum + Number(row.amount), 0),
+        dailyExpenseTotal,
+        employeeCash.filter((row) => row.kind === "EMPLOYEE_REIMBURSEMENT").reduce((sum, row) => sum + Number(row.amount), 0),
+      ),
       date: dayStart.toISOString(),
       revenue: dailyRevenue,
       cogs: dailyCogs,
@@ -174,6 +182,10 @@ export async function GET(req: NextRequest) {
           receiptNumber: row.receiptNumber,
           totalAmount: sales,
           totalQty: Number(row.totalQty || 0),
+          paymentMethod: row.paymentMethod,
+          paidAmount: Number(row.paidAmount || 0),
+          balance: Math.max(0, sales - Number(row.paidAmount || 0)),
+          employeeName: row.employeeName,
           cogs,
           grossProfit: sales - cogs,
           saleDate: row.saleDate,

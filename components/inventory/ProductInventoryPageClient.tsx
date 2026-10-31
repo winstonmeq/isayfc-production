@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
@@ -22,7 +24,6 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -518,7 +519,7 @@ export function ProductInventoryPageClient() {
       </Card>
 
       <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
-        <DialogContent className="sm:max-w-3xl">
+        <EntryDialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Grocery/Product" : "Add Grocery/Product"}</DialogTitle>
           </DialogHeader>
@@ -619,11 +620,11 @@ export function ProductInventoryPageClient() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
 
       <Dialog open={stockDialogOpen} onOpenChange={setStockDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <EntryDialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Manage Stock: {stockItem?.name}</DialogTitle>
           </DialogHeader>
@@ -712,7 +713,7 @@ export function ProductInventoryPageClient() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </div>
   );

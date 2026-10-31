@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useState } from "react";
 import { Loader2, Pencil, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,7 +19,6 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -577,7 +578,7 @@ export function OutletInventoryPageClient() {
       </ErpSection>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <EntryDialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Outlet Inventory Item</DialogTitle>
           </DialogHeader>
@@ -683,11 +684,11 @@ export function OutletInventoryPageClient() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <EntryDialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Adjust Outlet Inventory</DialogTitle>
           </DialogHeader>
@@ -753,7 +754,7 @@ export function OutletInventoryPageClient() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </ErpPage>
   );

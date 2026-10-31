@@ -41,13 +41,3 @@ test("production cost is weighted into existing finished stock", () => {
   });
   assert.equal(batch.weightedUnitCost, 12.5);
 });
-
-test("selling the complete produced quantity leaves zero finished stock", () => {
-  const transferredRawStock = 50;
-  const consumedRawStock = 50;
-  const producedFinishedStock = 50;
-  const soldFinishedStock = 50;
-
-  assert.equal(transferredRawStock - consumedRawStock, 0);
-  assert.equal(producedFinishedStock - soldFinishedStock, 0);
-});

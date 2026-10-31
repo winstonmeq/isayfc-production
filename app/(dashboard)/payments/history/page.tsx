@@ -1,6 +1,6 @@
 // app/(dashboard)/payments/history/page.tsx
-import { PaymentSummaryPageClient } from "@/components/payments/PaymentSummaryPageClient";
+import { PaymentHistoryPageClient } from "@/components/payments/PaymentHistoryPageClient";
 
 export default function PaymentHistoryPage() {
-  return <PaymentSummaryPageClient />;
+  return <PaymentHistoryPageClient />;
 }

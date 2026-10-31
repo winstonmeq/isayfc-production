@@ -14,6 +14,8 @@ import { buildRangeParams } from "./ReportShell";
 import { toast } from "sonner";
 
 type RegisterRow = {
+  grossSales: number;
+  discounts: number;
   id: string;
   receiptNumber: string;
   saleDate: string;
@@ -28,6 +30,8 @@ type RegisterRow = {
   status: string;
 };
 type DailyRow = {
+  grossSales: number;
+  discounts: number;
   day: string;
   count: number;
   qty: number;
@@ -37,6 +41,8 @@ type DailyRow = {
   balance: number;
 };
 type Agg = {
+  grossSales: number;
+  discounts: number;
   name: string;
   qty: number;
   unit: "packs" | "qty";
@@ -55,6 +61,8 @@ type SalesReport = {
   rows: RegisterRow[];
   daily: DailyRow[];
   grand: {
+    grossSales: number;
+    discounts: number;
     count: number;
     qty: number;
     qtyDisplay: string;
@@ -71,9 +79,10 @@ type SalesReport = {
   byProduct: Agg[];
   byCategory: Agg[];
   chickenCuts: ChickenCutsMatrix;
+  discountSummary: { name: string; lines: number; amount: number }[];
 };
 
-type Tab = "register" | "chickenCuts" | "product" | "category";
+type Tab = "register" | "chickenCuts" | "product" | "category" | "discounts";
 
 export function SalesReportPageClient() {
   const [preset, setPreset] = useState<Preset>("month");
@@ -163,8 +172,10 @@ export function SalesReportPageClient() {
       ) : !data ? null : (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <StatCard label="Total Sales" value={peso(data.grand.total)} />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <StatCard label="Gross Sales" value={peso(data.grand.grossSales)} />
+            <StatCard label="Sales Discounts" value={peso(data.grand.discounts)} />
+            <StatCard label="Net Sales" value={peso(data.grand.total)} />
             <StatCard label="Transactions" value={qtyFmt(data.grand.count)} />
             <StatCard
               label="Cash Sales"
@@ -186,6 +197,7 @@ export function SalesReportPageClient() {
               ["chickenCuts", "Chicken Cuts"],
               ["product", "By Product"],
               ["category", "By Category"],
+              ["discounts", "Discounts"],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -213,6 +225,7 @@ export function SalesReportPageClient() {
           {tab === "chickenCuts" && (
             <ChickenCutsTable matrix={data.chickenCuts} />
           )}
+          {tab === "discounts" && <DiscountSummaryTable rows={data.discountSummary} total={data.grand.discounts} />}
         </>
       )}
     </ReportShell>
@@ -229,7 +242,7 @@ function ChickenCutsTable({ matrix }: { matrix: ChickenCutsMatrix }) {
       <div className="mb-3 text-center">
         <h2 className="text-lg font-bold text-slate-900">ISAY CHICKEN</h2>
         <p className="font-semibold text-slate-700">CHICKEN CUTS</p>
-        <p className="text-sm text-slate-500">DAILY SALES BY PRODUCT</p>
+        <p className="text-sm text-slate-500">DAILY NET SALES BY PRODUCT</p>
       </div>
       <div className="overflow-x-auto rounded-2xl border border-slate-200">
         <table className="min-w-max w-full text-sm">
@@ -309,7 +322,9 @@ function RegisterTable({
             <th className="p-2.5 font-semibold">Customer</th>
             <th className="p-2.5 font-semibold">Source</th>
             <th className="p-2.5 text-right font-semibold">Sold Qty</th>
-            <th className="p-2.5 text-right font-semibold">Total</th>
+            <th className="p-2.5 text-right font-semibold">Gross Sales</th>
+            <th className="p-2.5 text-right font-semibold">Discounts</th>
+            <th className="p-2.5 text-right font-semibold">Net Sales</th>
             <th className="p-2.5 text-right font-semibold">Paid</th>
             <th className="p-2.5 text-right font-semibold">Balance</th>
             <th className="p-2.5 font-semibold">Status</th>
@@ -330,6 +345,8 @@ function RegisterTable({
               GRAND TOTAL ({grand.count})
             </td>
             <td className="p-2.5 text-right">{grand.qtyDisplay}</td>
+            <td className="p-2.5 text-right">{peso(grand.grossSales)}</td>
+            <td className="p-2.5 text-right">{peso(grand.discounts)}</td>
             <td className="p-2.5 text-right">{peso(grand.total)}</td>
             <td className="p-2.5 text-right">{peso(grand.paid)}</td>
             <td className="p-2.5 text-right">{peso(grand.balance)}</td>
@@ -359,6 +376,8 @@ function DayGroup({
           <td className="p-2.5">{r.customerName}</td>
           <td className="p-2.5 text-slate-500">{r.source}</td>
           <td className="p-2.5 text-right">{r.qtyDisplay}</td>
+          <td className="p-2.5 text-right">{peso(r.grossSales)}</td>
+          <td className="p-2.5 text-right">{peso(r.discounts)}</td>
           <td className="p-2.5 text-right font-medium">{peso(r.totalAmount)}</td>
           <td className="p-2.5 text-right text-slate-600">{peso(r.paidAmount)}</td>
           <td
@@ -377,6 +396,8 @@ function DayGroup({
             Subtotal {day} ({sub.count})
           </td>
           <td className="p-2 text-right">{sub.qtyDisplay}</td>
+          <td className="p-2 text-right">{peso(sub.grossSales)}</td>
+          <td className="p-2 text-right">{peso(sub.discounts)}</td>
           <td className="p-2 text-right">{peso(sub.total)}</td>
           <td className="p-2 text-right">{peso(sub.paid)}</td>
           <td className="p-2 text-right">{peso(sub.balance)}</td>
@@ -390,6 +411,8 @@ function DayGroup({
 function SummaryTable({ title, rows }: { title: string; rows: Agg[] }) {
   if (rows.length === 0) return <Empty>No data in this period.</Empty>;
   const total = rows.reduce((s, r) => s + r.total, 0);
+  const gross = rows.reduce((s, r) => s + r.grossSales, 0);
+  const discounts = rows.reduce((s, r) => s + r.discounts, 0);
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200">
       <table className="w-full text-sm">
@@ -398,7 +421,9 @@ function SummaryTable({ title, rows }: { title: string; rows: Agg[] }) {
             <th className="p-2.5 font-semibold">{title}</th>
             <th className="p-2.5 text-right font-semibold">Lines</th>
             <th className="p-2.5 text-right font-semibold">Sold Qty</th>
-            <th className="p-2.5 text-right font-semibold">Sales</th>
+            <th className="p-2.5 text-right font-semibold">Gross Sales</th>
+            <th className="p-2.5 text-right font-semibold">Discounts</th>
+            <th className="p-2.5 text-right font-semibold">Net Sales</th>
             <th className="p-2.5 text-right font-semibold">% of Total</th>
           </tr>
         </thead>
@@ -410,6 +435,8 @@ function SummaryTable({ title, rows }: { title: string; rows: Agg[] }) {
               <td className="p-2.5 text-right">
                 {qtyFmt(r.qty)} {r.unit}
               </td>
+              <td className="p-2.5 text-right">{peso(r.grossSales)}</td>
+              <td className="p-2.5 text-right">{peso(r.discounts)}</td>
               <td className="p-2.5 text-right font-medium">{peso(r.total)}</td>
               <td className="p-2.5 text-right text-slate-500">
                 {total > 0 ? ((r.total / total) * 100).toFixed(1) : "0.0"}%
@@ -422,6 +449,8 @@ function SummaryTable({ title, rows }: { title: string; rows: Agg[] }) {
             <td className="p-2.5">GRAND TOTAL</td>
             <td />
             <td className="p-2.5 text-right text-slate-500">Mixed units</td>
+            <td className="p-2.5 text-right">{peso(gross)}</td>
+            <td className="p-2.5 text-right">{peso(discounts)}</td>
             <td className="p-2.5 text-right">{peso(total)}</td>
             <td className="p-2.5 text-right">100%</td>
           </tr>
@@ -437,4 +466,15 @@ function Empty({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+function DiscountSummaryTable({ rows, total }: { rows: SalesReport["discountSummary"]; total: number }) {
+  return <section className="space-y-3">
+    <p className="text-sm text-slate-600">Sales discounts reduce gross sales to net sales. These amounts are already deducted from sales totals and are excluded from operating expenses.</p>
+    <div className="overflow-auto rounded-2xl border border-slate-200"><table className="w-full text-sm">
+      <thead className="bg-slate-50"><tr><th className="p-3 text-left">Discount</th><th className="p-3 text-right">Product Rows</th><th className="p-3 text-right">Discount Given</th></tr></thead>
+      <tbody>{rows.map((row) => <tr key={row.name} className="border-t"><td className="p-3">{row.name}</td><td className="p-3 text-right">{row.lines}</td><td className="p-3 text-right">{peso(row.amount)}</td></tr>)}{!rows.length && <tr><td colSpan={3} className="p-8 text-center text-slate-500">No sales discounts in this period.</td></tr>}</tbody>
+      <tfoot className="border-t-2 bg-slate-100 font-bold"><tr><td className="p-3">TOTAL SALES DISCOUNTS</td><td className="p-3 text-right">{rows.reduce((sum, row) => sum + row.lines, 0)}</td><td className="p-3 text-right">{peso(total)}</td></tr></tfoot>
+    </table></div>
+  </section>;
 }

@@ -19,6 +19,16 @@ function LoadingModule() {
 }
 
 const moduleComponents: Record<string, ComponentType> = {
+  "/reports/internal-outlets": dynamic(() => import("@/components/reports/InternalOutletsReport").then(m => m.InternalOutletsReport), { loading: LoadingModule }),
+  "/pos/remittances": dynamic(() => import("@/components/pos/OutletRemittancesPage").then(m => m.OutletRemittancesPage), { loading: LoadingModule }),
+  "/supplier-payment-history": dynamic(
+    () => import("@/components/suppliers/SupplierFinancePage").then(m => function SupplierHistoryModule() { return <m.SupplierFinancePage mode="history" />; }),
+    { loading: LoadingModule }
+  ),
+  "/slicing/reconciliation": dynamic(
+    () => import("@/components/slicing/ChickenReconciliation").then(m => m.ChickenReconciliationPage),
+    { loading: LoadingModule }
+  ),
   "/customers": dynamic(
     () =>
       import("@/components/app-shell/MasterDataModules").then(
@@ -103,13 +113,6 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
-  "/slicing/daily-history": dynamic(
-    () =>
-      import("@/components/slicing/DailySlicingHistoryPageClient").then(
-        (m) => m.DailySlicingHistoryPageClient
-      ),
-    { loading: LoadingModule }
-  ),
   "/slicing/standard-packing": dynamic(
     () =>
       import("@/components/slicing/StandardPackingPageClient").then(
@@ -118,15 +121,19 @@ const moduleComponents: Record<string, ComponentType> = {
     { loading: LoadingModule }
   ),
   "/sales": dynamic(
-    () => import("@/components/sales/SellChickenPageClient").then((m) => m.SellChickenPageClient),
+    () => import("@/components/sales/AllSalesPageClient").then((m) => m.AllSalesPageClient),
     { loading: LoadingModule }
   ),
   "/sales/all": dynamic(
     () => import("@/components/sales/AllSalesPageClient").then((m) => m.AllSalesPageClient),
     { loading: LoadingModule }
   ),
+  "/sales/discounts": dynamic(
+    () => import("@/components/sales/DiscountsPageClient").then((m) => m.DiscountsPageClient),
+    { loading: LoadingModule }
+  ),
   "/sales/grocery": dynamic(
-    () => import("@/components/sales/SaleGroceryPageClient").then((m) => m.SaleGroceryPageClient),
+    () => import("@/components/sales/AllSalesPageClient").then((m) => m.AllSalesPageClient),
     { loading: LoadingModule }
   ),
   "/sales/history": dynamic(
@@ -160,8 +167,8 @@ const moduleComponents: Record<string, ComponentType> = {
   ),
   "/payments/history": dynamic(
     () =>
-      import("@/components/payments/PaymentSummaryPageClient").then(
-        (m) => m.PaymentSummaryPageClient
+      import("@/components/payments/PaymentHistoryPageClient").then(
+        (m) => m.PaymentHistoryPageClient
       ),
     { loading: LoadingModule }
   ),

@@ -12,6 +12,7 @@ export interface ISupplierInvoice extends Document {
   status: "UNPAID" | "PARTIAL" | "PAID" | "VOID";
   referenceType?: string;
   referenceId?: Types.ObjectId;
+  purchaseBatchId?: Types.ObjectId;
   remarks?: string;
   createdBy?: Types.ObjectId;
   createdAt: Date;
@@ -29,12 +30,14 @@ const SupplierInvoiceSchema = new Schema<ISupplierInvoice>({
   status: { type: String, enum: ["UNPAID", "PARTIAL", "PAID", "VOID"], default: "UNPAID" },
   referenceType: { type: String, default: "", trim: true, uppercase: true },
   referenceId: Schema.Types.ObjectId,
+  purchaseBatchId: { type: Schema.Types.ObjectId, ref: "PurchaseBatch" },
   remarks: { type: String, default: "", trim: true, uppercase: true },
   createdBy: { type: Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });
 
 SupplierInvoiceSchema.index({ supplierId: 1, invoiceNumber: 1 }, { unique: true });
 SupplierInvoiceSchema.index({ dueDate: 1, status: 1 });
+SupplierInvoiceSchema.index({ purchaseBatchId: 1 }, { unique: true, sparse: true });
 SupplierInvoiceSchema.index(
   { referenceType: 1, referenceId: 1 },
   {

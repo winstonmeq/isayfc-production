@@ -1,10 +1,13 @@
 "use client";
 
+import { EntryActions } from "@/components/erp/EntryForm";
+
 import { useEffect, useState } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CustomerPicker, type CustomerOption } from "@/components/sales/CustomerPicker";
+import { ItemDiscountSelector, SaleDiscountSummary, useItemDiscounts } from "@/components/sales/SaleDiscount";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -13,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn, formatPeso } from "@/lib/utils";
+import { manilaDateString } from "@/lib/date-utils";
+import { filterMainSaleProducts, mainSaleSource, type MainSaleProductFilter } from "@/lib/main-sales-entry";
 
 type ProductType = "CHICKEN" | "BODEGA";
 
@@ -29,7 +34,7 @@ type UnifiedProduct = {
   price: number;
 };
 
-type CartItem = UnifiedProduct & { quantity: number };
+type CartItem = UnifiedProduct & { quantity: number; discountId?: string };
 
 function ProductPicker({ products, value, onChange }: { products: UnifiedProduct[]; value: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -72,16 +77,18 @@ export function AllSalesPageClient() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [products, setProducts] = useState<UnifiedProduct[]>([]);
   const [customerId, setCustomerId] = useState("");
-  const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
+  const [saleDate, setSaleDate] = useState(() => manilaDateString());
   const [receiptNumber, setReceiptNumber] = useState("");
   const [selectedKey, setSelectedKey] = useState("");
   const [quantity, setQuantity] = useState("0");
+  const [productFilter, setProductFilter] = useState<MainSaleProductFilter>("ALL");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const selectedProduct = products.find((product) => product.key === selectedKey);
-  const grandTotal = cart.reduce((sum, item) => sum + item.quantity * item.price, 0);
+  const visibleProducts = filterMainSaleProducts(products, productFilter);
+  const discount = useItemDiscounts(cart.map((item) => ({ subtotal: item.quantity * item.price, quantity: item.quantity, discountId: item.discountId })));
 
   async function loadCustomers() {
     const all: CustomerOption[] = [];
@@ -153,8 +160,8 @@ export function AllSalesPageClient() {
 
   function addItem() {
     if (!selectedProduct) return toast.error("Select a product.");
-    const qty = Math.trunc(Number(quantity));
-    if (!Number.isFinite(qty) || qty <= 0) return toast.error("Quantity must be greater than zero.");
+    const qty = Number(quantity);
+    if (!Number.isSafeInteger(qty) || qty <= 0) return toast.error("Enter a whole quantity greater than zero.");
     const existingQty = cart.find((item) => item.key === selectedProduct.key)?.quantity || 0;
     if (existingQty + qty > selectedProduct.availableQty) return toast.error(`Only ${selectedProduct.availableQty} ${selectedProduct.saleUnit.toLowerCase()} available for ${selectedProduct.name}.`);
     setCart((current) => {
@@ -168,6 +175,7 @@ export function AllSalesPageClient() {
   }
 
   async function saveSale() {
+    if (discount.error) { toast.error(discount.error); return; }
     if (!customerId) return toast.error("Select a customer.");
     if (!saleDate) return toast.error("Sale date is required.");
     if (!receiptNumber.trim()) return toast.error("Receipt number is required.");
@@ -183,7 +191,7 @@ export function AllSalesPageClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          source: "MIXED",
+          source: mainSaleSource(cart),
           customerId,
           saleDate,
           receiptNumber,
@@ -193,6 +201,7 @@ export function AllSalesPageClient() {
             productId: item.id,
             bodegaProductId: item.type === "CHICKEN" ? item.id : undefined,
             quantity: item.quantity,
+            discountId: item.discountId || undefined,
           })),
         }),
       });
@@ -213,19 +222,21 @@ export function AllSalesPageClient() {
 
   return (
     <div className="space-y-5">
+      <header><h1 className="text-2xl font-black">New Sale</h1><p className="mt-1 text-sm text-slate-500">Main-branch chicken and grocery sales. Combine products on one receipt; outlet retail sales remain in Outlet Operations.</p></header>
       <Card><CardContent className="grid gap-4 p-5 lg:grid-cols-3">
         <div className="space-y-2"><Label>Customer *</Label><CustomerPicker customers={customers} value={customerId} onChange={setCustomerId} /></div>
         <div className="space-y-2"><Label>Sale Date *</Label><Input type="date" value={saleDate} onChange={(event) => setSaleDate(event.target.value)} /></div>
         <div className="space-y-2"><Label>Receipt Number *</Label><Input value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="e.g. 0003801" /></div>
       </CardContent></Card>
-      <Card><CardHeader><CardTitle>Add Product</CardTitle></CardHeader><CardContent className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
-        <ProductPicker products={products} value={selectedKey} onChange={setSelectedKey} />
+      <Card><CardHeader><CardTitle>Add Product</CardTitle><div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Product type filter">{([{ value: "ALL", label: "All" }, { value: "CHICKEN", label: "Chicken" }, { value: "BODEGA", label: "Grocery" }] as const).map((filter) => <Button key={filter.value} type="button" variant={productFilter === filter.value ? "default" : "outline"} aria-pressed={productFilter === filter.value} onClick={() => { setProductFilter(filter.value); setSelectedKey(""); setQuantity("0"); }}>{filter.label}</Button>)}</div></CardHeader><CardContent className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
+        <ProductPicker products={visibleProducts} value={selectedKey} onChange={setSelectedKey} />
         <Input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Quantity" />
         <Button onClick={addItem}><Plus className="mr-2 h-4 w-4" />Add</Button>
+
       </CardContent></Card>
       <Card><CardHeader><CardTitle>Sale Items</CardTitle></CardHeader><CardContent>
-        {cart.length === 0 ? <div className="py-16 text-center text-muted-foreground"><ShoppingCart className="mx-auto mb-2 h-8 w-8" />No items yet.</div> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Product</TableHead><TableHead>Unit</TableHead><TableHead className="text-right">Quantity</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Total</TableHead><TableHead /></TableRow></TableHeader><TableBody>{cart.map((item) => <TableRow key={item.key}><TableCell>{item.type === "CHICKEN" ? "Chicken" : "Grocery"}</TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell>{item.saleUnit}</TableCell><TableCell className="text-right">{item.quantity}</TableCell><TableCell className="text-right">{formatPeso(item.price)}</TableCell><TableCell className="text-right font-semibold">{formatPeso(item.quantity * item.price)}</TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => setCart((current) => current.filter((row) => row.key !== item.key))}><Trash2 className="h-4 w-4 text-red-600" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}
-        <div className="mt-5 flex flex-col items-end gap-3 border-t pt-5"><div className="text-2xl font-bold">{formatPeso(grandTotal)}</div><Button size="lg" disabled={isSaving || cart.length === 0} onClick={saveSale}>{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save Sale</Button></div>
+        {cart.length === 0 ? <div className="py-16 text-center text-muted-foreground"><ShoppingCart className="mx-auto mb-2 h-8 w-8" />No items yet.</div> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Product</TableHead><TableHead>Unit</TableHead><TableHead className="text-right">Quantity</TableHead><TableHead className="text-right">Price</TableHead><TableHead>Discount</TableHead><TableHead className="text-right">Total</TableHead><TableHead /></TableRow></TableHeader><TableBody>{cart.map((item) => <TableRow key={item.key}><TableCell>{item.type === "CHICKEN" ? "Chicken" : "Grocery"}</TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell>{item.saleUnit}</TableCell><TableCell className="text-right">{item.quantity}</TableCell><TableCell className="text-right">{formatPeso(item.price)}</TableCell><TableCell><ItemDiscountSelector options={discount.options} value={item.discountId} disabled={isSaving} label={`Discount for ${item.name}`} onChange={(discountId) => setCart((current) => current.map((row) => row.key === item.key ? { ...row, discountId } : row))} /></TableCell><TableCell className="text-right font-semibold">{formatPeso(discount.lineTotal(item.quantity * item.price, item.quantity, item.discountId))}</TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => setCart((current) => current.filter((row) => row.key !== item.key))}><Trash2 className="h-4 w-4 text-red-600" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}
+        <EntryActions className="mt-5"><SaleDiscountSummary discount={discount} /><Button size="lg" disabled={isSaving || cart.length === 0 || Boolean(discount.error)} onClick={saveSale}>{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save Sale</Button></EntryActions>
       </CardContent></Card>
     </div>
   );

@@ -551,6 +551,12 @@ export function SalesHistoryPageClient() {
                   <strong>Total:</strong> {formatPeso(visibleTotal)}
                 </p>
                 <p>
+                  <strong>Subtotal:</strong> {formatPeso(visibleLines.reduce((sum: number, line: any) => sum + Number(line.grossLineTotal ?? line.lineTotal ?? 0), 0))}
+                </p>
+                <p>
+                  <strong>Discount{viewData.discountName ? ` (${viewData.discountName})` : ""}:</strong> {formatPeso(visibleLines.reduce((sum: number, line: any) => sum + Number(line.discountAmount || 0), 0))}
+                </p>
+                <p>
                   <strong>Balance:</strong> {formatPeso(visibleBalance)}
                 </p>
               </div>
@@ -574,6 +580,7 @@ export function SalesHistoryPageClient() {
                       <TableHead className="text-center text-white">
                         Line Total
                       </TableHead>
+                      <TableHead className="text-center text-white">Discount</TableHead>
                     </TableRow>
                   </TableHeader>
 
@@ -595,6 +602,7 @@ export function SalesHistoryPageClient() {
                         <TableCell className="text-center">
                           {formatPeso(line.lineTotal)}
                         </TableCell>
+                        <TableCell className="text-center">{line.discountName && <span className="block text-xs text-slate-500">{line.discountName}</span>}{formatPeso(line.discountAmount || 0)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

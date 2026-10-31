@@ -1,6 +1,6 @@
 export type SaleFulfillmentState = {
   balance: number;
-  status: "PENDING" | "UNPAID";
+  status: "PENDING" | "UNPAID" | "PAID";
   fulfillmentStatus: "PENDING" | "DIRECT";
   recognizedAt?: Date;
 };
@@ -20,12 +20,12 @@ export function initialSaleFulfillment(
 
   return {
     balance: totalAmount,
-    status: "UNPAID",
+    status: totalAmount === 0 ? "PAID" : "UNPAID",
     fulfillmentStatus: "DIRECT",
     recognizedAt: saleDate,
   };
 }
 
-export function isRevenueRecognized(fulfillmentStatus?: string | null) {
-  return fulfillmentStatus !== "PENDING";
+export function isRevenueRecognized(fulfillmentStatus?: string | null, transactionType?: string | null) {
+  return transactionType !== "INTERNAL_TRANSFER" && fulfillmentStatus !== "PENDING";
 }

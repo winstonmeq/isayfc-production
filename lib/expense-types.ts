@@ -33,3 +33,9 @@ export async function ensureDefaultExpenseTypes() {
     { ordered: false }
   );
 }
+
+/** Include inactive types so historical expenses retain their display names. */
+export async function getExpenseTypeNames() {
+  const rows = await ExpenseTypeModel.find({}).select("code name").lean();
+  return new Map(rows.map((row) => [row.code, row.name]));
+}

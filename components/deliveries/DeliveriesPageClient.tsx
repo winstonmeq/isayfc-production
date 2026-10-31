@@ -1,6 +1,8 @@
 // components/deliveries/DeliveriesPageClient.tsx
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Eye,
@@ -39,6 +41,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -77,6 +80,7 @@ type DeliveryItemForm = {
 type DeliveryItem = {
   _id: string;
   supplierName: string;
+  productNames?: string[];
   deliveryCode: string;
   receiptNumber: string;
   totalBags: number;
@@ -166,6 +170,12 @@ async function fetchAllLookupRows(path: string) {
 
 export function DeliveriesPageClient() {
   const [deliveries, setDeliveries] = useState<DeliveryItem[]>([]);
+  const deliveryTotals = useMemo(() => deliveries.reduce((sum, delivery) => ({
+    bags: sum.bags + (Number(delivery.totalBags) || 0),
+    kilos: sum.kilos + (Number(delivery.totalKilos) || 0),
+    pieces: sum.pieces + (Number(delivery.totalPieces) || 0),
+    amount: sum.amount + (Number(delivery.totalAmount) || 0),
+  }), { bags: 0, kilos: 0, pieces: 0, amount: 0 }), [deliveries]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -183,9 +193,11 @@ export function DeliveriesPageClient() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [deliveryCode, setDeliveryCode] = useState("");
+  const [productFilter, setProductFilter] = useState("");
   const [receiptNumber, setReceiptNumber] = useState("");
 
   const [appliedFilters, setAppliedFilters] = useState({
+    product: "",
     dateFrom: "",
     dateTo: "",
     deliveryCode: "",
@@ -284,6 +296,7 @@ export function DeliveriesPageClient() {
     if (appliedFilters.receiptNumber) {
       params.set("receiptNumber", appliedFilters.receiptNumber);
     }
+    if (appliedFilters.product) params.set("product", appliedFilters.product);
 
     try {
       const res = await fetch(`/api/deliveries?${params.toString()}`, {
@@ -404,6 +417,7 @@ export function DeliveriesPageClient() {
 
   function applyFilters() {
     setAppliedFilters({
+      product: productFilter.trim(),
       dateFrom,
       dateTo,
       deliveryCode: deliveryCode.trim(),
@@ -413,11 +427,13 @@ export function DeliveriesPageClient() {
   }
 
   function resetFilters() {
+    setProductFilter("");
     setDateFrom("");
     setDateTo("");
     setDeliveryCode("");
     setReceiptNumber("");
     setAppliedFilters({
+      product: "",
       dateFrom: "",
       dateTo: "",
       deliveryCode: "",
@@ -659,7 +675,11 @@ export function DeliveriesPageClient() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_7rem_auto]">
+      <div className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[repeat(5,minmax(0,1fr))_7rem_auto]">
+        <div>
+          <Label htmlFor="delivery-product-filter">Product</Label>
+          <Input id="delivery-product-filter" value={productFilter} onChange={(event) => setProductFilter(event.target.value)} placeholder="Search product name, e.g. OS1" maxLength={120} onKeyDown={(event) => { if (event.key === "Enter") applyFilters(); }} />
+        </div>
         <div>
           <Label>Date From</Label>
           <Input
@@ -745,6 +765,7 @@ export function DeliveriesPageClient() {
                   <TableHead className="text-center text-white">
                     Supplier
                   </TableHead>
+                  <TableHead className="text-center text-white">Products</TableHead>
                   <TableHead className="text-center text-white">
                     Delivery Code
                   </TableHead>
@@ -778,14 +799,14 @@ export function DeliveriesPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-32 text-center">
+                    <TableCell colSpan={11} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : deliveries.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={10}
+                      colSpan={11}
                       className="h-32 text-center text-muted-foreground"
                     >
                       No deliveries found.
@@ -796,6 +817,9 @@ export function DeliveriesPageClient() {
                     <TableRow key={delivery._id}>
                       <TableCell className="text-center">
                         {delivery.supplierName}
+                      </TableCell>
+                      <TableCell className="min-w-[160px] whitespace-normal text-center">
+                        {delivery.productNames?.length ? delivery.productNames.join(", ") : "—"}
                       </TableCell>
 
                       <TableCell className="text-center">
@@ -865,6 +889,18 @@ export function DeliveriesPageClient() {
                   ))
                 )}
               </TableBody>
+              {!isLoading && deliveries.length > 0 && (
+                <TableFooter className="bg-slate-100 font-bold text-slate-950">
+                  <TableRow>
+                    <TableCell colSpan={4}>Page Total ({deliveries.length} deliveries)</TableCell>
+                    <TableCell className="text-center">{deliveryTotals.bags.toLocaleString()}</TableCell>
+                    <TableCell className="text-center">{deliveryTotals.kilos.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-center">{deliveryTotals.pieces.toLocaleString()}</TableCell>
+                    <TableCell className="text-center">{formatPeso(deliveryTotals.amount)}</TableCell>
+                    <TableCell colSpan={3} />
+                  </TableRow>
+                </TableFooter>
+              )}
             </Table>
           </div>
 
@@ -910,7 +946,7 @@ export function DeliveriesPageClient() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
+        <EntryDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Edit Delivery" : "Add Delivery"}
@@ -1185,11 +1221,11 @@ export function DeliveriesPageClient() {
                 {isSaving ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                {editingId ? "Update Delivery" : "Save Delivery"}
+                {editingId ? "Save" : "Save"}
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
 
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>

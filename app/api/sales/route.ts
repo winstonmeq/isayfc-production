@@ -1,3 +1,4 @@
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId } from "mongoose";
 
@@ -18,6 +19,8 @@ import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ProductModel from "@/models/Product";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
+import DiscountModel from "@/models/Discount";
+import { applyItemDiscounts } from "@/lib/discounts";
 import StandardPackingModel from "@/models/StandardPacking";
 import OutletModel from "@/models/Outlet";
 import StockTransferModel from "@/models/StockTransfer";
@@ -35,6 +38,7 @@ import { getOutletCode, getSaleOrigin } from "@/lib/sale-origin";
 type SaleSource = "CHICKEN" | "BODEGA" | "MIXED";
 
 type SaleItemInput = {
+  discountId?: string;
   source?: string;
   productId?: string;
   bodegaProductId?: string;
@@ -51,6 +55,11 @@ type SaleItemInput = {
 };
 
 type PreparedSaleItem = {
+  discountId?: mongoose.Types.ObjectId;
+  discountName?: string;
+  discountType?: "PERCENTAGE" | "AMOUNT";
+  discountValue?: number;
+  discountBasis?: "PER_UNIT" | "PER_ROW";
   source: "CHICKEN" | "BODEGA";
   productType: "BODEGA_PRODUCT" | "PRODUCT";
   productId?: mongoose.Types.ObjectId;
@@ -61,6 +70,8 @@ type PreparedSaleItem = {
   qty: number;
   price: number;
   lineTotal: number;
+  grossLineTotal?: number;
+  discountAmount?: number;
   unitCost: number;
   stockUnit: "PACK" | "HEAD" | "QTY";
   packSize: number;
@@ -102,6 +113,12 @@ function serializeSale(sale: any, sourceBreakdown: any[] = []) {
     totalPacks: Number(sale.totalPacks || 0),
     totalQty: Number(sale.totalQty || 0),
     totalAmount: Number(sale.totalAmount || 0),
+    subtotal: Number(sale.subtotal ?? sale.totalAmount ?? 0),
+    discountId: sale.discountId?.toString?.() || "",
+    discountName: sale.discountName || "",
+    discountType: sale.discountType,
+    discountValue: Number(sale.discountValue || 0),
+    discountAmount: Number(sale.discountAmount || 0),
     paidAmount: Number(sale.paidAmount || 0),
     balance: Number(sale.balance || 0),
     status: sale.status || "UNPAID",
@@ -298,6 +315,7 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  filter.$and = [...(filter.$and || []), { $nor: internalOutletMatchClauses() }];
   const [items, total] = await Promise.all([
     SaleModel.find(filter)
       .populate("customerId", "name")
@@ -376,6 +394,9 @@ async function handlePOST(req: NextRequest) {
   const saleDate = cleanString(body.saleDate);
   const receiptNumber = cleanString(body.receiptNumber);
   const remarks = cleanString(body.remarks);
+  if (cleanString(body.discountId)) {
+    return NextResponse.json({ success: false, message: "Select discounts on individual product rows. Refresh the sales page." }, { status: 400 });
+  }
   const lateEntryReason = correctionReason(body.correctionReason);
   const items: SaleItemInput[] = Array.isArray(body.items) ? body.items : [];
   const isLateEntry = Boolean(saleDate && saleDate < manilaDateString());
@@ -452,7 +473,17 @@ async function handlePOST(req: NextRequest) {
       let totalAmount = 0;
       const preparedItems: PreparedSaleItem[] = [];
 
+      const requestedDiscountIds = [...new Set(items.map((item) => cleanString(item.discountId)).filter(Boolean))];
+      if (requestedDiscountIds.some((id) => !isValidObjectId(id))) fail(400, "Select a valid configured discount for each product.");
+      const activeDiscounts = requestedDiscountIds.length
+        ? await DiscountModel.find({ _id: { $in: requestedDiscountIds }, isActive: true }).session(mongoSession)
+        : [];
+      const discountsById = new Map(activeDiscounts.map((rule) => [String(rule._id), rule]));
+      if (activeDiscounts.length !== requestedDiscountIds.length) fail(400, "A product discount is inactive or unavailable. Choose an active discount.");
+
       for (const item of items) {
+        const itemDiscountId = cleanString(item.discountId);
+        const itemDiscount = discountsById.get(itemDiscountId);
         const qty = cleanNumber(item.quantity || item.packs || item.qty);
         const itemRemarks = cleanString(item.remarks);
         const itemSourceInput = cleanString(item.source).toUpperCase();
@@ -554,6 +585,7 @@ async function handlePOST(req: NextRequest) {
         }
 
         preparedItems.push({
+          ...(itemDiscount ? { discountId: itemDiscount._id, discountName: itemDiscount.name, discountType: itemDiscount.type, discountValue: itemDiscount.value, discountBasis: itemDiscount.basis || "PER_ROW" } : {}),
           source: itemSource,
           productType,
           productId: productType === "PRODUCT" ? product._id : undefined,
@@ -598,6 +630,15 @@ async function handlePOST(req: NextRequest) {
         });
       }
 
+      let discounted;
+      try {
+        discounted = applyItemDiscounts(preparedItems.map((item) => ({ subtotal: item.lineTotal, quantity: item.qty, discount: item.discountId ? { name: item.discountName!, type: item.discountType!, value: item.discountValue!, basis: item.discountBasis } : null })));
+      } catch (error) {
+        fail(400, (error as Error).message);
+      }
+      preparedItems.forEach((item, index) => Object.assign(item, discounted.lines[index]));
+      totalAmount = discounted.totalAmount;
+
       const effectiveSaleDate = new Date(saleDate);
       const fulfillment = initialSaleFulfillment(
         Boolean(linkedOutletId),
@@ -609,11 +650,14 @@ async function handlePOST(req: NextRequest) {
           {
             source,
             customerId,
+            transactionType: "EXTERNAL_SALE",
             saleDate: effectiveSaleDate,
             receiptNumber,
             totalPacks,
             totalQty,
             totalAmount,
+            subtotal: discounted.subtotal,
+            discountAmount: discounted.discountAmount,
             paidAmount: 0,
             ...fulfillment,
             remarks,
@@ -663,7 +707,8 @@ async function handlePOST(req: NextRequest) {
                   ? "HEAD"
                   : "QTY",
             buyingPrice: item.unitCost,
-            sellingPrice: item.price,
+            companyUnitCost: item.unitCost,
+            sellingPrice: item.qty > 0 ? item.lineTotal / item.qty : 0,
             qty: item.qty,
             qtyPcs: item.stockPcsOut,
             baseUnit: item.baseUnit,
@@ -776,6 +821,13 @@ async function handlePOST(req: NextRequest) {
           qty: item.qty,
           price: item.price,
           lineTotal: item.lineTotal,
+          grossLineTotal: item.grossLineTotal,
+          discountAmount: item.discountAmount,
+          discountId: item.discountId,
+          discountName: item.discountName,
+          discountType: item.discountType,
+          discountValue: item.discountValue,
+          discountBasis: item.discountBasis,
           unitCost: item.unitCost,
           stockUnit: item.stockUnit,
           packSize: item.packSize,
@@ -826,7 +878,7 @@ async function handlePOST(req: NextRequest) {
       {
         success: true,
         message: linkedOutletId
-          ? "Sale created successfully with a pending stock transfer."
+          ? "Outlet customer sale created with a pending delivery. Receipt recognizes the main sale and customer balance."
           : "Sale created successfully.",
         data: serializeSale(populatedSale),
       },

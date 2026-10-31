@@ -37,6 +37,7 @@ type PosCollection = {
   paymentMethod: string;
   totalAmount: number;
   paidAmount: number;
+  balance: number;
   cashReceived: number;
   change: number;
   status: string;
@@ -168,7 +169,7 @@ export function PosCollectionsPageClient() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Transactions</p><p className="mt-1 text-2xl font-bold">{summary.transactionCount.toLocaleString()}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">POS Sales</p><p className="mt-1 text-2xl font-bold">{formatPeso(summary.totalSales)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Collected</p><p className="mt-1 text-2xl font-bold text-emerald-700">{formatPeso(summary.totalPaid)}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Paid Against Sales (to date)</p><p className="mt-1 text-2xl font-bold text-emerald-700">{formatPeso(summary.totalPaid)}</p></CardContent></Card>
       </div>
 
       <Card>
@@ -181,11 +182,11 @@ export function PosCollectionsPageClient() {
             <Table>
               <TableHeader className="bg-slate-950">
                 <TableRow>
-                  {['Date','Receipt','Outlet','Cashier','Shift','Method','Sale','Paid','Cash Received','Change','Status'].map((label) => <TableHead key={label} className="whitespace-nowrap text-white">{label}</TableHead>)}
+                  {['Sale Date','Receipt','Outlet','Cashier','Shift','Original Method','Sale','Paid to Date','Balance','Cash at Sale','Change','Status'].map((label) => <TableHead key={label} className="whitespace-nowrap text-white">{label}</TableHead>)}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? <TableRow><TableCell colSpan={11} className="h-32 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></TableCell></TableRow> : rows.length === 0 ? <TableRow><TableCell colSpan={11} className="h-32 text-center text-muted-foreground">No POS collections found.</TableCell></TableRow> : rows.map((row) => (
+                {loading ? <TableRow><TableCell colSpan={12} className="h-32 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></TableCell></TableRow> : rows.length === 0 ? <TableRow><TableCell colSpan={12} className="h-32 text-center text-muted-foreground">No POS collections found.</TableCell></TableRow> : rows.map((row) => (
                   <TableRow key={row._id}>
                     <TableCell className="whitespace-nowrap">{row.saleDate ? new Date(row.saleDate).toLocaleDateString() : '—'}</TableCell>
                     <TableCell>{row.receiptNumber}</TableCell>
@@ -195,6 +196,7 @@ export function PosCollectionsPageClient() {
                     <TableCell>{row.paymentMethod}</TableCell>
                     <TableCell className="text-right">{formatPeso(row.totalAmount)}</TableCell>
                     <TableCell className="text-right font-semibold text-emerald-700">{formatPeso(row.paidAmount)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatPeso(row.balance)}</TableCell>
                     <TableCell className="text-right">{formatPeso(row.cashReceived)}</TableCell>
                     <TableCell className="text-right">{formatPeso(row.change)}</TableCell>
                     <TableCell>{row.status}</TableCell>

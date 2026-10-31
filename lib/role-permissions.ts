@@ -58,19 +58,22 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "sales.view", label: "View Sales" },
       {
         key: "sales.manage",
-        label: "Create Sales (All, Chicken, and Grocery)",
+        label: "Create Main Sales (Chicken and Grocery)",
       },
       { key: "sales-lines.view", label: "View Sales Per Item" },
+      { key: "discounts.view", label: "View Discounts" },
+      { key: "discounts.manage", label: "Manage Discount Setup" },
       { key: "customer-deliveries.view", label: "View Customer Deliveries" },
       { key: "customer-deliveries.manage", label: "Manage Customer Deliveries" },
       { key: "customer-inventory.view", label: "View Customer Inventory" },
     ],
   },
   {
-    group: "Point of Sale (POS)",
+    group: "Outlet Operations (POS)",
     permissions: [
-      { key: "pos.view", label: "View Outlet POS" },
-      { key: "pos.manage", label: "Operate POS and Cashier Shifts" },
+      { key: "pos.view", label: "View Outlet Daily Sales and Operations" },
+      { key: "pos.manage", label: "Encode Outlet Sales and Activities" },
+      { key: "pos.employee-finance.manage", label: "Collect Employee Credit and Reimburse Outside Purchases" },
     ],
   },
   {
@@ -212,6 +215,8 @@ export const PRODUCT_LOOKUP_PERMISSIONS: RolePermission[] = [
 ];
 
 export const SUPPLIER_LOOKUP_PERMISSIONS: RolePermission[] = [
+  "purchase-items.view",
+  "purchase-items.manage",
   "suppliers.view",
   "suppliers.manage",
   "supplier-deliveries.view",

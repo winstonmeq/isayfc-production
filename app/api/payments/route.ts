@@ -1,3 +1,4 @@
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId, type QueryFilter } from "mongoose";
 
@@ -17,6 +18,7 @@ import CustomerModel from "@/models/Customer";
 import PaymentModel from "@/models/Payment";
 import PaymentAllocationModel from "@/models/PaymentAllocation";
 import SaleModel from "@/models/Sale";
+import { outletSaleMatchClauses } from "@/lib/sale-origin";
 
 export const runtime = "nodejs";
 
@@ -124,7 +126,8 @@ export async function GET(req: NextRequest) {
     };
   }
 
-  const [items, total] = await Promise.all([
+  const aggregateFilter = { ...filter, ...(typeof filter.customerId === "string" ? { customerId: new mongoose.Types.ObjectId(filter.customerId) } : {}) };
+  const [items, total, totals] = await Promise.all([
     PaymentModel.find(filter)
       .populate("customerId", "name")
       .populate("createdBy", "name username")
@@ -133,11 +136,14 @@ export async function GET(req: NextRequest) {
       .limit(limit)
       .lean(),
     PaymentModel.countDocuments(filter),
+    PaymentModel.aggregate([{ $match: aggregateFilter }, { $group: { _id: null, amount: { $sum: "$amount" }, appliedAmount: { $sum: "$appliedAmount" }, unappliedAmount: { $sum: "$unappliedAmount" } } }]),
   ]);
+  const allocations = await PaymentAllocationModel.find({ paymentId: { $in: items.map(item => item._id) } }).populate("saleId", "receiptNumber").lean();
 
   return NextResponse.json({
     success: true,
-    data: items.map(serializePayment),
+    data: items.map(item => ({ ...serializePayment(item), allocations: allocations.filter(row => String(row.paymentId) === String(item._id)).map(row => ({ saleId: String((row.saleId as any)?._id || row.saleId), receiptNumber: (row.saleId as any)?.receiptNumber || "", amount: row.amount })) })),
+    summary: totals[0] || { amount: 0, appliedAmount: 0, unappliedAmount: 0 },
     meta: {
       page,
       limit,
@@ -245,6 +251,7 @@ async function handlePOST(req: NextRequest) {
       let appliedAmount = 0;
 
       const unpaidSales = await SaleModel.find({
+        $nor: [...outletSaleMatchClauses(), ...internalOutletMatchClauses()],
         customerId,
         isVoided: false,
         fulfillmentStatus: { $ne: "PENDING" },

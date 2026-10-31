@@ -20,6 +20,8 @@
 //     referenceType "REPACK" + referenceId so the conversion is auditable.
 
 import { NextRequest, NextResponse } from "next/server";
+import { allocateCompanyOutputs, weightedCompanyCost } from "@/lib/company-cost";
+import { validIngredientQuantity } from "@/lib/business-flow";
 import mongoose, { Types, isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
@@ -219,10 +221,10 @@ export async function POST(req: NextRequest) {
   }
   for (const source of sources) {
     const id = String(source?.inventoryId || "").trim();
-    const qty = Math.trunc(Number(source?.qty || 0));
-    if (!isValidObjectId(id) || !Number.isFinite(qty) || qty < 1) {
+    const qty = Number(source?.qty || 0);
+    if (!isValidObjectId(id) || !Number.isFinite(qty) || qty <= 0) {
       return NextResponse.json(
-        { success: false, message: "Each ingredient needs a product and a whole quantity of at least 1." },
+        { success: false, message: "Each ingredient needs a product and a positive quantity." },
         { status: 400 }
       );
     }
@@ -272,13 +274,14 @@ export async function POST(req: NextRequest) {
       let totalSourceCost = 0;
       for (const input of sources) {
         const inventoryId = String(input.inventoryId || "");
-        const qty = Math.trunc(Number(input.qty || 0));
+        const qty = Number(input.qty || 0);
         const inv = await OutletInventoryModel.findOne({
           _id: inventoryId,
           outletId,
           isActive: true,
         }).session(mongoSession);
         if (!inv) throw new ApiError(404, "An ingredient is not stocked at this outlet.");
+        if (!validIngredientQuantity(qty, inv.unitLabel)) throw new ApiError(400, "Pieces and heads must be whole; measured ingredients must have a positive quantity.");
 
         const before = Number(inv.stockQty || 0);
         const after = before - qty;
@@ -304,8 +307,8 @@ export async function POST(req: NextRequest) {
       let totalTargetUnits = 0;
 
       for (const t of targets) {
-        const qty = Math.trunc(Number(t?.qty || 0));
-        if (!Number.isFinite(qty) || qty < 1) {
+        const qty = Number(t?.qty || 0);
+        if (!Number.isSafeInteger(qty) || qty < 1) {
           throw new ApiError(400, "Each target quantity must be a whole number of at least 1.");
         }
 
@@ -385,6 +388,10 @@ export async function POST(req: NextRequest) {
       // targets should pass an explicit buyingPrice override per target.
       const unitCost =
         totalTargetUnits > 0 ? totalSourceCost / totalTargetUnits : 0;
+      const companyOutputCosts = allocateCompanyOutputs(
+        consumed.map(source => ({ quantity: source.qty, companyUnitCost: source.inv.companyUnitCost })),
+        prepared.map(target => ({ quantity: target.qty, weightPerUnit: target.unitCostOverride > 0 ? target.unitCostOverride : unitCost }))
+      );
 
       const ledger: any[] = [];
 
@@ -422,6 +429,8 @@ export async function POST(req: NextRequest) {
       for (const p of prepared) {
         const before = Number(p.inv.stockQty || 0);
         const after = before + p.qty;
+        p.inv.companyUnitCost = weightedCompanyCost(before, p.inv.companyUnitCost, p.qty,
+          companyOutputCosts[prepared.indexOf(p)]);
 
         p.inv.stockQty = after;
 

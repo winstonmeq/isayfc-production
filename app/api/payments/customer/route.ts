@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/require-permission";
 import { cleanString, escapeRegex } from "@/lib/crud-utils";
 import CustomerModel from "@/models/Customer";
 import SaleModel from "@/models/Sale";
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 
 export const runtime = "nodejs";
 
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
         $match: {
           isVoided: false,
           fulfillmentStatus: { $ne: "PENDING" },
+          $nor: internalOutletMatchClauses(),
           balance: { $gt: 0 },
         },
       },

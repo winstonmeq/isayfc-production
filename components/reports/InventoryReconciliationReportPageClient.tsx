@@ -43,7 +43,7 @@ const statusStyle: Record<Status, string> = {
   BROKEN_CHAIN: "bg-orange-50 text-orange-700",
 };
 
-export function InventoryReconciliationReportPageClient() {
+export function InventoryReconciliationReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" | "OUTLET" }) {
   const [report, setReport] = useState<ReconciliationReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -53,7 +53,7 @@ export function InventoryReconciliationReportPageClient() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/reports/inventory-reconciliation", {
+      const response = await fetch(`/api/reports/inventory-reconciliation?scope=${scope}`, {
         cache: "no-store",
       });
       const json = await response.json();
@@ -68,7 +68,7 @@ export function InventoryReconciliationReportPageClient() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     void load();
@@ -90,7 +90,7 @@ export function InventoryReconciliationReportPageClient() {
     <div className="space-y-5 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-black">Inventory Reconciliation</h1>
+          <h1 className="text-2xl font-black">{scope === "OUTLET" ? "Outlet" : "Main"} Inventory Reconciliation</h1>
           <p className="text-sm text-slate-500">
             Compare current inventory balances with the latest stock ledger and
             detect missing or broken transaction history.
@@ -142,10 +142,7 @@ export function InventoryReconciliationReportPageClient() {
             className="h-9 rounded-lg border border-input bg-white px-3 text-sm"
           >
             <option value="ALL">All inventory</option>
-            <option value="GROCERY">Grocery</option>
-            <option value="BODEGA">Bodega</option>
-            <option value="OUTLET">Outlet</option>
-            <option value="CUSTOMER">Customer</option>
+            {scope === "MAIN" ? <><option value="GROCERY">Grocery</option><option value="BODEGA">Bodega</option><option value="CUSTOMER">Customer</option></> : <option value="OUTLET">Outlet</option>}
           </select>
         </div>
         <div>

@@ -21,7 +21,15 @@ export interface ISaleLine extends Document {
   qty: number;
   price: number;
   lineTotal: number;
+  grossLineTotal?: number;
+  discountAmount?: number;
+  discountId?: Types.ObjectId;
+  discountName?: string;
+  discountType?: "PERCENTAGE" | "AMOUNT";
+  discountValue?: number;
+  discountBasis?: "PER_UNIT" | "PER_ROW";
   unitCost: number;
+  companyUnitCost?: number;
 
   stockUnit: SaleStockUnit;
   packSize: number;
@@ -39,6 +47,7 @@ export interface ISaleLine extends Document {
 
 const SaleLineSchema = new Schema<ISaleLine>(
   {
+    companyUnitCost: { type: Number, min: 0 },
     saleId: {
       type: Schema.Types.ObjectId,
       ref: "Sale",
@@ -107,6 +116,13 @@ const SaleLineSchema = new Schema<ISaleLine>(
       required: true,
       min: 0,
     },
+    grossLineTotal: { type: Number, min: 0 },
+    discountAmount: { type: Number, default: 0, min: 0 },
+    discountId: { type: Schema.Types.ObjectId, ref: "Discount" },
+    discountName: { type: String, default: "" },
+    discountType: { type: String, enum: ["PERCENTAGE", "AMOUNT"] },
+    discountValue: { type: Number, min: 0 },
+    discountBasis: { type: String, enum: ["PER_UNIT", "PER_ROW"] },
 
     // Cost per base stock unit at the time of sale. Historical reports use
     // this snapshot instead of today's product price.

@@ -1,28 +1,19 @@
-// app/api/reports/profit/route.ts
-//
-// Consolidated Profit Report — a standard income statement (P&L) for the
-// period:
-//
-//   Revenue (Chicken + Grocery)
-//   − Cost of Goods Sold (cost behind those sales, by source)
-//   = Gross Profit
-//   − Operating Expenses (by type)
-//   = Net Profit
-//
-// Revenue/COGS come from sale lines: each line's lineTotal is revenue, and its
-// quantity × the product's buyingPrice is the cost. Chicken lines reference a
-// BodegaProduct; grocery lines reference a Product.
-//
-// COGS uses each product's CURRENT buyingPrice (the system keeps no per-line
-// cost snapshot), so historical cost reflects today's cost if prices changed.
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+// Main-company income statement: gross sales less sales discounts = net sales.
+// Gross profit = net sales less COGS; net profit also deducts operating expenses.
+// Product cost snapshots are used where available, with legacy cost fallbacks.
+// Outlet POS activity is reported separately.
 
 import { NextRequest, NextResponse } from "next/server";
+import { recognizedSaleRange } from "@/lib/business-flow";
 import { Types } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import { parseReportRange, roundMoney } from "@/lib/report-utils";
 import { manilaDateString } from "@/lib/date-utils";
+import { getExpenseTypeNames } from "@/lib/expense-types";
+import { salesReportAmounts } from "@/lib/sales-report-amounts";
 import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
@@ -56,8 +47,8 @@ export async function GET(req: NextRequest) {
   const sales = await SaleModel.find({
     isVoided: false,
     fulfillmentStatus: { $ne: "PENDING" },
-    saleDate: { $gte: start, $lt: end },
-    $nor: outletSaleMatchClauses(),
+    $expr: recognizedSaleRange(start, end),
+    $nor: [...outletSaleMatchClauses(), ...internalOutletMatchClauses()],
   })
     .select("_id source channel receiptNumber")
     .lean<
@@ -78,6 +69,8 @@ export async function GET(req: NextRequest) {
     stockPcsOut?: number;
     baseQty?: number;
     lineTotal?: number;
+    grossLineTotal?: number;
+    discountAmount?: number;
     unitCost?: number;
   };
 
@@ -86,7 +79,7 @@ export async function GET(req: NextRequest) {
       ? []
       : await SaleLineModel.find({ saleId: { $in: saleIds } })
           .select(
-            "source productId bodegaProductId qty stockPcsOut baseQty lineTotal unitCost"
+            "source productId bodegaProductId qty stockPcsOut baseQty lineTotal grossLineTotal discountAmount unitCost"
           )
           .lean<Line[]>();
 
@@ -154,14 +147,17 @@ export async function GET(req: NextRequest) {
   //    their own OUTLET bucket: they carry no product refs, so costing them
   //    from the product maps would book them at zero COGS (100% margin).
   const bySource = {
-    CHICKEN: { revenue: 0, cogs: 0 },
-    BODEGA: { revenue: 0, cogs: 0 },
+    CHICKEN: { revenue: 0, grossSales: 0, discounts: 0, cogs: 0 },
+    BODEGA: { revenue: 0, grossSales: 0, discounts: 0, cogs: 0 },
   };
 
   for (const l of lines) {
     const isChicken = l.source === "CHICKEN" || !!l.bodegaProductId;
     const bucket = isChicken ? bySource.CHICKEN : bySource.BODEGA;
-    const revenue = Number(l.lineTotal || 0);
+    const amounts = salesReportAmounts(l);
+    const revenue = amounts.netSales;
+    bucket.grossSales = roundMoney(bucket.grossSales + amounts.grossSales);
+    bucket.discounts = roundMoney(bucket.discounts + amounts.discounts);
     // Cost = pieces sold × unit cost. stockPcsOut is the true base-unit qty
     // (packs already expanded); fall back to qty.
     const pcs = Number(l.baseQty ?? l.stockPcsOut ?? l.qty ?? 0);
@@ -213,8 +209,10 @@ export async function GET(req: NextRequest) {
     { $sort: { total: -1 } },
   ]);
 
+  const expenseNames = await getExpenseTypeNames();
   const expenses = expenseAgg.map((e) => ({
     type: String(e._id || "OTHERS"),
+    name: expenseNames.get(String(e._id || "OTHERS")) || String(e._id || "OTHERS").replaceAll("_", " "),
     total: roundMoney(Number(e.total || 0)),
     count: Number(e.count || 0),
   }));
@@ -234,6 +232,12 @@ export async function GET(req: NextRequest) {
       total: revenue,
       chicken: roundMoney(bySource.CHICKEN.revenue),
       grocery: roundMoney(bySource.BODEGA.revenue),
+      grossSales: roundMoney(bySource.CHICKEN.grossSales + bySource.BODEGA.grossSales),
+      grossChicken: bySource.CHICKEN.grossSales,
+      grossGrocery: bySource.BODEGA.grossSales,
+      discounts: roundMoney(bySource.CHICKEN.discounts + bySource.BODEGA.discounts),
+      chickenDiscounts: bySource.CHICKEN.discounts,
+      groceryDiscounts: bySource.BODEGA.discounts,
     },
     cogs: {
       total: cogs,

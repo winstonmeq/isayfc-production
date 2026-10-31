@@ -31,6 +31,8 @@ type ProductColumn = {
   piecePrice: number;
   stockUnitsOut: number;
   grossSales: number;
+  discounts: number;
+  netSales: number;
   cogs: number;
   grossProfit: number;
   beginningInventory: number;
@@ -48,6 +50,8 @@ type ReportData = {
     pieceUnits: number;
     pieceSales: number;
     grossSales: number;
+    discounts: number;
+    netSales: number;
     beginningInventory: number;
     processedChickenCuts: number;
     endingInventory: number;
@@ -59,7 +63,7 @@ type ReportData = {
     netIncome: number;
     profitabilityRatio: number;
   };
-  expenses: Array<{ type: string; total: number }>;
+  expenses: Array<{ type: string; name?: string; total: number }>;
 };
 
 const money = (value: number) =>
@@ -72,18 +76,6 @@ const quantity = (value: number) =>
   (Number(value) || 0).toLocaleString("en-PH", {
     maximumFractionDigits: 2,
   });
-
-const expenseLabel: Record<string, string> = {
-  DELIVERY_EXPENSES: "Delivery Expenses",
-  CLEANING_SUPPLIES: "Cleaning Supplies",
-  TRANSPORTATION_EXPENSES: "Transportation Expense",
-  MARINATE_EXPENSES: "Marinate Expense",
-  OFFICE_SUPPLIES: "Office Supplies",
-  REPAIR_AND_MAINTENANCE: "Repairs and Maintenance",
-  SALARIES: "Salaries Expense",
-  INCENTIVES_AND_ALLOWANCES: "Incentives and Allowances",
-  OTHERS: "Other Expenses",
-};
 
 export function GrossSalesProfitabilityReportPageClient() {
   const [preset, setPreset] = useState<Preset>("month");
@@ -349,6 +341,8 @@ export function GrossSalesProfitabilityReportPageClient() {
                 total={money(visibleTotals.grossSales)}
                 products={visibleProducts}
               />
+              <DataRow label="Less: Sales Discounts" total={money(visibleTotals.discounts)} values={visibleProducts.map((product) => money(product.discounts))} />
+              <DataRow label="NET SALES" total={money(visibleTotals.netSales)} values={visibleProducts.map((product) => money(product.netSales))} bold rule />
             </ReportTable>
 
             <ReportTable products={visibleProducts}>
@@ -427,7 +421,7 @@ export function GrossSalesProfitabilityReportPageClient() {
                 {data.expenses.map((expense) => (
                   <tr key={expense.type}>
                     <td className="w-80 px-1 py-1 italic">
-                      {expenseLabel[expense.type] || expense.type.replaceAll("_", " ")}
+                      {expense.name || expense.type.replaceAll("_", " ")}
                     </td>
                     <td className="px-1 py-1 text-right">{money(expense.total)}</td>
                   </tr>

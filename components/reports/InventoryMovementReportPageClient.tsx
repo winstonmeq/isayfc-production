@@ -40,6 +40,7 @@ type MovementReport = {
   range: { start: string; end: string };
   generatedAt: string;
   data: MovementRow[];
+  locationOptions: string[];
   summary: {
     products: number;
     movementCount: number;
@@ -50,10 +51,11 @@ type MovementReport = {
   };
 };
 
-export function InventoryMovementReportPageClient() {
+export function InventoryMovementReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" | "OUTLET" }) {
   const [preset, setPreset] = useState<Preset>("month");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [location, setLocation] = useState("");
   const [data, setData] = useState<MovementReport | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -66,6 +68,8 @@ export function InventoryMovementReportPageClient() {
     setLoading(true);
     try {
       const params = buildRangeParams({ preset, from, to });
+      params.set("scope", scope);
+      if (location) params.set("location", location);
       const response = await fetch(
         `/api/reports/inventory-movements?${params.toString()}`,
         { cache: "no-store" }
@@ -82,7 +86,7 @@ export function InventoryMovementReportPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [preset, from, to]);
+  }, [preset, from, to, scope, location]);
 
   useEffect(() => {
     if (preset === "custom") return;
@@ -98,8 +102,8 @@ export function InventoryMovementReportPageClient() {
 
   return (
     <ReportShell
-      title="Inventory Movement Report"
-      subtitle="Opening stock, movements, deductions, and closing stock for the selected period."
+      title={scope === "OUTLET" ? "Outlet Stock Movement Report" : "Main Inventory Movement Report"}
+      subtitle={scope === "OUTLET" ? "Outlet-only opening stock, receipts, production consumption, sales, deductions, and closing balances." : "Bodega and grocery movements and closing stock. Outlet balances are excluded."}
       generatedAt={data?.generatedAt}
       periodLabel={periodLabel}
       preset={preset}
@@ -109,6 +113,7 @@ export function InventoryMovementReportPageClient() {
       onFrom={setFrom}
       onTo={setTo}
       onApply={load}
+      extraFilters={scope === "OUTLET" ? <label className="text-sm font-semibold">Outlet <select className="h-10 rounded-lg border bg-white px-3" value={location} onChange={(event) => setLocation(event.target.value)}><option value="">All Outlets</option>{data?.locationOptions?.map((name) => <option key={name} value={name}>{name}</option>)}</select></label> : undefined}
     >
       {loading ? (
         <div className="flex items-center justify-center py-16 text-slate-400">

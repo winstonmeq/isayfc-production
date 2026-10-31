@@ -14,6 +14,9 @@ export interface IInventoryAdjustment extends Document {
   reason: string;
   remarks?: string;
   stockCountId?: Types.ObjectId;
+  status?: "POSTED" | "REVERSED";
+  reversalOf?: Types.ObjectId;
+  reversedByAdjustmentId?: Types.ObjectId;
   createdBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -32,10 +35,14 @@ const InventoryAdjustmentSchema = new Schema<IInventoryAdjustment>({
   reason: { type: String, required: true, trim: true, uppercase: true },
   remarks: { type: String, default: "", trim: true, uppercase: true },
   stockCountId: { type: Schema.Types.ObjectId, ref: "StockCount" },
+  status: { type: String, enum: ["POSTED", "REVERSED"], default: "POSTED" },
+  reversalOf: { type: Schema.Types.ObjectId, ref: "InventoryAdjustment" },
+  reversedByAdjustmentId: { type: Schema.Types.ObjectId, ref: "InventoryAdjustment" },
   createdBy: { type: Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });
 
 InventoryAdjustmentSchema.index({ adjustmentDate: -1, inventoryType: 1 });
 InventoryAdjustmentSchema.index({ inventoryId: 1 });
+InventoryAdjustmentSchema.index({ reversalOf: 1 }, { unique: true, sparse: true });
 const InventoryAdjustmentModel: Model<IInventoryAdjustment> = mongoose.models.InventoryAdjustment || mongoose.model<IInventoryAdjustment>("InventoryAdjustment", InventoryAdjustmentSchema);
 export default InventoryAdjustmentModel;

@@ -55,6 +55,8 @@ type SaleLineItem = {
   qty?: number;
   price?: number;
   lineTotal?: number;
+  discountAmount?: number;
+  discountName?: string;
   remarks?: string;
 };
 
@@ -69,6 +71,7 @@ type Summary = {
   rows: number;
   totalQty: number;
   totalPrice: number;
+  totalDiscount?: number;
   totalAmount: number;
 };
 
@@ -567,6 +570,7 @@ export function SalesLinesPageClient() {
                   <TableHead className="text-white">Product</TableHead>
                   <TableHead className="text-right text-white">Qty</TableHead>
                   <TableHead className="text-right text-white">Price</TableHead>
+                  <TableHead className="text-right text-white">Discount</TableHead>
                   <TableHead className="text-right text-white">
                     Line Total
                   </TableHead>
@@ -577,14 +581,14 @@ export function SalesLinesPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="h-32 text-center">
+                    <TableCell colSpan={14} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : lines.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={13}
+                      colSpan={14}
                       className="h-32 text-center text-muted-foreground"
                     >
                       No sales lines found.
@@ -622,6 +626,7 @@ export function SalesLinesPageClient() {
                       <TableCell className="text-right">
                         {formatPeso(Number(line.price || 0))}
                       </TableCell>
+                      <TableCell className="text-right">{line.discountName && <span className="block text-xs text-slate-500">{line.discountName}</span>}{formatPeso(Number(line.discountAmount || 0))}</TableCell>
                       <TableCell className="text-right font-semibold">
                         {formatPeso(Number(line.lineTotal || 0))}
                       </TableCell>
@@ -639,6 +644,7 @@ export function SalesLinesPageClient() {
                       <TableCell className="text-right">
                         {formatPeso(Number(summary.totalPrice || 0))}
                       </TableCell>
+                      <TableCell className="text-right">{formatPeso(Number(summary.totalDiscount || 0))}</TableCell>
                       <TableCell className="text-right">
                         {formatPeso(Number(summary.totalAmount || 0))}
                       </TableCell>

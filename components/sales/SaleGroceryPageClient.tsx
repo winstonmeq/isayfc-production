@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CustomerPicker, type CustomerOption } from "@/components/sales/CustomerPicker";
+import { ItemDiscountSelector, SaleDiscountSummary, useItemDiscounts } from "@/components/sales/SaleDiscount";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -42,6 +43,7 @@ type ProductOption = {
 };
 
 type SaleRow = {
+  discountId?: string;
   productId: string;
   price: string;
   quantity: string;
@@ -150,11 +152,7 @@ export function SaleGroceryPageClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const total = useMemo(() => {
-    return rows.reduce((sum, row) => {
-      return sum + (Number(row.price) || 0) * (Number(row.quantity) || 0);
-    }, 0);
-  }, [rows]);
+  const discount = useItemDiscounts(rows.filter((row) => row.productId && Number(row.quantity) > 0).map((row) => ({ subtotal: (Number(row.price) || 0) * (Number(row.quantity) || 0), quantity: Number(row.quantity), discountId: row.discountId })));
 
   async function loadCustomers() {
     const allCustomers: CustomerOption[] = [];
@@ -218,6 +216,7 @@ export function SaleGroceryPageClient() {
       };
 
       if (field === "productId") {
+        next[index].discountId = "";
         const product = products.find((item) => item._id === value);
 
         if (product) {
@@ -241,6 +240,7 @@ export function SaleGroceryPageClient() {
   }
 
   async function saveSale() {
+    if (discount.error) { toast.error(discount.error); return; }
     if (!saleDate) {
       toast.error("Date of sale is required.");
       return;
@@ -263,6 +263,7 @@ export function SaleGroceryPageClient() {
 
         return {
           productId: row.productId,
+          discountId: row.discountId || undefined,
           quantity: Number(row.quantity) || 0,
           qty: Number(row.quantity) || 0,
           price: Number(row.price) || 0,
@@ -407,7 +408,7 @@ export function SaleGroceryPageClient() {
                       key={index}
                       className="rounded-2xl border bg-slate-50 p-4"
                     >
-                      <div className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+                      <div className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_1.5fr_1fr_auto]">
                         <div className="space-y-2">
                           <Label>Product</Label>
                           <GroceryProductPicker
@@ -454,9 +455,13 @@ export function SaleGroceryPageClient() {
                         </div>
 
                         <div className="space-y-2">
+                          <Label>Discount</Label>
+                          <ItemDiscountSelector options={discount.options} value={row.discountId} disabled={isSaving || !row.productId} label={`Discount for ${selectedProduct?.name || `row ${index + 1}`}`} onChange={(discountId) => updateRow(index, "discountId", discountId)} />
+                        </div>
+                        <div className="space-y-2">
                           <Label>Line Total</Label>
                           <Input
-                            value={lineTotal.toFixed(2)}
+                            value={discount.lineTotal(lineTotal, Number(row.quantity), row.discountId).toFixed(2)}
                             disabled
                             className="bg-white"
                           />
@@ -484,13 +489,14 @@ export function SaleGroceryPageClient() {
 
               <div className="flex flex-col items-end gap-3 rounded-2xl bg-slate-950 p-5 text-white">
                 <p className="text-sm text-white/70">Grand Total</p>
-                <p className="text-3xl font-black">{formatPeso(total)}</p>
+                <p className="text-3xl font-black">{formatPeso(discount.preview.totalAmount)}</p>
               </div>
 
+              <SaleDiscountSummary discount={discount} />
               <div className="flex justify-end">
                 <Button
                   onClick={saveSale}
-                  disabled={isSaving}
+                  disabled={isSaving || Boolean(discount.error)}
                   className="bg-emerald-600 hover:bg-emerald-700"
                 >
                   {isSaving ? (

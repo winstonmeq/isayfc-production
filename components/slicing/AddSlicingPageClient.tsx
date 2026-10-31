@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryActions } from "@/components/erp/EntryForm";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -511,15 +513,15 @@ export function AddSlicingPageClient() {
           </div>
         )}
 
-        <div className="mt-5 flex justify-end gap-2">
+        <EntryActions className="mt-5">
           <Button type="button" variant="outline" onClick={() => router.push("/slicing")}>
             Cancel
           </Button>
 	          <Button type="button" onClick={saveAll} disabled={isSaving || hasBlockingIssues}>
 	            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-	            Save All
+	            Save
 	          </Button>
-        </div>
+        </EntryActions>
       </ErpSection>
     </ErpPage>
   );

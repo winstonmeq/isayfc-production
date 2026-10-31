@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useMemo, useState } from "react";
 import {
   Building2,
@@ -20,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -725,7 +726,7 @@ export function ExpensesBodegaPageClient() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <EntryDialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black">
               {editingExpense ? "Edit Expense" : "Add Expense"}
@@ -844,11 +845,11 @@ export function ExpensesBodegaPageClient() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
 
       <Dialog open={typesDialogOpen} onOpenChange={setTypesDialogOpen}>
-        <DialogContent className="sm:max-w-4xl">
+        <EntryDialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black">Expense Type Setup</DialogTitle>
             <p className="text-sm text-muted-foreground">
@@ -941,7 +942,7 @@ export function ExpensesBodegaPageClient() {
           <DialogFooter>
             <Button variant="secondary" onClick={() => setTypesDialogOpen(false)}>Close</Button>
           </DialogFooter>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </div>
   );

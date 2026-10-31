@@ -1,5 +1,7 @@
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useState } from "react";
 import {
   Loader2,
@@ -30,7 +32,6 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -530,7 +531,7 @@ export function BodegaProductsPageClient() {
       </ErpSection>
 
       <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <EntryDialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingProduct ? "Edit Bodega Product" : "Add Bodega Product"}</DialogTitle>
           </DialogHeader>
@@ -578,11 +579,11 @@ export function BodegaProductsPageClient() {
               <Button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Save"}</Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
 
       <Dialog open={stockDialogOpen} onOpenChange={setStockDialogOpen}>
-        <DialogContent>
+        <EntryDialogContent>
           <DialogHeader>
             <DialogTitle>Add Stock: {stockProduct?.name}</DialogTitle>
           </DialogHeader>
@@ -612,7 +613,7 @@ export function BodegaProductsPageClient() {
               <Button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Add Stock"}</Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </ErpPage>
   );

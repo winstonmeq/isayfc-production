@@ -1,3 +1,6 @@
+import SaleModel from "@/models/Sale";
+import { outletSaleRecognitionUpdate } from "@/lib/outlet-sale-recognition";
+import { weightedCompanyCost } from "@/lib/company-cost";
 // app/api/mobile/transfers/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId } from "mongoose";
@@ -192,7 +195,7 @@ export async function POST(
         const productRef = source === "GROCERY" ? item.productId : item.bodegaProductId;
 
         const transferPrice =
-          Number(item.sellingPrice || 0) > 0
+          transfer.saleId || Number(item.sellingPrice || 0) > 0
             ? Number(item.sellingPrice)
             : Number(item.buyingPrice || 0);
         const transferPacking = packingSnapshot({
@@ -227,6 +230,7 @@ export async function POST(
                 newStock
               : incomingBaseCost;
 
+          existingInventory.companyUnitCost = weightedCompanyCost(previousStock, existingInventory.companyUnitCost, receivedPcs, item.companyUnitCost);
           existingInventory.stockQty = newStock;
           existingInventory.unitLabel = baseUnit;
           existingInventory.packSize = packSize;
@@ -249,6 +253,7 @@ export async function POST(
                 unitLabel: baseUnit,
                 packSize,
                 lowStockAlert: 0,
+                companyUnitCost: item.companyUnitCost,
                 buyingPrice: transferPrice,
                 sellingPrice: item.sellingPrice,
                 remarks: "",
@@ -294,6 +299,10 @@ export async function POST(
       transfer.hasDiscrepancy = totalVarianceQty > 0;
       if (body?.outletRemarks) transfer.outletRemarks = String(body.outletRemarks).trim();
       await transfer.save({ session: mongoSession });
+      if (transfer.saleId) {
+        const linked = await SaleModel.findOneAndUpdate({ _id: transfer.saleId, isVoided: false, transactionType: { $ne: "INTERNAL_TRANSFER" }, fulfillmentStatus: "PENDING" }, outletSaleRecognitionUpdate(), { new: true, session: mongoSession, updatePipeline: true });
+        if (!linked) throw new ApiError(409, "Linked sale cannot be recognized. Check its status; older internal records require review. No stock changes were posted.");
+      }
     });
 
     return NextResponse.json({ success: true, message: "Delivery confirmed." });

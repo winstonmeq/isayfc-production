@@ -14,6 +14,7 @@ import {
 } from "@/components/erp/ErpShell";
 import { formatWholeNumber, numberValue, PackStockDisplay, wholeNumber } from "@/components/erp/StockDisplay";
 import { CustomerPicker, type CustomerOption } from "@/components/sales/CustomerPicker";
+import { ItemDiscountSelector, SaleDiscountSummary, useItemDiscounts } from "@/components/sales/SaleDiscount";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -57,6 +58,7 @@ type ChickenProductOption = {
 };
 
 type CartItem = {
+  discountId?: string;
   productId: string;
   bodegaProductId: string;
   name: string;
@@ -96,6 +98,7 @@ export function SellChickenPageClient() {
       { packs: 0, heads: 0, pcsOut: 0, grandTotal: 0 }
     );
   }, [cart]);
+  const discount = useItemDiscounts(cart.map((item) => ({ subtotal: item.quantity * item.pricePerUnit, quantity: item.quantity, discountId: item.discountId })));
 
   async function loadCustomers() {
     const allCustomers: CustomerOption[] = [];
@@ -216,6 +219,7 @@ export function SellChickenPageClient() {
   }
 
   async function submitSale() {
+    if (discount.error) { toast.error(discount.error); return; }
     if (!customerId) {
       toast.error("Please select a customer.");
       return;
@@ -263,6 +267,7 @@ export function SellChickenPageClient() {
             productId: item.bodegaProductId,
             bodegaProductId: item.bodegaProductId,
             quantity: item.quantity,
+            discountId: item.discountId || undefined,
             saleUnit: item.saleUnit,
           })),
         }),
@@ -372,6 +377,7 @@ export function SellChickenPageClient() {
                           <TableHead className="text-right text-white">Quantity</TableHead>
                           <TableHead className="text-right text-white">PCS Out</TableHead>
                           <TableHead className="text-right text-white">Unit Price</TableHead>
+                          <TableHead className="text-white">Discount</TableHead>
                           <TableHead className="text-right text-white">Line Total</TableHead>
                           <TableHead className="text-center text-white">Action</TableHead>
                         </TableRow>
@@ -389,7 +395,8 @@ export function SellChickenPageClient() {
                             <TableCell className="text-right font-bold">{formatWholeNumber(item.quantity)}</TableCell>
                             <TableCell className="text-right">{formatWholeNumber(item.stockPcsOut)} pcs</TableCell>
                             <TableCell className="text-right">{formatPeso(item.pricePerUnit)}</TableCell>
-                            <TableCell className="text-right font-bold">{formatPeso(item.quantity * item.pricePerUnit)}</TableCell>
+                            <TableCell><ItemDiscountSelector options={discount.options} value={item.discountId} disabled={isSaving} label={`Discount for ${item.name}`} onChange={(discountId) => setCart((current) => current.map((row) => row.bodegaProductId === item.bodegaProductId ? { ...row, discountId } : row))} /></TableCell>
+                            <TableCell className="text-right font-bold">{formatPeso(discount.lineTotal(item.quantity * item.pricePerUnit, item.quantity, item.discountId))}</TableCell>
                             <TableCell className="text-center">
                               <Button size="icon" variant="destructive" onClick={() => removeCartItem(item.bodegaProductId)}>
                                 <Trash2 className="h-4 w-4" />
@@ -417,8 +424,9 @@ export function SellChickenPageClient() {
                           <ErpKeyValue label={item.saleUnit === "PACK" ? "Packs" : "Heads"} value={formatWholeNumber(item.quantity)} />
                           <ErpKeyValue label="PCS Out" value={`${formatWholeNumber(item.stockPcsOut)} pcs`} />
                           <ErpKeyValue label="Unit Price" value={formatPeso(item.pricePerUnit)} />
-                          <ErpKeyValue label="Line Total" value={formatPeso(item.quantity * item.pricePerUnit)} />
+                          <ErpKeyValue label="Line Total" value={formatPeso(discount.lineTotal(item.quantity * item.pricePerUnit, item.quantity, item.discountId))} />
                         </div>
+                        <div className="mt-3"><ItemDiscountSelector options={discount.options} value={item.discountId} disabled={isSaving} label={`Discount for ${item.name}`} onChange={(discountId) => setCart((current) => current.map((row) => row.bodegaProductId === item.bodegaProductId ? { ...row, discountId } : row))} /></div>
                       </ErpMobileCard>
                     ))}
                   </div>
@@ -434,14 +442,15 @@ export function SellChickenPageClient() {
             <CardContent className="space-y-4">
               <div className="rounded-3xl bg-slate-950 p-5 text-white">
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-300">Grand Total</p>
-                <p className="mt-2 text-3xl font-black">{formatPeso(totals.grandTotal)}</p>
+                <p className="mt-2 text-3xl font-black">{formatPeso(discount.preview.totalAmount)}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <ErpKeyValue label="Total Packs" value={formatWholeNumber(totals.packs)} />
                 <ErpKeyValue label="Total Heads" value={formatWholeNumber(totals.heads)} />
                 <ErpKeyValue label="PCS Out" value={`${formatWholeNumber(totals.pcsOut)} pcs`} />
               </div>
-              <Button type="button" onClick={submitSale} disabled={isSaving || cart.length === 0} className="h-12 w-full rounded-2xl">
+              <SaleDiscountSummary discount={discount} />
+              <Button type="button" onClick={submitSale} disabled={isSaving || cart.length === 0 || Boolean(discount.error)} className="h-12 w-full rounded-2xl">
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                 Submit Sale
               </Button>

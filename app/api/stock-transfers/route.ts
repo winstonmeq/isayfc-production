@@ -19,6 +19,7 @@ import {
 import OutletModel from "@/models/Outlet";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
+import SaleModel from "@/models/Sale";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -89,11 +90,25 @@ export async function GET(req: NextRequest) {
       .lean(),
   ]);
 
+  const [amounts, sales] = await Promise.all([
+    StockTransferItemModel.aggregate<{ _id: mongoose.Types.ObjectId; amount: number }>([
+      { $match: { transferId: { $in: transfers.map(row => row._id) } } },
+      { $group: { _id: "$transferId", amount: { $sum: { $multiply: [{ $ifNull: ["$qty", 0] }, { $ifNull: ["$sellingPrice", 0] }] } } } },
+    ]),
+    SaleModel.find({ _id: { $in: transfers.flatMap(row => row.saleId ? [row.saleId] : []) } }).select("totalAmount").lean(),
+  ]);
+  const amountByTransfer = new Map(amounts.map(row => [String(row._id), row.amount]));
+  const amountBySale = new Map(sales.map(row => [String(row._id), Number(row.totalAmount || 0)]));
+
   return NextResponse.json(
     {
       success: true,
       data: transfers.map((transfer) =>
-        serializeTransfer(transfer as Parameters<typeof serializeTransfer>[0])
+        ({ ...serializeTransfer(transfer as Parameters<typeof serializeTransfer>[0]),
+          transactionAmount: transfer.saleId && amountBySale.has(String(transfer.saleId))
+            ? amountBySale.get(String(transfer.saleId))
+            : amountByTransfer.get(String(transfer._id)) || 0,
+        })
       ),
       outlets: outlets.map((outlet) => ({
         _id: outlet._id.toString(),

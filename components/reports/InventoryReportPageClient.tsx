@@ -30,6 +30,7 @@ type InventoryReport = {
   generatedAt: string;
   rows: Row[];
   categoryOptions: string[];
+  locationOptions: string[];
   grand: {
     items: number;
     stockByUnit: Record<string, number>;
@@ -43,9 +44,10 @@ type InventoryReport = {
 
 type StockFilter = "all" | "in" | "low" | "zero";
 
-export function InventoryReportPageClient() {
+export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" | "OUTLET" }) {
   const [stock, setStock] = useState<StockFilter>("all");
   const [category, setCategory] = useState("");
+  const [location, setLocation] = useState("");
   const [data, setData] = useState<InventoryReport | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -53,6 +55,8 @@ export function InventoryReportPageClient() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.set("scope", scope);
+      if (location) params.set("location", location);
       if (stock !== "all") params.set("stock", stock);
       if (category) params.set("category", category);
       const qs = params.toString();
@@ -67,13 +71,13 @@ export function InventoryReportPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [stock, category]);
+  }, [stock, category, scope, location]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stock, category]);
+  }, [stock, category, scope, location]);
 
   const statusBadge = (s: Row["stockStatus"]) =>
     s === "OUT"
@@ -84,8 +88,8 @@ export function InventoryReportPageClient() {
 
   return (
     <ReportShell
-      title="Inventory Stock-on-Hand Report"
-      subtitle="Current stock quantity and valuation by product and location."
+      title={scope === "OUTLET" ? "Outlet Stock-on-Hand Report" : "Main Inventory Stock-on-Hand Report"}
+      subtitle={scope === "OUTLET" ? "Outlet inventory only. Received stock is inventory, not an operating expense." : "Bodega and grocery inventory only. Outlet stock is reported in Outlet Operations."}
       generatedAt={data?.generatedAt}
       periodLabel={data?.generatedAt ? `As of ${data.generatedAt}` : "As of now"}
       showRange={false}
@@ -98,6 +102,7 @@ export function InventoryReportPageClient() {
       onApply={() => {}}
       extraFilters={
         <>
+          {scope === "OUTLET" && <label className="text-sm font-semibold">Outlet <select className="h-10 rounded-lg border bg-white px-3" value={location} onChange={(event) => setLocation(event.target.value)}><option value="">All Outlets</option>{data?.locationOptions?.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>}
           <div className="flex items-end gap-1 rounded-lg border border-slate-200 p-1">
             {([
               ["all", "All"],

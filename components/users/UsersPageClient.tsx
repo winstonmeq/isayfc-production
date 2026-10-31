@@ -1,6 +1,8 @@
 // components/users/UsersPageClient.tsx
 "use client";
 
+import { EntryDialogContent } from "@/components/erp/EntryForm";
+
 import { useEffect, useState } from "react";
 import {
   Loader2,
@@ -18,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -455,7 +456,7 @@ export function UsersPageClient() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <EntryDialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl font-black">
               <UserRoundCog className="h-6 w-6" />
@@ -580,10 +581,6 @@ export function UsersPageClient() {
                 </SelectContent>
               </Select>
 
-              <p className="text-xs text-muted-foreground">
-                This keeps compatibility with your existing auth code. The new
-                permission system uses the selected Role above.
-              </p>
             </div>
           </div>
 
@@ -601,10 +598,10 @@ export function UsersPageClient() {
               {isSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              {editingUser ? "Update User" : "Save User"}
+              {editingUser ? "Save" : "Save"}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </EntryDialogContent>
       </Dialog>
     </div>
   );

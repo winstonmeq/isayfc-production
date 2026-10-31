@@ -2,7 +2,7 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type SaleSource = "CHICKEN" | "BODEGA" | "MIXED" | "OUTLET";
-export type SaleStatus = "PENDING" | "UNPAID" | "PARTIAL" | "PAID" | "VOIDED";
+export type SaleStatus = "PENDING" | "UNPAID" | "PARTIAL" | "PAID" | "VOIDED" | "INTERNAL";
 export type FulfillmentStatus = "DIRECT" | "PENDING" | "RECOGNIZED";
 export type SaleChannel = "WEB" | "MOBILE";
 export type PaymentMethod = "CASH" | "GCASH" | "CREDIT";
@@ -11,9 +11,13 @@ export interface ISale extends Document {
   _id: Types.ObjectId;
   receiptNumber: string;
   customerId?: Types.ObjectId;
+  employeeId?: Types.ObjectId;
+  employeeName?: string;
+  entryHash?: string;
   stockTransferId?: Types.ObjectId;
   saleDate: Date;
   source: SaleSource;
+  transactionType?: "EXTERNAL_SALE" | "INTERNAL_TRANSFER";
   // Outlet / shift / channel are now first-class fields (previously these were
   // only encoded in `remarks` as "OUTLET:<id> SHIFT:<id>"). Old rows have them
   // unset; readers fall back to the remarks tag for backward compatibility.
@@ -28,6 +32,12 @@ export interface ISale extends Document {
   // request can't create a duplicate sale. Sparse: web sales omit it.
   idempotencyKey?: string;
   totalAmount: number;
+  subtotal?: number;
+  discountId?: Types.ObjectId;
+  discountName?: string;
+  discountType?: "PERCENTAGE" | "AMOUNT";
+  discountValue?: number;
+  discountAmount?: number;
   paidAmount: number;
   balance: number;
   totalPacks: number;
@@ -55,6 +65,9 @@ const SaleSchema = new Schema<ISale>(
       ref: "Customer",
       required: false,
     },
+    employeeId: { type: Schema.Types.ObjectId, ref: "OutletEmployee" },
+    employeeName: { type: String, trim: true },
+    entryHash: String,
 
     stockTransferId: {
       type: Schema.Types.ObjectId,
@@ -73,6 +86,7 @@ const SaleSchema = new Schema<ISale>(
       enum: ["CHICKEN", "BODEGA", "MIXED", "OUTLET"],
       required: true,
     },
+    transactionType: { type: String, enum: ["EXTERNAL_SALE", "INTERNAL_TRANSFER"], default: "EXTERNAL_SALE", index: true },
 
     outletId: {
       type: Schema.Types.ObjectId,
@@ -122,6 +136,13 @@ const SaleSchema = new Schema<ISale>(
       min: 0,
     },
 
+    subtotal: { type: Number, min: 0 },
+    discountId: { type: Schema.Types.ObjectId, ref: "Discount" },
+    discountName: { type: String, default: "" },
+    discountType: { type: String, enum: ["PERCENTAGE", "AMOUNT"] },
+    discountValue: { type: Number, min: 0 },
+    discountAmount: { type: Number, default: 0, min: 0 },
+
     paidAmount: {
       type: Number,
       default: 0,
@@ -154,7 +175,7 @@ const SaleSchema = new Schema<ISale>(
 
     status: {
       type: String,
-      enum: ["PENDING", "UNPAID", "PARTIAL", "PAID", "VOIDED"],
+      enum: ["PENDING", "UNPAID", "PARTIAL", "PAID", "VOIDED", "INTERNAL"],
       default: "UNPAID",
     },
 

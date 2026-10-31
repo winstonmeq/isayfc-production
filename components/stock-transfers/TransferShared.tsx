@@ -27,6 +27,7 @@ export type TransferRow = {
   outletName: string;
   outletCode: string;
   totalItems: number;
+  transactionAmount?: number;
   totalQty: number;
   totalReceivedQty: number;
   totalVarianceQty: number;

@@ -4,6 +4,11 @@ import mongoose, { Document, Model, Schema, Types } from "mongoose";
 export interface IPurchaseBatch extends Document {
   _id: Types.ObjectId;
   datePurchased: Date;
+  supplierId?: Types.ObjectId;
+  supplierInvoiceId?: Types.ObjectId;
+  invoiceNumber?: string;
+  dueDate?: Date;
+  paymentMode?: "CASH" | "CREDIT";
   totalItems: number;
   totalAmount: number;
   remarks?: string;
@@ -15,6 +20,11 @@ export interface IPurchaseBatch extends Document {
 
 const PurchaseBatchSchema = new Schema<IPurchaseBatch>(
   {
+    supplierId: { type: Schema.Types.ObjectId, ref: "Supplier" },
+    supplierInvoiceId: { type: Schema.Types.ObjectId, ref: "SupplierInvoice" },
+    invoiceNumber: { type: String, trim: true, uppercase: true },
+    dueDate: Date,
+    paymentMode: { type: String, enum: ["CASH", "CREDIT"] },
     datePurchased: {
       type: Date,
       required: true,

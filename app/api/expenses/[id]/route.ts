@@ -8,6 +8,7 @@ import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import ExpenseModel, { ExpenseCategory, ExpenseType } from "@/models/Expense";
 import ExpenseTypeModel from "@/models/ExpenseType";
 import { ensureDefaultExpenseTypes, expenseTypeCode } from "@/lib/expense-types";
+import { parseExpenseDate } from "@/lib/expense-date";
 import { isMainExpenseCategory } from "@/lib/expense-scope";
 
 const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
@@ -23,11 +24,6 @@ function normalizeExpenseCategory(value: unknown): ExpenseCategory {
 
 function normalizeExpenseType(value: unknown): ExpenseType {
   return expenseTypeCode(value) || "OTHERS";
-}
-
-function toExpenseDate(value: string) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function serializeExpense(expense: any) {
@@ -107,7 +103,7 @@ async function handlePATCH(
     );
   }
 
-  const expenseDate = toExpenseDate(expenseDateInput);
+  const expenseDate = parseExpenseDate(expenseDateInput);
 
   if (!expenseDate) {
     return NextResponse.json(

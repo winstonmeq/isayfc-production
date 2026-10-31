@@ -8,6 +8,7 @@ import { cleanString, escapeRegex } from "@/lib/crud-utils";
 import CustomerModel, { ICustomer } from "@/models/Customer";
 import PaymentModel from "@/models/Payment";
 import SaleModel from "@/models/Sale";
+import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 
 export async function GET(req: NextRequest) {
   const { response } = await requirePermission(["payments.view", "payments.manage"]);
@@ -55,6 +56,7 @@ export async function GET(req: NextRequest) {
         $match: {
           isVoided: false,
           fulfillmentStatus: { $ne: "PENDING" },
+          $nor: internalOutletMatchClauses(),
           customerId: {
             $in: customerIds,
           },

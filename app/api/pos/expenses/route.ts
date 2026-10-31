@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
-import { addDays, startOfDayManila } from "@/lib/date-utils";
+import { addDays } from "@/lib/date-utils";
+import { outletExpenseDay } from "@/lib/business-flow";
 import { ensureDefaultExpenseTypes, expenseTypeCode } from "@/lib/expense-types";
 import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 import { requirePermission } from "@/lib/require-permission";
@@ -29,7 +30,8 @@ export async function GET(req: NextRequest) {
   if (!current) {
     return NextResponse.json({ success: false, message: "Select an authorized outlet." }, { status: 400 });
   }
-  const dayStart = startOfDayManila();
+  const dayStart = outletExpenseDay(req.nextUrl.searchParams.get("date") ?? undefined);
+  if (!dayStart) return NextResponse.json({ success: false, message: "Select a valid business date, not in the future." }, { status: 400 });
   const [expenses, expenseTypes] = await Promise.all([
     ExpenseModel.find({
       outletId,
@@ -70,6 +72,7 @@ export async function POST(req: NextRequest) {
     type?: string;
     amount?: number;
     remarks?: string;
+    expenseDate?: string;
   } | null;
   const outletId = String(body?.outletId || "");
   const current = await context(outletId, session!.user.id);
@@ -80,6 +83,8 @@ export async function POST(req: NextRequest) {
   const amount = Number(body?.amount);
   const type = (expenseTypeCode(body?.type) || "OTHERS") as ExpenseType;
   const notes = String(body?.remarks || "").trim();
+  const expenseDate = outletExpenseDay(body?.expenseDate);
+  if (!expenseDate) return NextResponse.json({ success: false, message: "Select a valid expense date, not in the future." }, { status: 400 });
   if (!name) {
     return NextResponse.json({ success: false, message: "Expense description is required." }, { status: 400 });
   }
@@ -94,7 +99,7 @@ export async function POST(req: NextRequest) {
     name,
     expenseCategory: "OUTLET",
     type,
-    expenseDate: new Date(),
+    expenseDate,
     amount,
     outletId,
     remarks: [`WEB POS EXPENSE OUTLET:${outletId}`, notes].filter(Boolean).join(" | "),

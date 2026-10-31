@@ -34,6 +34,7 @@ export interface IStockTransferItem extends Document {
   // marked-up selling price at dispatch and becomes the outlet's acquisition
   // cost when received. It is not consolidated company revenue.
   sellingPrice: number;
+  companyUnitCost?: number;
 
   // qty is what the user enters (packs for pack products, otherwise pieces/qty).
   // qtyPcs is the true base-unit quantity moved in stock = qty * (packSize||1).
@@ -116,6 +117,7 @@ const StockTransferItemSchema = new Schema<IStockTransferItem>(
       default: 0,
       min: 0,
     },
+    companyUnitCost: { type: Number, min: 0 },
 
     qty: {
       type: Number,
