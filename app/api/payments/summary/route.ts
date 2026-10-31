@@ -8,6 +8,7 @@ import { cleanString, escapeRegex } from "@/lib/crud-utils";
 import CustomerModel, { ICustomer } from "@/models/Customer";
 import PaymentModel from "@/models/Payment";
 import SaleModel from "@/models/Sale";
+import { ownerOutletAmount } from "@/lib/owner-outlet-amount";
 import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 
 export async function GET(req: NextRequest) {
@@ -137,6 +138,7 @@ export async function GET(req: NextRequest) {
       sales,
       paid,
       balance: Math.max(sales - paid, 0),
+      ownerOutletAmount: ownerOutletAmount(customer.outletId, Math.max(sales - paid, 0)),
       unappliedCredit,
       received,
       netPosition: sales - received,

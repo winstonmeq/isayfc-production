@@ -26,6 +26,7 @@ type PaymentSummaryRow = {
   sales: number;
   paid: number;
   balance: number;
+  ownerOutletAmount: number;
   packs: number;
 };
 
@@ -41,12 +42,14 @@ export function PaymentSummaryPageClient() {
         sales: sum.sales + row.sales,
         paid: sum.paid + row.paid,
         balance: sum.balance + row.balance,
+        ownerOutletAmount: sum.ownerOutletAmount + Number(row.ownerOutletAmount || 0),
         packs: sum.packs + row.packs,
       }),
       {
         sales: 0,
         paid: 0,
         balance: 0,
+        ownerOutletAmount: 0,
         packs: 0,
       }
     );
@@ -109,6 +112,7 @@ export function PaymentSummaryPageClient() {
   return (
     <div className="space-y-5">
       <ErpPageHeader title="Customer Balances" />
+      <p className="text-sm text-slate-500">Owner Outlet is included in Outstanding Balance—not an additional expense or deduction.</p>
       <div className="flex flex-wrap gap-2">
         <Input
           className="min-w-64 flex-1"
@@ -155,6 +159,9 @@ export function PaymentSummaryPageClient() {
                     Outstanding Balance (₱)
                   </TableHead>
                   <TableHead className="text-center font-bold text-slate-900">
+                    Owner Outlet (₱)
+                  </TableHead>
+                  <TableHead className="text-center font-bold text-slate-900">
                     Action
                   </TableHead>
                 </TableRow>
@@ -163,14 +170,14 @@ export function PaymentSummaryPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-32 text-center">
+                    <TableCell colSpan={6} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={6}
                       className="h-32 text-center text-muted-foreground"
                     >
                       No customer transactions found.
@@ -204,6 +211,7 @@ export function PaymentSummaryPageClient() {
                         })}
                       </TableCell>
 
+                      <TableCell className="text-center">{formatPeso(row.ownerOutletAmount || 0)}</TableCell>
                       <TableCell className="text-center">
                         <Button
                           size="sm"
@@ -232,6 +240,7 @@ export function PaymentSummaryPageClient() {
                     <TableCell className={`text-center ${balanceClass(totals.balance)}`}>
                       {formatPeso(totals.balance)}
                     </TableCell>
+                    <TableCell className="text-center">{formatPeso(totals.ownerOutletAmount)}</TableCell>
                     <TableCell />
                   </TableRow>
                 ) : null}

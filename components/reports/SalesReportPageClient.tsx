@@ -27,6 +27,7 @@ type RegisterRow = {
   totalAmount: number;
   paidAmount: number;
   balance: number;
+  ownerOutletAmount: number;
   status: string;
 };
 type DailyRow = {
@@ -39,6 +40,7 @@ type DailyRow = {
   total: number;
   paid: number;
   balance: number;
+  ownerOutletAmount: number;
 };
 type Agg = {
   grossSales: number;
@@ -69,6 +71,7 @@ type SalesReport = {
     total: number;
     paid: number;
     balance: number;
+    ownerOutletAmount: number;
   };
   split: {
     cashCount: number;
@@ -327,6 +330,7 @@ function RegisterTable({
             <th className="p-2.5 text-right font-semibold">Net Sales</th>
             <th className="p-2.5 text-right font-semibold">Paid</th>
             <th className="p-2.5 text-right font-semibold">Balance</th>
+            <th className="p-2.5 text-right font-semibold" title="Included in Balance; not an additional expense">Owner Outlet (₱)</th>
             <th className="p-2.5 font-semibold">Status</th>
           </tr>
         </thead>
@@ -350,6 +354,7 @@ function RegisterTable({
             <td className="p-2.5 text-right">{peso(grand.total)}</td>
             <td className="p-2.5 text-right">{peso(grand.paid)}</td>
             <td className="p-2.5 text-right">{peso(grand.balance)}</td>
+            <td className="p-2.5 text-right">{peso(grand.ownerOutletAmount || 0)}</td>
             <td />
           </tr>
         </tfoot>
@@ -387,6 +392,7 @@ function DayGroup({
           >
             {peso(r.balance)}
           </td>
+          <td className="p-2.5 text-right">{peso(r.ownerOutletAmount || 0)}</td>
           <td className="p-2.5 text-xs">{r.status}</td>
         </tr>
       ))}
@@ -401,6 +407,7 @@ function DayGroup({
           <td className="p-2 text-right">{peso(sub.total)}</td>
           <td className="p-2 text-right">{peso(sub.paid)}</td>
           <td className="p-2 text-right">{peso(sub.balance)}</td>
+          <td className="p-2 text-right">{peso(sub.ownerOutletAmount || 0)}</td>
           <td />
         </tr>
       )}

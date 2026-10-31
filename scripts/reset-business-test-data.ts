@@ -17,18 +17,20 @@ const CLEAR_COLLECTIONS = [
   "purchaseitems", "purchasebatches",
   "outletemployeepurchases", "outletemployeecashmovements",
   "outletremittances",
+  "correctionrecords",
 ] as const;
 const STOCK_FIELDS: Record<string, string[]> = {
   products: ["stockPcs", "stockBags", "stockKilos"],
   bodegaproducts: ["stockQty", "stockBags", "stockKilos", "stockHeads"],
   outletinventories: ["stockQty"],
 };
-const PRESERVED = ["users", "roles", "outlets", "categories", "customers", "suppliers", "expensetypes", "standardpackings", "slicingstandards", "discounts", "outletmenuitems", "menucatalogitems", "outletemployees", "correctionrecords"];
+const PRESERVED = ["users", "roles", "outlets", "categories", "customers", "suppliers", "expensetypes", "standardpackings", "slicingstandards", "discounts", "outletmenuitems", "menucatalogitems", "outletemployees"];
 const stringify = (value: unknown) => EJSON.stringify(value, { relaxed: false });
 const fingerprint = (value: unknown) => createHash("sha256").update(stringify(value)).digest("hex");
 
 async function main() {
   const confirmed = process.argv.includes("--confirm");
+  const skipBackup = process.argv.includes("--no-backup");
   const databaseArgument = process.argv.find((arg) => arg.startsWith("--database="))?.slice("--database=".length);
   if (confirmed && databaseArgument !== EXPECTED_DATABASE) throw new Error(`Pass --database=${EXPECTED_DATABASE} explicitly to apply this reset.`);
   if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI is not configured.");
@@ -56,6 +58,7 @@ async function main() {
     const backupPath = path.join(backupRoot, `${EXPECTED_DATABASE}-business-reset-${stamp}.ejson`);
     const relative = path.relative(path.resolve(process.cwd()), backupPath);
     if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("Backup path must remain in the workspace.");
+    if (!skipBackup) {
     await mkdir(backupRoot, { recursive: true });
     const backup = { database: EXPECTED_DATABASE, createdAt: new Date(), clearedCollections: targets, stockFields: STOCK_FIELDS, collections: snapshot, preservedCounts };
     await writeFile(backupPath, stringify(backup), { encoding: "utf8", flag: "wx", mode: 0o600 });
@@ -64,6 +67,9 @@ async function main() {
       if (fingerprint(verified.collections[name]) !== fingerprint(snapshot[name])) throw new Error("Backup verification failed; no data changed.");
     }
     console.log(`Verified recovery backup: ${backupPath}`);
+    } else {
+      console.log("No new backup will be created, as requested.");
+    }
 
     const session = await mongoose.startSession();
     try {
@@ -82,7 +88,7 @@ async function main() {
         await db.collection("auditlogs").insertOne({
           module: "SYSTEM", action: "RESET_TEST_DATA", entityType: "DATABASE", sourceChannel: "SYSTEM",
           remarks: "OWNER-APPROVED FRESH BUSINESS TEST RESET; MASTER DATA PRESERVED",
-          newValue: { backupPath: relative, clearedCounts: counts }, createdAt: new Date(), updatedAt: new Date(),
+          newValue: { backupPath: skipBackup ? null : relative, clearedCounts: counts }, createdAt: new Date(), updatedAt: new Date(),
         }, { session });
       }, { readConcern: { level: "snapshot" }, writeConcern: { w: "majority" } });
     } finally { await session.endSession(); }
@@ -104,7 +110,7 @@ async function main() {
       if (await db.collection(name).countDocuments({}) !== count) throw new Error(`Preserved collection count changed: ${name}.`);
     }
     console.log("RESET COMPLETE: requested transactions cleared; all main stock quantities zero; master data preserved. Existing audit history retained.");
-    console.log(`Recovery backup: ${backupPath}`);
+    if (!skipBackup) console.log(`Recovery backup: ${backupPath}`);
   } finally { await mongoose.disconnect(); }
 }
 

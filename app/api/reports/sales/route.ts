@@ -1,4 +1,5 @@
 import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+import { ownerOutletAmount } from "@/lib/owner-outlet-amount";
 // Main-company sales register with daily totals, product/category summaries,
 // and discount analysis. All amounts come from posted sales snapshots.
 // Gross sales less sales discounts equals net sales; outlet POS is separate.
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
   }
 
   const sales = await SaleModel.find(saleFilter)
-    .populate("customerId", "name")
+    .populate("customerId", "name outletId")
     .populate("outletId", "name code")
     .select(
       "receiptNumber saleDate recognizedAt source totalQty totalAmount subtotal discountAmount paidAmount balance status customerId outletId channel paymentMethod"
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
         channel?: string;
         outletId?: { name?: string; code?: string } | null;
         paymentMethod?: string;
-        customerId?: { name?: string } | null;
+        customerId?: { name?: string; outletId?: unknown } | null;
       }>
     >();
 
@@ -187,6 +188,7 @@ export async function GET(req: NextRequest) {
     totalAmount: number;
     paidAmount: number;
     balance: number;
+    ownerOutletAmount: number;
     status: string;
   };
 
@@ -236,6 +238,7 @@ export async function GET(req: NextRequest) {
         totalAmount: filteredTotal,
         paidAmount: filteredPaid,
         balance: roundMoney(Math.max(filteredTotal - filteredPaid, 0)),
+        ownerOutletAmount: ownerOutletAmount(s.customerId?.outletId, roundMoney(Math.max(filteredTotal - filteredPaid, 0))),
         status: String(s.status || ""),
       };
     });
@@ -256,6 +259,7 @@ export async function GET(req: NextRequest) {
       discounts: number;
       paid: number;
       balance: number;
+      ownerOutletAmount: number;
     }
   >();
   for (const r of rows) {
@@ -274,6 +278,7 @@ export async function GET(req: NextRequest) {
         discounts: 0,
         paid: 0,
         balance: 0,
+        ownerOutletAmount: 0,
       };
     cur.count = new Set(
       rows.filter((row) => row.day === r.day).map((row) => row.saleId)
@@ -288,6 +293,7 @@ export async function GET(req: NextRequest) {
     cur.discounts = roundMoney(cur.discounts + r.discounts);
     cur.paid = roundMoney(cur.paid + r.paidAmount);
     cur.balance = roundMoney(cur.balance + r.balance);
+    cur.ownerOutletAmount = roundMoney(cur.ownerOutletAmount + r.ownerOutletAmount);
     dailyMap.set(r.day, cur);
   }
   const daily = [...dailyMap.values()].sort((a, b) => a.day.localeCompare(b.day));
@@ -306,6 +312,7 @@ export async function GET(req: NextRequest) {
       acc.discounts = roundMoney(acc.discounts + r.discounts);
       acc.paid = roundMoney(acc.paid + r.paidAmount);
       acc.balance = roundMoney(acc.balance + r.balance);
+      acc.ownerOutletAmount = roundMoney(acc.ownerOutletAmount + r.ownerOutletAmount);
       return acc;
     },
     {
@@ -320,6 +327,7 @@ export async function GET(req: NextRequest) {
       discounts: 0,
       paid: 0,
       balance: 0,
+      ownerOutletAmount: 0,
     }
   );
   grand.count = new Set(rows.map((row) => row.saleId)).size;
