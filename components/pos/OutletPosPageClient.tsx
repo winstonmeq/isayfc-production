@@ -1,5 +1,6 @@
 "use client";
 import { readApiResponse } from "@/lib/api-response";
+import { emptyPosDailyReport } from "@/lib/pos-empty-report";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, Blend, BookOpen, CheckCircle2, FileText, Loader2, PackageCheck, Plus, Printer, ReceiptText, Search, Store, Trash2, Warehouse, X } from "lucide-react";
@@ -104,6 +105,13 @@ export function OutletPosPageClient() {
       const response = await fetch(`/api/pos${selected ? `?outletId=${encodeURIComponent(selected)}` : ""}`, { cache: "no-store" });
       const payload = await readApiResponse<Bootstrap>(response);
       if (!response.ok || !payload.success) throw new Error(payload.message || "Unable to load outlet operations.");
+      if (!Array.isArray(payload.outlets)) throw new Error("Unable to load the outlet list. Refresh and retry.");
+      if (!payload.dailyReport) {
+        if (payload.outletId) throw new Error("The outlet report could not be loaded. Refresh and retry.");
+        payload.dailyReport = emptyPosDailyReport(new Date().toISOString());
+      }
+      payload.inventory ??= [];
+      payload.menu ??= [];
       setData(payload); setOutletId(payload.outletId);
       if (!preserveCart) setCart({});
     } catch (error) {
@@ -321,7 +329,7 @@ export function OutletPosPageClient() {
               {(data?.outlets || []).map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name} ({outlet.code})</option>)}
             </select>
           </label>
-          <time className="pb-2 text-sm text-slate-500">{data?.dailyReport.date ? new Date(data.dailyReport.date).toLocaleDateString("en-PH", { dateStyle: "long" }) : ""}</time>
+          <time className="pb-2 text-sm text-slate-500">{data?.dailyReport?.date ? new Date(data.dailyReport.date).toLocaleDateString("en-PH", { dateStyle: "long" }) : ""}</time>
         </div>
         <nav aria-label="Outlet transaction actions" className="flex flex-wrap gap-2 p-3">
           <Button type="button" variant="outline" disabled={!outletId} onClick={() => void loadIncoming()}><PackageCheck className="mr-2 size-4" />Receive Deliveries</Button>

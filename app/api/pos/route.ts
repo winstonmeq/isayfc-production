@@ -17,6 +17,7 @@ import SaleLineModel from "@/models/SaleLine";
 import ExpenseModel from "@/models/Expense";
 import UserModel from "@/models/User";
 import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
+import { emptyPosDailyReport } from "@/lib/pos-empty-report";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,8 @@ export async function GET(req: NextRequest) {
       outlets: outlets.map((row) => ({ id: row._id.toString(), name: row.name, code: row.code })),
       outletId: "",
       menu: [],
+      inventory: [],
+      dailyReport: emptyPosDailyReport(startOfDayManila().toISOString()),
       shift: null,
       recentSales: [],
     });

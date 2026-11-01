@@ -7,6 +7,7 @@ import { withAuditLog } from "@/lib/audit-log";
 import { cleanString, escapeRegex, getPagination } from "@/lib/crud-utils";
 import { normalizeRolePermissions } from "@/lib/role-permissions";
 import RoleModel from "@/models/Role";
+import { isRoleDuplicateKey, roleNameConflictMessage } from "@/lib/role-name-conflict";
 
 function serializeRole(role: any) {
   return {
@@ -85,21 +86,27 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
-  const existing = await RoleModel.findOne({ name, isActive: true });
+  const existing = await RoleModel.findOne({ name });
 
   if (existing) {
     return NextResponse.json(
-      { success: false, message: "Role name already exists." },
+      { success: false, message: roleNameConflictMessage(existing.isActive === false) },
       { status: 409 }
     );
   }
 
-  const role = await RoleModel.create({
+  let role;
+  try {
+    role = await RoleModel.create({
     name,
     description,
     permissions,
     createdBy: authSession?.user?.id,
   });
+  } catch (error) {
+    if (isRoleDuplicateKey(error)) return NextResponse.json({ success: false, message: roleNameConflictMessage() }, { status: 409 });
+    throw error;
+  }
 
   return NextResponse.json(
     {

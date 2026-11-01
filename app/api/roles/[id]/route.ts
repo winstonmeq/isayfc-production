@@ -7,6 +7,7 @@ import { withAuditLog } from "@/lib/audit-log";
 import { cleanString } from "@/lib/crud-utils";
 import { normalizeRolePermissions } from "@/lib/role-permissions";
 import RoleModel from "@/models/Role";
+import { isRoleDuplicateKey, roleNameConflictMessage } from "@/lib/role-name-conflict";
 
 function serializeRole(role: any) {
   return {
@@ -107,12 +108,11 @@ async function handlePATCH(
   const duplicate = await RoleModel.findOne({
     _id: { $ne: id },
     name,
-    isActive: true,
   });
 
   if (duplicate) {
     return NextResponse.json(
-      { success: false, message: "Role name already exists." },
+      { success: false, message: roleNameConflictMessage(duplicate.isActive === false) },
       { status: 409 }
     );
   }
@@ -120,7 +120,12 @@ async function handlePATCH(
   role.name = name;
   role.description = description;
   role.permissions = permissions;
-  await role.save();
+  try {
+    await role.save();
+  } catch (error) {
+    if (isRoleDuplicateKey(error)) return NextResponse.json({ success: false, message: roleNameConflictMessage() }, { status: 409 });
+    throw error;
+  }
 
   // Role permissions changed: drop cached access so it applies immediately.
   invalidateUserAccessCache();
