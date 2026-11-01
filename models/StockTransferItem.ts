@@ -26,6 +26,7 @@ export interface IStockTransferItem extends Document {
 
   // Snapshots at dispatch time so history stays correct if the product changes.
   productName: string;
+  unitCode?: string;
   categoryName?: string;
   packSize: number;
   unitLabel: "PACK" | "HEAD" | "PCS" | "QTY";
@@ -40,7 +41,7 @@ export interface IStockTransferItem extends Document {
   // qtyPcs is the true base-unit quantity moved in stock = qty * (packSize||1).
   qty: number;
   qtyPcs: number;
-  baseUnit?: "HEAD" | "PCS" | "QTY";
+  baseUnit?: "HEAD" | "PCS" | "QTY" | "KG";
   baseQty?: number;
   receivedQty: number;
   receivedPcs: number;
@@ -88,6 +89,7 @@ const StockTransferItemSchema = new Schema<IStockTransferItem>(
       trim: true,
     },
 
+    unitCode: { type: String, trim: true, uppercase: true },
     categoryName: {
       type: String,
       trim: true,
@@ -135,7 +137,7 @@ const StockTransferItemSchema = new Schema<IStockTransferItem>(
     // with existing transfers, but baseQty is the authoritative moved amount.
     baseUnit: {
       type: String,
-      enum: ["HEAD", "PCS", "QTY"],
+      enum: ["HEAD", "PCS", "QTY", "KG"],
     },
 
     baseQty: {

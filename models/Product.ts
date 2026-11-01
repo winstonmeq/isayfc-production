@@ -4,6 +4,7 @@ import mongoose, { Document, Model, Schema, Types } from "mongoose";
 export interface IProduct extends Document {
   _id: Types.ObjectId;
   name: string;
+  unitCode?: string;
   categoryId: Types.ObjectId;
   buyingPrice: number;
   unitPrice: number;
@@ -30,6 +31,7 @@ const ProductSchema = new Schema<IProduct>(
       ref: "Category",
       required: true,
     },
+    unitCode: { type: String, trim: true, uppercase: true, default: "PCS", index: true },
 
     buyingPrice: {
       type: Number,

@@ -1,5 +1,4 @@
-import SaleModel from "@/models/Sale";
-import { outletSaleRecognitionUpdate } from "@/lib/outlet-sale-recognition";
+import { postOutletDelivery, OutletDeliveryPostingError } from "@/lib/post-outlet-delivery";
 import { weightedCompanyCost } from "@/lib/company-cost";
 // app/api/mobile/transfers/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
@@ -251,6 +250,7 @@ export async function POST(
                 categoryName: item.categoryName,
                 stockQty: receivedPcs,
                 unitLabel: baseUnit,
+                unitCode: item.unitLabel === "PACK" ? "PCS" : item.unitCode || baseUnit,
                 packSize,
                 lowStockAlert: 0,
                 companyUnitCost: item.companyUnitCost,
@@ -299,14 +299,12 @@ export async function POST(
       transfer.hasDiscrepancy = totalVarianceQty > 0;
       if (body?.outletRemarks) transfer.outletRemarks = String(body.outletRemarks).trim();
       await transfer.save({ session: mongoSession });
-      if (transfer.saleId) {
-        const linked = await SaleModel.findOneAndUpdate({ _id: transfer.saleId, isVoided: false, transactionType: { $ne: "INTERNAL_TRANSFER" }, fulfillmentStatus: "PENDING" }, outletSaleRecognitionUpdate(), { new: true, session: mongoSession, updatePipeline: true });
-        if (!linked) throw new ApiError(409, "Linked sale cannot be recognized. Check its status; older internal records require review. No stock changes were posted.");
-      }
+      await postOutletDelivery(String(transfer._id), mongoSession, user.id);
     });
 
     return NextResponse.json({ success: true, message: "Delivery confirmed." });
   } catch (error) {
+    if (error instanceof OutletDeliveryPostingError) return NextResponse.json({ success: false, message: error.message }, { status: error.status });
     if (error instanceof ApiError) {
       return NextResponse.json({ success: false, message: error.message }, { status: error.status });
     }

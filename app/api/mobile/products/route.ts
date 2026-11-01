@@ -97,7 +97,7 @@ async function saveMenuImage(file: File | null): Promise<string> {
  * JSON (no image), for backward compatibility.
  */
 export async function POST(req: NextRequest) {
-  const { user, response } = await requireMobileAuth(req, "sales.manage");
+  const { user, response } = await requireMobileAuth(req, ["pos.manage", "sales.manage"]);
   if (response) return response;
 
   if (!user.outlet) {
@@ -237,6 +237,8 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
+    "pos.view",
+    "pos.manage",
     "sales.manage",
     "sales.view",
   ]);

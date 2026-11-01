@@ -8,8 +8,7 @@ import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 import { requirePermission } from "@/lib/require-permission";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
-import SaleModel from "@/models/Sale";
-import { outletSaleRecognitionUpdate } from "@/lib/outlet-sale-recognition";
+import { postOutletDelivery, OutletDeliveryPostingError } from "@/lib/post-outlet-delivery";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
 
@@ -88,6 +87,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           const [created] = await OutletInventoryModel.create([{
             outletId, productSource: source, productId, productName: item.productName,
             categoryName: item.categoryName, stockQty: receivedBaseQty, unitLabel: baseUnit,
+            unitCode: item.unitLabel === "PACK" ? "PCS" : item.unitCode || baseUnit,
             companyUnitCost: item.companyUnitCost,
             packSize, buyingPrice: transferPrice, sellingPrice: Number(item.sellingPrice || 0),
             lowStockAlert: 0, createdBy: session!.user.id,
@@ -110,20 +110,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       transfer.hasDiscrepancy = false;
       await transfer.save({ session: mongoSession });
 
-      if (transfer.saleId) {
-        const sale = await SaleModel.findOneAndUpdate(
-          { _id: transfer.saleId, isVoided: false, transactionType: { $ne: "INTERNAL_TRANSFER" },
-            $or: [{ fulfillmentStatus: "PENDING" }, { fulfillmentStatus: { $exists: false } }] },
-          outletSaleRecognitionUpdate(),
-          { new: true, session: mongoSession, updatePipeline: true }
-        );
-        if (!sale) {
-          throw new ApiError(409, "The linked sale could not be recognized. Check its status; older internal records require review. No stock changes were posted.");
-        }
-      }
+      await postOutletDelivery(String(transfer._id), mongoSession, session!.user.id);
     });
     return NextResponse.json({ success: true, message: `Delivery ${transferNumber} received. Outlet stock was updated.` });
   } catch (error) {
+    if (error instanceof OutletDeliveryPostingError) return NextResponse.json({ success: false, message: error.message }, { status: error.status });
     if (error instanceof ApiError) return NextResponse.json({ success: false, message: error.message }, { status: error.status });
     console.error(error);
     return NextResponse.json({ success: false, message: "Unable to receive the delivery." }, { status: 500 });

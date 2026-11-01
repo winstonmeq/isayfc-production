@@ -20,22 +20,11 @@
 import dotenv from "dotenv";
 import path from "node:path";
 import bcrypt from "bcryptjs";
+import { ROLE_PRESETS } from "../lib/role-permissions";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-const CASHIER_PERMISSIONS = [
-  "sales.view",
-  "sales.manage",
-  "sales-lines.view",
-  "cash.manage",
-  "stock-transfers.view",
-  "stock-transfers.confirm",
-  "outlet-inventory.view",
-  "expenses-bodega.view",
-  "expenses-bodega.manage",
-  "customers.view",
-  "dashboard.view",
-];
+const CASHIER_PERMISSIONS = [...ROLE_PRESETS[0].permissions];
 
 async function main() {
   if (!process.env.MONGODB_URI) {

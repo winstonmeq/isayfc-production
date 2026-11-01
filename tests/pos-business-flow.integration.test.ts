@@ -13,6 +13,7 @@ import StockTransferModel from "../models/StockTransfer";
 import StockTransferItemModel from "../models/StockTransferItem";
 import SaleModel from "../models/Sale";
 import SaleLineModel from "../models/SaleLine";
+import ExpenseModel from "../models/Expense";
 
 // Run against a dedicated test server using the SAME test database and an
 // authenticated ADMIN cookie. Never point this suite at the production app.
@@ -51,7 +52,8 @@ test("POS receipt, mixing, rollback, final sale and oversell rejection", {
   try {
     await OutletModel.create({ _id: outletId, name: receipt, code: receipt });
     await OutletMenuItemModel.create({ _id: menuId, outletId, name: "TEST CHICKEN", category: "BUTTERED", price: 20 });
-    await SaleModel.create({ _id: saleId, receiptNumber: receipt, source: "CHICKEN", totalAmount: 500, totalQty: 50, fulfillmentStatus: "PENDING", status: "PENDING", balance: 0 });
+    await SaleModel.create({ _id: saleId, receiptNumber: receipt, source: "CHICKEN", transactionType: "INTERNAL_TRANSFER", totalAmount: 500, totalQty: 50, fulfillmentStatus: "PENDING", status: "PENDING", balance: 0 });
+    await SaleLineModel.create({ saleId, source: "CHICKEN", bodegaProductId: rawProductId, productName: "TEST CHICKEN", categoryName: "CHICKEN", qty: 1, stockUnit: "PACK", packSize: 50, stockPcsOut: 50, baseQty: 50, unitCost: 6, price: 500, lineTotal: 500 });
     await StockTransferModel.create({ _id: transferId, transferNumber: receipt, outletId, saleId, status: "IN_TRANSIT", totalItems: 1, totalQty: 50 });
     await StockTransferItemModel.create({ transferId, source: "BODEGA", bodegaProductId: rawProductId, productName: "TEST CHICKEN", qty: 1, qtyPcs: 50, unitLabel: "PACK", packSize: 50, sellingPrice: 500, companyUnitCost: 6 });
 
@@ -63,8 +65,20 @@ test("POS receipt, mixing, rollback, final sale and oversell rejection", {
     assert.equal(internal.transactionType, "EXTERNAL_SALE");
     assert.equal(internal.status, "UNPAID");
     assert.equal(internal.balance, 500);
+    assert.equal(internal.paidAmount, 0);
+    assert.equal(String(internal.ownerOutletId), String(outletId));
+    const generated = await ExpenseModel.find({ linkedTransferId: transferId }).lean();
+    assert.equal(generated.length, 1);
+    assert.equal(generated[0].amount, 500);
+    assert.equal(generated[0].expenseCategory, "BODEGA");
+    assert.equal(generated[0].outletId, undefined);
     assert.equal((await SaleModel.findById(saleId).orFail()).fulfillmentStatus, "RECOGNIZED");
+    const reportResponse = await fetch(new URL("/api/reports/sales?preset=today", baseUrl), { headers: { Cookie: cookie! } });
+    assert.equal(reportResponse.status, 200);
+    const report = await reportResponse.json();
+    assert.equal(report.rows.some((row: { saleId: string }) => row.saleId === String(saleId)), true);
     await post(`/api/pos/transfers/${transferId}/confirm`, { outletId }, 409);
+    assert.equal(await ExpenseModel.countDocuments({ linkedTransferId: transferId }), 1);
     assert.equal((await OutletInventoryModel.findById(raw._id).orFail()).stockQty, 50);
 
     // Raw stock has the exact menu name; it must not be sold before mixing.
@@ -95,6 +109,14 @@ test("POS receipt, mixing, rollback, final sale and oversell rejection", {
     const lines = await SaleLineModel.find({ saleId: sale.sale.id });
     assert.equal(lines.reduce((sum, line) => sum + line.unitCost * Number(line.baseQty), 0), 500);
     assert.equal(lines.reduce((sum, line) => sum + Number(line.companyUnitCost) * Number(line.baseQty), 0), 300);
+    const overallResponse = await fetch(new URL("/api/reports/overall?preset=today", baseUrl), { headers: { Cookie: cookie! } });
+    assert.equal(overallResponse.status, 200);
+    const overall = await overallResponse.json();
+    const retailRow = overall.rows.find((row: { id: string }) => row.id === sale.sale.id);
+    assert.equal(retailRow.netSales, 1000);
+    assert.equal(retailRow.cogs, 300); // Original company cost, not outlet transfer cost of 500.
+    assert.equal(retailRow.grossProfit, 700);
+    assert.equal(overall.rows.some((row: { id: string }) => row.id === String(saleId)), false);
     const movements = await OutletStockTransactionModel.find({ outletId, type: "SALE" });
     assert.equal(movements.length, 1);
     assert.equal(movements[0].previousStock, 50);
@@ -128,6 +150,7 @@ test("POS receipt, mixing, rollback, final sale and oversell rejection", {
     assert.equal(await SaleModel.countDocuments({ outletId, source: "OUTLET" }), 2); // Collection is not a sale.
     assert.equal((await OutletInventoryModel.findById(finished._id).orFail()).stockQty, 8); // Reimbursement moves cash only.
   } finally {
+    await ExpenseModel.deleteMany({ linkedTransferId: transferId });
     await OutletEmployeeCash.deleteMany({ outletId });
     await OutletEmployeePurchase.deleteMany({ outletId });
     await OutletEmployee.deleteMany({ outletId });

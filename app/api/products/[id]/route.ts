@@ -7,11 +7,15 @@ import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import CategoryModel from "@/models/Category";
 import ProductModel from "@/models/Product";
+import InventoryTransaction from "@/models/InventoryTransaction";
+import { activeProductUnit } from "@/lib/product-units";
+import { canChangeProductUnit, validUnitQuantity } from "@/lib/product-unit-policy";
 
 function serializeProduct(product: any) {
   return {
     _id: product._id.toString(),
     name: product.name,
+    unitCode: product.unitCode || "PCS",
     categoryId: product.categoryId?._id?.toString?.() || product.categoryId?.toString?.(),
     categoryName: product.categoryId?.name || "",
     buyingPrice: product.buyingPrice || 0,
@@ -103,10 +107,18 @@ async function handlePATCH(
     );
   }
 
+  const current = await ProductModel.findOne({ _id: id, isActive: true }).lean();
+  if (!current) return NextResponse.json({ success: false, message: "Product not found." }, { status: 404 });
+  const unit = await activeProductUnit(body.unitCode ?? current.unitCode);
+  if (!unit) return NextResponse.json({ success: false, message: "Select an active unit from Units setup." }, { status: 400 });
+  if (!validUnitQuantity(cleanNumber(body.stockPcs), unit.allowsDecimal)) return NextResponse.json({ success: false, message: "Stock quantity does not match the selected unit." }, { status: 400 });
+  const history = unit.code !== (current.unitCode || "PCS") && !!await InventoryTransaction.exists({ productId: id });
+  if (!canChangeProductUnit(Number(current.stockPcs || current.stockBags || current.stockKilos || 0), history, current.unitCode || "PCS", unit.code)) return NextResponse.json({ success: false, message: "The product unit cannot change after stock or transactions exist. Create a separate product for a different unit." }, { status: 409 });
   const updatedProduct = await ProductModel.findOneAndUpdate(
     { _id: id, isActive: true },
     {
       name,
+      unitCode: unit.code,
       categoryId,
       buyingPrice: cleanNumber(body.buyingPrice),
       unitPrice: cleanNumber(body.unitPrice),

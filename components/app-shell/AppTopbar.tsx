@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isOutletRoute, OUTLET_ROUTES } from "@/lib/outlet-navigation";
 import { appNavItems, type AppNavItem } from "./nav-config";
+import { firstPermittedRoute } from "@/lib/nav-permissions";
 
 type Props = {
   collapsed: boolean;
@@ -118,27 +119,28 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
   const permissions = user?.permissions || [];
   const normalizedRole = String(user?.roleName || user?.role || "").toUpperCase();
   const isAdmin = normalizedRole === "ADMIN";
-  const canViewReports =
-    isAdmin || permissions.some((permission) => permission.startsWith("reports."));
   const canManageUsers =
     isAdmin ||
     permissions.includes("users.view") ||
     permissions.includes("roles.view") ||
     permissions.includes("audit-logs.view") ||
-    permissions.includes("activity-logs.view");
+    permissions.includes("activity-logs.view") || permissions.includes("corrections.view");
   const firstReport =
     [
       ["reports.sales", "/reports/sales"],
       ["reports.inventory", "/reports/inventory"],
       ["reports.payments", "/reports/payments"],
       ["reports.profit", "/reports/profit"],
+      ["reports.overall", "/reports/overall"],
     ].find(([permission]) => isAdmin || permissions.includes(permission))?.[1] ||
-    "/reports/sales";
+    "";
+  const canViewReports = Boolean(firstReport);
   const firstUserModule = isAdmin || permissions.includes("users.view")
     ? "/users"
     : permissions.includes("roles.view")
       ? "/roles"
-      : "/audit-logs";
+      : permissions.includes("audit-logs.view") ? "/audit-logs" : "/corrections";
+  const firstAllowed = (routes: string[]) => firstPermittedRoute(appNavItems, permissions, routes, isAdmin);
   function canAccessSection(section: SectionName) {
     if (isAdmin) return true;
     return appNavItems
@@ -217,7 +219,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       ? [
           {
             label: "Purchasing",
-            href: `/operations?module=${encodeURIComponent("/purchase-items")}`,
+            href: `/operations?module=${encodeURIComponent(firstAllowed(["/purchase-items", "/deliveries", "/supplier-invoices"]))}`,
             active: isPurchasingModule,
           },
         ]
@@ -226,7 +228,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       ? [
           {
             label: "Production",
-            href: `/operations?module=${encodeURIComponent("/slicing")}`,
+            href: `/operations?module=${encodeURIComponent(firstAllowed(["/slicing"]))}`,
             active: isProductionModule,
           },
         ]
@@ -235,25 +237,16 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       ? [
           {
             label: "Sales",
-            href: `/operations?module=${encodeURIComponent("/sales/history")}`,
+            href: `/operations?module=${encodeURIComponent(firstAllowed(["/sales", "/stock-transfers"]))}`,
             active: isSalesModule,
-          },
-        ]
-      : []),
-    ...(canAccessAnyRoute(OUTLET_ROUTES)
-      ? [
-          {
-            label: "Outlet Operations",
-            href: appNavItems.find((item) => item.title === "Outlet Operations")?.children?.find((child) => isAdmin || !child.permission || permissions.includes(child.permission))?.href || "/pos",
-            active: isPosModule,
           },
         ]
       : []),
     ...(canAccessAnyFinanceRoute(["/payments", "/accounts-payable"])
       ? [
           {
-            label: "Finance",
-            href: `/finance?module=${encodeURIComponent("/payments")}`,
+            label: "Payment",
+            href: `/finance?module=${encodeURIComponent(firstAllowed(["/payments", "/accounts-payable"]))}`,
             active: !isPosModule && isCollectionsModule,
           },
         ]
@@ -287,8 +280,17 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       ? [
           {
             label: "Inventory",
-            href: `/finance?module=${encodeURIComponent("/inventory/bodega")}`,
+            href: `/finance?module=${encodeURIComponent(firstAllowed(["/inventory/bodega", "/inventory/products", "/inventory-adjustments"]))}`,
             active: isInventoryModule,
+          },
+        ]
+      : []),
+    ...(canAccessAnyRoute(OUTLET_ROUTES)
+      ? [
+          {
+            label: "Outlet Operations",
+            href: appNavItems.find((item) => item.title === "Outlet Operations")?.children?.find((child) => isAdmin || !child.permission || permissions.includes(child.permission))?.href || "/pos",
+            active: isPosModule,
           },
         ]
       : []),

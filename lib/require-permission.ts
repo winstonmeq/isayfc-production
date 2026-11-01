@@ -4,12 +4,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/mongodb";
 import RoleModel from "@/models/Role";
-import UserModel from "@/models/User";
-import type { RolePermission } from "@/lib/role-permissions";
+import UserModel, { type UserRole } from "@/models/User";
+import { legacyRoleForSelection, normalizeRolePermissions, type RolePermission } from "@/lib/role-permissions";
 
 type UserAccess = {
   isActive: boolean;
-  role: string;
+  role: UserRole;
   roleName: string;
   permissions: string[];
 };
@@ -51,7 +51,7 @@ function writeCache(userId: string, access: UserAccess | null) {
  * deactivation take effect on API requests within the cache TTL, without
  * requiring the user to log out and back in.
  */
-async function getUserAccess(userId: string): Promise<UserAccess | null> {
+export async function getUserAccess(userId: string): Promise<UserAccess | null> {
   const cached = readCache(userId);
   if (cached !== undefined) return cached;
 
@@ -82,11 +82,11 @@ async function getUserAccess(userId: string): Promise<UserAccess | null> {
   const roleIsActive = role ? role.isActive !== false : true;
 
   const access: UserAccess = {
-    isActive: Boolean(user.isActive),
-    role: String(user.role || ""),
-    roleName: String(role?.name || ""),
+    isActive: Boolean(user.isActive) && roleIsActive,
+    role: legacyRoleForSelection(String(role?.name || user.role || "USER")),
+    roleName: roleIsActive ? String(role?.name || "") : "",
     permissions:
-      roleIsActive && Array.isArray(role?.permissions) ? role.permissions : [],
+      roleIsActive && Array.isArray(role?.permissions) ? normalizeRolePermissions(role.permissions) : [],
   };
 
   writeCache(userId, access);
@@ -135,6 +135,9 @@ export async function requirePermission(
     };
   }
 
+  session.user.role = access.role;
+  session.user.roleName = access.roleName;
+  session.user.permissions = access.permissions;
   if (access.role === "ADMIN" || access.roleName === "ADMIN") {
     return { session, response: null };
   }

@@ -1,5 +1,6 @@
 // app/api/purchase-batches/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { productQuantityAllowed } from "@/lib/product-units";
 import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
@@ -246,6 +247,7 @@ async function handlePOST(req: NextRequest) {
 
     const buyingPrice = cleanNumber(item.buyingPrice);
     const quantity = cleanNumber(item.quantity);
+    if (!await productQuantityAllowed(product.unitCode, quantity)) return NextResponse.json({ success: false, message: `${product.name}: enter a valid quantity in ${product.unitCode || "PCS"}. Count units require whole numbers.` }, { status: 400 });
 
     if (buyingPrice <= 0) {
       return NextResponse.json(

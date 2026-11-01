@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { expenseBusinessCategory } from "@/lib/transaction-category";
 
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
@@ -60,6 +61,8 @@ function serializeExpense(expense: any) {
     : normalizeExpenseCategory(expense.expenseCategory);
   return {
     _id: expense._id.toString(),
+    isAutomatic: expense.origin === "OWNER_OUTLET_DELIVERY",
+    businessCategory: expenseBusinessCategory(expense),
     name: expense.name,
     expenseCategory: effectiveCategory,
     type: normalizeExpenseType(expense.type),

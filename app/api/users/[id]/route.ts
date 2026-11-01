@@ -7,13 +7,9 @@ import { invalidateUserAccessCache, requirePermission } from "@/lib/require-perm
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanString } from "@/lib/crud-utils";
 import RoleModel from "@/models/Role";
-import UserModel, { type UserRole } from "@/models/User";
-
-const allowedRoles: UserRole[] = ["ADMIN", "MANAGER", "CASHIER", "STAFF", "USER"];
-
-function isUserRole(value: string): value is UserRole {
-  return allowedRoles.includes(value as UserRole);
-}
+import UserModel from "@/models/User";
+import OutletModel from "@/models/Outlet";
+import { legacyRoleForSelection, roleNeedsOutlet, normalizeRolePermissions } from "@/lib/role-permissions";
 
 function serializeUser(user: any) {
   const role = user.roleId;
@@ -29,7 +25,7 @@ function serializeUser(user: any) {
     roleName: role?.name || "",
     outletId: outlet?._id?.toString?.() || user.outletId?.toString?.() || "",
     outletName: outlet?.name || "",
-    permissions: role?.permissions || [],
+    permissions: normalizeRolePermissions(role?.permissions || []),
     permissionCount: Number(role?.permissions?.length || 0),
     isActive: Boolean(user.isActive),
     createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
@@ -102,7 +98,6 @@ async function handlePATCH(
   const email = cleanString(body.email).toLowerCase();
   const username = cleanString(body.username || user.username).toLowerCase();
   const password = cleanString(body.password);
-  const roleInput = cleanString(body.role).toUpperCase();
   const roleId = cleanString(body.roleId);
   const outletId = cleanString(body.outletId);
 
@@ -143,6 +138,9 @@ async function handlePATCH(
     );
   }
 
+  if (roleNeedsOutlet(roleRecord.name, roleRecord.permissions) && !outletId) return NextResponse.json({ success: false, message: "Select the store assigned to this outlet cashier." }, { status: 400 });
+  if (outletId && (!isValidObjectId(outletId) || !(await OutletModel.exists({ _id: outletId, isActive: true, status: "ACTIVE" })))) return NextResponse.json({ success: false, message: "Select an active outlet." }, { status: 400 });
+
   const duplicate = await UserModel.findOne({
     _id: { $ne: id },
     isActive: true,
@@ -159,7 +157,7 @@ async function handlePATCH(
   user.name = name;
   user.username = username;
   user.email = email;
-  user.role = isUserRole(roleInput) ? roleInput : user.role || "USER";
+  user.role = legacyRoleForSelection(roleRecord.name);
   user.roleId = roleId as any;
   user.outletId = (outletId && isValidObjectId(outletId) ? outletId : undefined) as any;
 

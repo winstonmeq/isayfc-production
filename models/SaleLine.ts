@@ -17,6 +17,7 @@ export interface ISaleLine extends Document {
   categoryId?: Types.ObjectId;
   categoryName: string;
   productName: string;
+  unitCode?: string;
 
   qty: number;
   price: number;
@@ -48,6 +49,7 @@ export interface ISaleLine extends Document {
 const SaleLineSchema = new Schema<ISaleLine>(
   {
     companyUnitCost: { type: Number, min: 0 },
+    unitCode: { type: String, trim: true, uppercase: true },
     saleId: {
       type: Schema.Types.ObjectId,
       ref: "Sale",

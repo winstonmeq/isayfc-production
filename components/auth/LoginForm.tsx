@@ -2,7 +2,8 @@
 
 import type { FormEvent } from "react";
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
+import { userLandingPage } from "@/lib/page-access";
 import { useRouter } from "next/navigation";
 import {
   Eye,
@@ -49,8 +50,10 @@ export function LoginForm() {
       return;
     }
 
+    const session = await getSession();
+    if (!session?.user?.id) { toast.error("Unable to load your access. Please try again."); return; }
     toast.success("Login successful.");
-    router.replace("/dashboard");
+    router.replace(userLandingPage(session.user.permissions, session.user.role === "ADMIN" || session.user.roleName === "ADMIN", new URLSearchParams(window.location.search).get("callbackUrl")));
     router.refresh();
   }
 

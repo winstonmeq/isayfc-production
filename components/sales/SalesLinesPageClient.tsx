@@ -41,6 +41,7 @@ type ProductOption = {
 };
 
 type SaleLineItem = {
+  transactionType?: string;
   _id: string;
   saleId?: string;
   receiptNumber?: string;
@@ -605,6 +606,7 @@ export function SalesLinesPageClient() {
                       <TableCell>
                         <span className="rounded bg-emerald-700 px-2 py-1 text-xs font-bold text-white">
                           {line.source || "—"}
+                          {line.transactionType === "INTERNAL_TRANSFER" && <span className="mt-1 block text-xs text-amber-700">Legacy internal record</span>}
                         </span>
                       </TableCell>
                       <TableCell>

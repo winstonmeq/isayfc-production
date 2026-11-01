@@ -4,6 +4,7 @@
 import { EntryDialogContent } from "@/components/erp/EntryForm";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   Loader2,
   Pencil,
@@ -37,7 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { ROLE_PERMISSION_GROUPS } from "@/lib/role-permissions";
+import { ROLE_PERMISSION_GROUPS, ROLE_PRESETS, normalizeRolePermissions } from "@/lib/role-permissions";
 
 type RoleRow = {
   _id: string;
@@ -62,6 +63,9 @@ const emptyForm = {
 };
 
 export function RolesPageClient() {
+  const { data: session, update: refreshSession } = useSession();
+  const canManage = session?.user.role === "ADMIN" || session?.user.roleName === "ADMIN" || session?.user.permissions.includes("roles.manage");
+  const [permissionSearch, setPermissionSearch] = useState("");
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [meta, setMeta] = useState<ApiMeta>({
     page: 1,
@@ -151,9 +155,9 @@ export function RolesPageClient() {
 
       return {
         ...current,
-        permissions: exists
+        permissions: normalizeRolePermissions(exists
           ? current.permissions.filter((item) => item !== permission)
-          : [...current.permissions, permission],
+          : [...current.permissions, permission]),
       };
     });
   }
@@ -200,7 +204,7 @@ export function RolesPageClient() {
         body: JSON.stringify({
           name: form.name,
           description: form.description,
-          permissions: form.permissions,
+          permissions: normalizeRolePermissions(form.permissions),
         }),
       });
 
@@ -211,6 +215,7 @@ export function RolesPageClient() {
       }
 
       toast.success(json.message || "Role saved successfully.");
+      await refreshSession();
 
       setDialogOpen(false);
       setEditingRole(null);
@@ -255,7 +260,7 @@ export function RolesPageClient() {
         title="Roles"
         description="Create user roles and assign module permissions."
         actions={
-          <Button onClick={openAddDialog} className="rounded-xl">
+          <Button onClick={openAddDialog} disabled={!canManage} className="rounded-xl">
             <Plus className="mr-2 h-4 w-4" />
             Add Role
           </Button>
@@ -338,7 +343,7 @@ export function RolesPageClient() {
                             size="sm"
                             variant="outline"
                             onClick={() => openEditDialog(role)}
-                            disabled={role.isSystem}
+                            disabled={role.isSystem || !canManage}
                           >
                             <Pencil className="mr-1 h-4 w-4" />
                             Edit
@@ -348,7 +353,7 @@ export function RolesPageClient() {
                             size="sm"
                             variant="destructive"
                             onClick={() => disableRole(role)}
-                            disabled={role.isSystem}
+                            disabled={role.isSystem || !canManage}
                           >
                             <Trash2 className="mr-1 h-4 w-4" />
                             Disable
@@ -432,8 +437,16 @@ export function RolesPageClient() {
               </div>
             </div>
 
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600">{normalizeRolePermissions(form.permissions).length} permissions selected. Manage access includes the matching view page. Existing roles are not automatically granted new report access.</p>
+              <div className="flex flex-wrap gap-2">{ROLE_PRESETS.map((preset) => <Button key={preset.name} type="button" size="sm" variant="outline" onClick={() => {
+                if (form.permissions.length && !window.confirm(`Replace selected permissions with ${preset.name}?`)) return;
+                setForm((current) => ({ ...current, permissions: normalizeRolePermissions(preset.permissions) }));
+              }}>{preset.name}</Button>)}</div>
+              <Input aria-label="Search permissions" placeholder="Search page or permission…" value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} />
+            </div>
             <div className="space-y-4">
-              {ROLE_PERMISSION_GROUPS.map((group) => {
+              {ROLE_PERMISSION_GROUPS.map((group) => ({ ...group, permissions: group.permissions.filter((permission) => `${group.group} ${permission.label} ${permission.key}`.toLowerCase().includes(permissionSearch.toLowerCase())) })).filter((group) => group.permissions.length > 0).map((group) => {
                 const groupPermissionKeys = group.permissions.map(
                   (permission) => permission.key
                 );
@@ -499,7 +512,7 @@ export function RolesPageClient() {
               Cancel
             </Button>
 
-            <Button type="button" disabled={isSaving} onClick={saveRole}>
+            <Button type="button" disabled={isSaving || !canManage} onClick={saveRole}>
               {isSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}

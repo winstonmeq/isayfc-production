@@ -4,6 +4,8 @@
 import { EntryDialogContent } from "@/components/erp/EntryForm";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
+import { ROLE_PERMISSION_GROUPS, roleNeedsOutlet } from "@/lib/role-permissions";
 import {
   Loader2,
   Pencil,
@@ -44,6 +46,7 @@ import {
 } from "@/components/ui/table";
 
 type RoleOption = {
+  permissions: string[];
   _id: string;
   name: string;
   permissionCount: number;
@@ -84,6 +87,8 @@ const emptyForm = {
 };
 
 export function UsersPageClient() {
+  const { data: session, update: refreshSession } = useSession();
+  const canManage = session?.user.role === "ADMIN" || session?.user.roleName === "ADMIN" || session?.user.permissions.includes("users.manage");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
@@ -110,7 +115,7 @@ export function UsersPageClient() {
 
   async function loadRoles() {
     try {
-      const res = await fetch("/api/roles?limit=1000", {
+      const res = await fetch("/api/roles?limit=1000&lookup=true", {
         cache: "no-store",
       });
 
@@ -126,7 +131,7 @@ export function UsersPageClient() {
 
   async function loadOutlets() {
     try {
-      const res = await fetch("/api/outlets?limit=1000", {
+      const res = await fetch("/api/outlets?limit=1000&lookup=true", {
         cache: "no-store",
       });
 
@@ -231,6 +236,8 @@ export function UsersPageClient() {
   }
 
   async function saveUser() {
+    const selected = roles.find((role) => role._id === form.roleId);
+    if (selected && roleNeedsOutlet(selected.name, selected.permissions || []) && !form.outletId) { toast.error("Select the store assigned to this outlet cashier."); return; }
     if (!form.name.trim()) {
       toast.error("User name is required.");
       return;
@@ -278,6 +285,7 @@ export function UsersPageClient() {
       }
 
       toast.success(json.message || "User saved successfully.");
+      await refreshSession();
 
       setDialogOpen(false);
       setEditingUser(null);
@@ -322,7 +330,7 @@ export function UsersPageClient() {
         title="Users"
         description="Create users and assign role-based permissions."
         actions={
-          <Button onClick={openAddDialog} className="rounded-xl">
+          <Button onClick={openAddDialog} disabled={!canManage} className="rounded-xl">
             <Plus className="mr-2 h-4 w-4" />
             Add User
           </Button>
@@ -365,7 +373,7 @@ export function UsersPageClient() {
                     Permissions
                   </TableHead>
                   <TableHead className="text-center text-white">
-                    Legacy Role
+                    Assigned Outlet
                   </TableHead>
                   <TableHead className="text-center text-white">
                     Action
@@ -399,7 +407,7 @@ export function UsersPageClient() {
                         {user.permissionCount || 0}
                       </TableCell>
                       <TableCell className="text-center">
-                        {user.role || "USER"}
+                        {user.outletName || "No outlet assigned"}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-center gap-2">
@@ -407,6 +415,7 @@ export function UsersPageClient() {
                             size="sm"
                             variant="outline"
                             onClick={() => openEditDialog(user)}
+                            disabled={!canManage}
                           >
                             <Pencil className="mr-1 h-4 w-4" />
                             Edit
@@ -416,6 +425,7 @@ export function UsersPageClient() {
                             size="sm"
                             variant="destructive"
                             onClick={() => disableUser(user)}
+                            disabled={!canManage}
                           >
                             <Trash2 className="mr-1 h-4 w-4" />
                             Disable
@@ -562,25 +572,11 @@ export function UsersPageClient() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Legacy Role</Label>
-              <Select
-                value={form.role}
-                onValueChange={(value) => updateForm("role", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select legacy role" />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem value="ADMIN">Admin</SelectItem>
-                  <SelectItem value="MANAGER">Manager</SelectItem>
-                  <SelectItem value="CASHIER">Cashier</SelectItem>
-                  <SelectItem value="STAFF">Staff</SelectItem>
-                  <SelectItem value="USER">User</SelectItem>
-                </SelectContent>
-              </Select>
-
+            <div className="space-y-2 rounded-lg bg-slate-50 p-3">
+              <Label>Selected Role Access</Label>
+              <p className="text-xs text-slate-500">Access comes from the selected role. Cashiers require an assigned store. Other roles may be saved without one; outlet access remains restricted.</p>
+              <ul className="max-h-36 list-inside list-disc overflow-y-auto text-sm">{ROLE_PERMISSION_GROUPS.flatMap<{ key: string; label: string }>((group) => group.permissions).filter((permission) => roles.find((role) => role._id === form.roleId)?.permissions?.includes(permission.key)).map((permission) => <li key={permission.key}>{permission.label}</li>)}</ul>
+              {roles.find((role) => role._id === form.roleId)?.name === "ADMIN" && <p className="text-sm font-semibold">Administrator — full system access.</p>}
             </div>
           </div>
 
@@ -594,7 +590,7 @@ export function UsersPageClient() {
               Cancel
             </Button>
 
-            <Button type="button" disabled={isSaving} onClick={saveUser}>
+            <Button type="button" disabled={isSaving || !canManage} onClick={saveUser}>
               {isSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}

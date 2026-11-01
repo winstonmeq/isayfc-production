@@ -12,6 +12,7 @@ export interface IOutletInventory extends Document {
   originType: OutletInventoryOrigin;
   productId: Types.ObjectId;
   productName: string;
+  unitCode?: string;
   categoryName?: string;
   stockQty: number;
   companyUnitCost?: number;
@@ -63,6 +64,7 @@ const OutletInventorySchema = new Schema<IOutletInventory>(
       uppercase: true,
     },
 
+    unitCode: { type: String, trim: true, uppercase: true },
     categoryName: {
       type: String,
       trim: true,

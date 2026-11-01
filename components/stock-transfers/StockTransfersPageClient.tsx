@@ -1,5 +1,6 @@
 "use client";
 
+import { readApiResponse } from "@/lib/api-response";
 import { EntryDialogContent } from "@/components/erp/EntryForm";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -251,7 +252,7 @@ export function StockTransfersPageClient() {
       const res = await fetch(`/api/stock-transfers?${params.toString()}`, {
         cache: "no-store",
       });
-      const json = await res.json();
+      const json = await readApiResponse<any>(res);
 
       if (!res.ok || !json.success) {
         throw new Error(json.message || "Unable to load stock transfers.");
@@ -282,7 +283,7 @@ export function StockTransfersPageClient() {
             `${endpoint}${separator}page=${page}&limit=100`,
             { cache: "no-store" }
           );
-          const json = await response.json();
+          const json = await readApiResponse<any>(response);
 
           if (!response.ok || !json.success) {
             throw new Error(json.message || "Unable to load products.");
@@ -405,7 +406,7 @@ export function StockTransfersPageClient() {
       const res = await fetch(`/api/stock-transfers/${transferId}`, {
         cache: "no-store",
       });
-      const json = await res.json();
+      const json = await readApiResponse<any>(res);
 
       if (!res.ok || !json.success) {
         throw new Error(json.message || "Unable to load transfer.");
@@ -494,7 +495,7 @@ export function StockTransfersPageClient() {
             body: JSON.stringify(payload),
           });
 
-      const json = await res.json();
+      const json = await readApiResponse<any>(res);
 
       if (!res.ok || !json.success) {
         throw new Error(json.message || "Unable to save transfer.");
@@ -506,7 +507,7 @@ export function StockTransfersPageClient() {
           `/api/stock-transfers/${editingId}/dispatch`,
           { method: "POST" }
         );
-        const dispatchJson = await dispatchRes.json();
+        const dispatchJson = await readApiResponse<any>(dispatchRes);
 
         if (!dispatchRes.ok || !dispatchJson.success) {
           throw new Error(dispatchJson.message || "Saved, but dispatch failed.");
@@ -547,7 +548,7 @@ export function StockTransfersPageClient() {
               method: "DELETE",
             });
 
-      const json = await res.json();
+      const json = await readApiResponse<any>(res);
 
       if (!res.ok || !json.success) {
         throw new Error(json.message || "Action failed.");
@@ -569,7 +570,7 @@ export function StockTransfersPageClient() {
       const res = await fetch(`/api/stock-transfers/${transferId}`, {
         cache: "no-store",
       });
-      const json = await res.json();
+      const json = await readApiResponse<any>(res);
 
       if (!res.ok || !json.success) {
         throw new Error(json.message || "Unable to load transfer.");
@@ -740,6 +741,7 @@ export function StockTransfersPageClient() {
                     </TableCell>
                     <TableCell className="text-sm">
                       {transfer.outletName}
+                      <span className="block text-xs text-slate-500">Category: OUTLET</span>
                     </TableCell>
                     <TableCell>
                       <Badge variant={transfer.saleId ? "default" : "secondary"}>

@@ -13,6 +13,8 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   const { user, response } = await requireMobileAuth(req, [
+    "pos.view",
+    "pos.manage",
     "outlet-inventory.view",
     "sales.view",
   ]);

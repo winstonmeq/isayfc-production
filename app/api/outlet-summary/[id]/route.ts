@@ -36,11 +36,7 @@ export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { response } = await requirePermission([
-    "dashboard.view",
-    "outlets.view",
-    "reports.profit",
-  ]);
+  const { response } = await requirePermission("reports.outlet-comparison");
   if (response) return response;
 
   const { id } = await context.params;

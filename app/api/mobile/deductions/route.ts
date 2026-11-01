@@ -33,6 +33,8 @@ class ApiError extends Error {
 
 export async function GET(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
+    "pos.view",
+    "pos.manage",
     "outlet-inventory.manage",
     "outlet-inventory.view",
     "sales.manage",
@@ -75,6 +77,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
+    "pos.manage",
     "outlet-inventory.manage",
     "sales.manage",
   ]);

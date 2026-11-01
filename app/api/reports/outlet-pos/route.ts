@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-  const { response } = await requirePermission(["reports.sales", "reports.profit"]);
+  const { response } = await requirePermission("reports.outlet-sales");
   if (response) return response;
   await dbConnect();
 
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   const [outlets, sales] = await Promise.all([
     OutletModel.find({}).select("name code").sort({ name: 1 }).lean<any[]>(),
     SaleModel.find(saleFilter)
-      .select("receiptNumber saleDate outletId totalQty totalAmount paidAmount paymentMethod status employeeName")
+      .select("receiptNumber saleDate outletId totalQty totalAmount paidAmount paymentMethod status employeeName remarks")
       .sort({ saleDate: 1, createdAt: 1 })
       .lean<any[]>(),
   ]);

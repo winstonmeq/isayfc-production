@@ -7,6 +7,7 @@
 import mongoose, { Types, isValidObjectId } from "mongoose";
 
 import { cleanString } from "@/lib/crud-utils";
+import { productQuantityAllowed } from "@/lib/product-units";
 import { manilaDateString } from "@/lib/date-utils";
 import {
   packingSnapshot,
@@ -91,7 +92,7 @@ export async function dispatchTransferInTransaction({
   );
 
   if (!transfer) {
-    const exists = await StockTransferModel.exists({ _id: transferId });
+    const exists = await StockTransferModel.exists({ _id: transferId }).session(mongoSession);
     transferFail(
       exists ? 400 : 404,
       exists
@@ -290,8 +291,8 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
     }
     seen.add(dedupeKey);
 
-    if (!Number.isFinite(rawQty) || !Number.isInteger(rawQty) || rawQty < 1) {
-      transferFail(400, "Each item quantity must be a whole number of at least 1.");
+    if (!Number.isFinite(rawQty) || rawQty <= 0) {
+      transferFail(400, "Each item quantity must be greater than zero.");
     }
     const qty = rawQty;
 
@@ -306,6 +307,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
           name?: string;
           buyingPrice?: number;
           unitPrice?: number;
+          unitCode?: string;
           categoryId?: { name?: string } | Types.ObjectId | null;
         }>();
 
@@ -313,11 +315,15 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
         transferFail(404, "One of the selected grocery products was not found.");
       }
 
+      if (!(await productQuantityAllowed(product.unitCode, qty))) {
+        transferFail(400, "Invalid quantity for this product's unit.");
+      }
       prepared.push({
         source: "GROCERY" as const,
         productId: product._id,
         bodegaProductId: undefined,
         productName: String(product.name || ""),
+        unitCode: product.unitCode || "PCS",
         categoryName: categoryNameOf(product.categoryId),
         packSize: 0,
         unitLabel: "QTY" as const,
@@ -326,7 +332,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
         companyUnitCost: Number(product.buyingPrice || 0),
         qty,
         qtyPcs: qty,
-        baseUnit: "QTY" as const,
+        baseUnit: product.unitCode === "KG" ? "KG" as const : "QTY" as const,
         baseQty: qty,
         receivedQty: 0,
         receivedPcs: 0,
@@ -338,6 +344,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       continue;
     }
 
+    if (!Number.isSafeInteger(qty)) transferFail(400, "Chicken quantities must be whole numbers.");
     // BODEGA
     const product = await BodegaProductModel.findOne({
       _id: productKey,
@@ -474,6 +481,7 @@ export function serializeTransfer(transfer: LeanTransfer) {
     saleId: transfer.saleId?.toString?.() || "",
     outletId: outlet ? outlet._id?.toString?.() || outlet.toString?.() || "" : "",
     outletName: outlet?.name || "",
+    businessCategory: "OUTLET" as const,
     outletCode: outlet?.code || "",
     totalItems: Number(transfer.totalItems || 0),
     totalQty: Number(transfer.totalQty || 0),

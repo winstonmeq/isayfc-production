@@ -91,6 +91,7 @@ export const appNavItems: AppNavItem[] = [
         icon: Package,
         permission: "products.view",
       },
+      { title: "Product Units", href: "/units", icon: Tags, permission: "products.view" },
       {
         title: "Bodega Products",
         href: "/bodega-products",
@@ -279,9 +280,9 @@ export const appNavItems: AppNavItem[] = [
     children: [
       { title: "Daily Sales & Operations", href: "/pos", icon: ShoppingBasket, permission: "pos.view" },
       { title: "Outlet Inventory", href: "/outlet-inventory", icon: Warehouse, permission: "outlet-inventory.view" },
-      { title: "Sales & Profit Report", href: "/reports/outlet-pos", icon: ReceiptText, permission: "reports.sales" },
-      { title: "Outlet Comparison", href: "/outlet-summary", icon: BarChart3, permission: "outlets.view" },
-      { title: "Outlet Collections", href: "/payments/pos-collections", icon: WalletCards, permission: "payments.view" },
+      { title: "Sales & Profit Report", href: "/reports/outlet-pos", icon: ReceiptText, permission: "reports.outlet-sales" },
+      { title: "Outlet Comparison", href: "/outlet-summary", icon: BarChart3, permission: "reports.outlet-comparison" },
+      { title: "Outlet Collections", href: "/payments/pos-collections", icon: WalletCards, permission: "payments.outlet-collections" },
     ],
   },
   {
@@ -320,6 +321,12 @@ export const appNavItems: AppNavItem[] = [
         icon: Gauge,
         permission: "reports.profit",
       },
+      {
+        title: "Overall Business Report",
+        href: "/reports/overall",
+        icon: BarChart3,
+        permission: "reports.overall",
+      },
     ],
   },
   {
@@ -347,7 +354,7 @@ export const appNavItems: AppNavItem[] = [
     title: "Correction Register",
     href: "/corrections",
     icon: ScrollText,
-    permission: "audit-logs.view",
+    permission: "corrections.view",
     section: "Admin",
   },
 ];

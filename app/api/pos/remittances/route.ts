@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   await dbConnect();
   const user = await User.findById(session!.user.id).select("role outletId").lean();
   if (!user) return NextResponse.json({ message: "User not found." }, { status: 403 });
-  const admin = String(user.role).toUpperCase() === "ADMIN";
+  const admin = session!.user.role === "ADMIN";
   const outlets = await Outlet.find({ isActive: true, ...(admin ? {} : { _id: { $in: user.outletId ? [user.outletId] : [] } }) }).select("name code").sort({ name: 1 }).lean();
   const filter: Record<string, unknown> = { outletId: { $in: outlets.map(row => row._id) } };
   const outletId = req.nextUrl.searchParams.get("outletId");

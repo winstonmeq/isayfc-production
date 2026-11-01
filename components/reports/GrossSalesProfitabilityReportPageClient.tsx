@@ -175,7 +175,7 @@ export function GrossSalesProfitabilityReportPageClient() {
 
   return (
     <ReportShell
-      title="Gross Sales, Cost of Sales & Income Statement"
+      title="Main Branch Management Income Statement"
       generatedAt={data?.generatedAt}
       periodLabel={periodLabel}
       preset={preset}
@@ -433,7 +433,7 @@ export function GrossSalesProfitabilityReportPageClient() {
                   </td>
                 </tr>
                 <tr className="border-t border-black font-black">
-                  <td className="px-1 py-1">NET INCOME</td>
+                  <td className="px-1 py-1">MAIN OPERATING RESULT</td>
                   <td className={summaryValueClass(visibleTotals.netIncome)}>
                     {signedMoney(visibleTotals.netIncome)}
                   </td>

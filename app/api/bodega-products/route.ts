@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { activeProductUnit } from "@/lib/product-units";
 import { isValidObjectId, Types } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
@@ -27,6 +28,7 @@ type PopulatedCategory = {
 };
 
 type LeanBodegaProduct = {
+  unitCode?: string;
   _id: Types.ObjectId | string;
   name?: string;
   categoryId?: PopulatedCategory | Types.ObjectId | string | null;
@@ -133,6 +135,7 @@ function serializeBodegaProduct(
   return {
     _id: idToString(product._id),
     name: product.name || "",
+    unitCode: isPackProduct ? "PACK" : product.unitCode || "HEAD",
     categoryId: getCategoryId(product.categoryId),
     categoryName: getCategoryName(product.categoryId),
 
@@ -321,7 +324,10 @@ async function handlePOST(req: NextRequest) {
     }
   }
 
+  const unit = await activeProductUnit(body.unitCode, "HEAD");
+  if (!unit || !["HEAD", "PCS"].includes(unit.code)) return NextResponse.json({ success: false, message: "Use HEAD or PCS for bodega stock. Configure packs through Standard PCS & Packs." }, { status: 400 });
   const product = await BodegaProductModel.create({
+    unitCode: unit.code,
     name,
     categoryId: categoryId ? new Types.ObjectId(categoryId) : undefined,
     stockQty: cleanNumber(body.stockQty),

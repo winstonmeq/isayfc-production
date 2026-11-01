@@ -1,6 +1,7 @@
 "use client";
 
 import { EntryDialogContent } from "@/components/erp/EntryForm";
+import { ProductUnitSelect } from "@/components/units/ProductUnitSelect";
 
 import { useEffect, useState } from "react";
 import {
@@ -62,6 +63,7 @@ type CategoryOption = {
 };
 
 type BodegaProductItem = {
+  unitCode?: string;
   _id: string;
   name: string;
   categoryId?: string;
@@ -87,6 +89,7 @@ type ApiMeta = {
 };
 
 const emptyForm = {
+  unitCode: "HEAD",
   name: "",
   categoryId: "NONE",
   stockQty: "0",
@@ -222,6 +225,7 @@ export function BodegaProductsPageClient() {
     setForm({
       name: product.name,
       categoryId: product.categoryId || "NONE",
+      unitCode: product.unitCode || (product.isPackProduct ? "PACK" : "HEAD"),
       stockQty: String(product.stockQty),
       buyingPrice: String(product.buyingPrice),
       sellingPrice: String(product.sellingPrice),
@@ -429,7 +433,7 @@ export function BodegaProductsPageClient() {
                 <TableBody>
                   {products.map((product) => (
                     <TableRow key={product._id}>
-                      <TableCell className="font-bold text-slate-950">{product.name}</TableCell>
+                      <TableCell className="font-bold text-slate-950">{product.name}<span className="block text-xs font-normal text-slate-500">Unit: {product.unitCode || (product.isPackProduct ? "PACK" : "HEAD")}</span></TableCell>
                       <TableCell>{product.categoryName || "-"}</TableCell>
                       <TableCell>
                         <PackStockDisplay
@@ -538,6 +542,7 @@ export function BodegaProductsPageClient() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
+                <ProductUnitSelect bodega value={form.unitCode} onChange={(value) => updateForm("unitCode", value)} />
                 <Label>Product Name</Label>
                 <Input value={form.name} onChange={(event) => updateForm("name", event.target.value)} required />
               </div>

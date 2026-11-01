@@ -19,6 +19,7 @@ function LoadingModule() {
 }
 
 const moduleComponents: Record<string, ComponentType> = {
+  "/reports/overall": dynamic(() => import("@/components/reports/OverallBusinessReportPageClient").then(m => m.OverallBusinessReportPageClient), { loading: LoadingModule }),
   "/reports/internal-outlets": dynamic(() => import("@/components/reports/InternalOutletsReport").then(m => m.InternalOutletsReport), { loading: LoadingModule }),
   "/pos/remittances": dynamic(() => import("@/components/pos/OutletRemittancesPage").then(m => m.OutletRemittancesPage), { loading: LoadingModule }),
   "/supplier-payment-history": dynamic(
@@ -65,6 +66,7 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/units": dynamic(() => import("@/components/units/UnitsPageClient").then((m) => m.UnitsPageClient)),
   "/products": dynamic(
     () => import("@/components/products/ProductsPageClient").then((m) => m.ProductsPageClient),
     { loading: LoadingModule }

@@ -30,18 +30,18 @@ async function handlePOST(
     );
   }
 
-  await dbConnect();
-
-  const mongoSession = await mongoose.startSession();
-
+  let mongoSession: mongoose.ClientSession | undefined;
   try {
+    await dbConnect();
+    mongoSession = await mongoose.startSession();
+    const transactionSession = mongoSession;
     let transferNumber = "";
 
     await mongoSession.withTransaction(async () => {
       const transfer = await dispatchTransferInTransaction({
         transferId: id,
         userId: session?.user?.id,
-        mongoSession,
+        mongoSession: transactionSession,
       });
 
       transferNumber = transfer.transferNumber;
@@ -66,7 +66,7 @@ async function handlePOST(
       { status: 500 }
     );
   } finally {
-    await mongoSession.endSession();
+    await mongoSession?.endSession();
   }
 }
 

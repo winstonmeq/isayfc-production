@@ -12,8 +12,7 @@ import OutletInventoryModel from "@/models/OutletInventory";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
-import SaleModel from "@/models/Sale";
-import { outletSaleRecognitionUpdate } from "@/lib/outlet-sale-recognition";
+import { postOutletDelivery, OutletDeliveryPostingError } from "@/lib/post-outlet-delivery";
 import { packingSnapshot, toBaseUnitCost } from "@/lib/inventory-units";
 
 export const dynamic = "force-dynamic";
@@ -267,6 +266,7 @@ async function handlePOST(
                 categoryName: item.categoryName,
                 stockQty: receivedPcs,
                 unitLabel: baseUnit,
+                unitCode: item.unitLabel === "PACK" ? "PCS" : item.unitCode || baseUnit,
                 packSize,
                 lowStockAlert: 0,
                 companyUnitCost: item.companyUnitCost,
@@ -320,17 +320,7 @@ async function handlePOST(
 
       await transfer.save({ session: mongoSession });
 
-      if (transfer.saleId) {
-        const sale = await SaleModel.findOneAndUpdate(
-          { _id: transfer.saleId, isVoided: false, transactionType: { $ne: "INTERNAL_TRANSFER" },
-            $or: [{ fulfillmentStatus: "PENDING" }, { fulfillmentStatus: { $exists: false } }] },
-          outletSaleRecognitionUpdate(),
-          { new: true, session: mongoSession, updatePipeline: true }
-        );
-        if (!sale) {
-          throw new StockTransferError(409, "The linked sale could not be recognized. Check its status; older internal records require review. No stock changes were posted.");
-        }
-      }
+      await postOutletDelivery(String(transfer._id), mongoSession, session?.user?.id);
     });
 
     return NextResponse.json({
@@ -340,6 +330,7 @@ async function handlePOST(
         : `Transfer ${transferNumber} confirmed. Outlet inventory has been updated.`,
     });
   } catch (error) {
+    if (error instanceof OutletDeliveryPostingError) return NextResponse.json({ success: false, message: error.message }, { status: error.status });
     if (error instanceof StockTransferError) {
       return NextResponse.json(
         { success: false, message: error.message },

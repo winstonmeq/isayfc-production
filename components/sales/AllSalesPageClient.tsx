@@ -27,7 +27,7 @@ type UnifiedProduct = {
   type: ProductType;
   name: string;
   categoryName: string;
-  saleUnit: "PACK" | "HEAD" | "QTY";
+  saleUnit: string;
   availableQty: number;
   stockPcs: number;
   packSize: number;
@@ -143,7 +143,7 @@ export function AllSalesPageClient() {
         type: "BODEGA",
         name: product.name,
         categoryName: product.categoryName || "GROCERY",
-        saleUnit: "QTY",
+        saleUnit: product.unitCode || "PCS",
         availableQty: Number(product.stockPcs || 0),
         stockPcs: Number(product.stockPcs || 0),
         packSize: 0,
@@ -228,6 +228,7 @@ export function AllSalesPageClient() {
         <div className="space-y-2"><Label>Sale Date *</Label><Input type="date" value={saleDate} onChange={(event) => setSaleDate(event.target.value)} /></div>
         <div className="space-y-2"><Label>Receipt Number *</Label><Input value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="e.g. 0003801" /></div>
       </CardContent></Card>
+      {customers.some((customer) => customer._id === customerId && customer.outletId && customer.outletId !== "NONE") && <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Outlet customer sale: acceptance records an unpaid balance and a main delivery expense at selling amount. Record any payment separately.</p>}
       <Card><CardHeader><CardTitle>Add Product</CardTitle><div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Product type filter">{([{ value: "ALL", label: "All" }, { value: "CHICKEN", label: "Chicken" }, { value: "BODEGA", label: "Grocery" }] as const).map((filter) => <Button key={filter.value} type="button" variant={productFilter === filter.value ? "default" : "outline"} aria-pressed={productFilter === filter.value} onClick={() => { setProductFilter(filter.value); setSelectedKey(""); setQuantity("0"); }}>{filter.label}</Button>)}</div></CardHeader><CardContent className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
         <ProductPicker products={visibleProducts} value={selectedKey} onChange={setSelectedKey} />
         <Input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Quantity" />

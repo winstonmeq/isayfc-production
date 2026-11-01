@@ -12,6 +12,10 @@ export interface IExpense extends Document {
   type: ExpenseType;
   expenseDate: Date;
   amount: number;
+  origin?: "MANUAL" | "OWNER_OUTLET_DELIVERY";
+  linkedTransferId?: Types.ObjectId;
+  linkedSaleId?: Types.ObjectId;
+  beneficiaryOutletId?: Types.ObjectId;
   // First-class outlet/shift links for mobile expenses (previously only in
   // `remarks` as "OUTLET:<id> SHIFT:<id>"). Old rows fall back to the tag.
   outletId?: Types.ObjectId;
@@ -27,6 +31,10 @@ const expenseCategoryValues: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"]
 
 const ExpenseSchema = new Schema<IExpense>(
   {
+    origin: { type: String, enum: ["MANUAL", "OWNER_OUTLET_DELIVERY"], default: "MANUAL", index: true },
+    linkedTransferId: { type: Schema.Types.ObjectId, ref: "StockTransfer", index: true },
+    linkedSaleId: { type: Schema.Types.ObjectId, ref: "Sale" },
+    beneficiaryOutletId: { type: Schema.Types.ObjectId, ref: "Outlet" },
     name: {
       type: String,
       required: true,

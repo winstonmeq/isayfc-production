@@ -1,3 +1,2 @@
-import { InternalOutletsReport } from "@/components/reports/InternalOutletsReport";
-export const metadata = { title: "Internal Deliveries & Company Profit" };
-export default function Page() { return <InternalOutletsReport />; }
+import { redirect } from "next/navigation";
+export default function Page() { redirect("/reports/overall"); }

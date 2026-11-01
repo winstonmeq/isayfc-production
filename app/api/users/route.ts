@@ -7,13 +7,9 @@ import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanString, escapeRegex, getPagination } from "@/lib/crud-utils";
 import RoleModel from "@/models/Role";
-import UserModel, { type UserRole } from "@/models/User";
-
-const allowedRoles: UserRole[] = ["ADMIN", "MANAGER", "CASHIER", "STAFF", "USER"];
-
-function isUserRole(value: string): value is UserRole {
-  return allowedRoles.includes(value as UserRole);
-}
+import UserModel from "@/models/User";
+import OutletModel from "@/models/Outlet";
+import { legacyRoleForSelection, roleNeedsOutlet, normalizeRolePermissions } from "@/lib/role-permissions";
 
 function serializeUser(user: any) {
   const role = user.roleId;
@@ -29,7 +25,7 @@ function serializeUser(user: any) {
     roleName: role?.name || "",
     outletId: outlet?._id?.toString?.() || user.outletId?.toString?.() || "",
     outletName: outlet?.name || "",
-    permissions: role?.permissions || [],
+    permissions: normalizeRolePermissions(role?.permissions || []),
     permissionCount: Number(role?.permissions?.length || 0),
     isActive: Boolean(user.isActive),
     createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
@@ -92,7 +88,6 @@ async function handlePOST(req: NextRequest) {
   const name = cleanString(body.name).toUpperCase();
   const email = cleanString(body.email).toLowerCase();
   const password = cleanString(body.password);
-  const roleInput = cleanString(body.role).toUpperCase();
   const roleId = cleanString(body.roleId);
   const outletId = cleanString(body.outletId);
   const username = cleanString(body.username || body.email || body.name).toLowerCase();
@@ -141,6 +136,9 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
+  if (roleNeedsOutlet(roleRecord.name, roleRecord.permissions) && !outletId) return NextResponse.json({ success: false, message: "Select the store assigned to this outlet cashier." }, { status: 400 });
+  if (outletId && (!isValidObjectId(outletId) || !(await OutletModel.exists({ _id: outletId, isActive: true, status: "ACTIVE" })))) return NextResponse.json({ success: false, message: "Select an active outlet." }, { status: 400 });
+
   const existing = await UserModel.findOne({
     isActive: true,
     $or: [{ username }, { email }],
@@ -160,7 +158,7 @@ async function handlePOST(req: NextRequest) {
     username,
     email,
     password: hashedPassword,
-    role: isUserRole(roleInput) ? roleInput : "USER",
+    role: legacyRoleForSelection(roleRecord.name),
     roleId,
     outletId: outletId && isValidObjectId(outletId) ? outletId : undefined,
   });

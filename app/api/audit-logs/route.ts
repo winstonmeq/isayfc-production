@@ -65,7 +65,6 @@ function serializeAuditLog(log: PopulatedAuditLog) {
 export async function GET(req: NextRequest) {
   const { response } = await requirePermission([
     "audit-logs.view",
-    "activity-logs.view",
   ]);
   if (response) return response;
 

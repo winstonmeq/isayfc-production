@@ -1,5 +1,6 @@
 import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 import { ownerOutletAmount } from "@/lib/owner-outlet-amount";
+import { saleBusinessCategory } from "@/lib/transaction-category";
 // Main-company sales register with daily totals, product/category summaries,
 // and discount analysis. All amounts come from posted sales snapshots.
 // Gross sales less sales discounts equals net sales; outlet POS is separate.
@@ -230,6 +231,7 @@ export async function GET(req: NextRequest) {
         saleDate: date ? date.toISOString() : "",
         day: date ? manilaDateString(date) : "",
         customerName: s.customerId?.name || "Walk-in",
+        businessCategory: saleBusinessCategory(s),
         qty: sold.packs + sold.quantity,
         ...sold,
         source:

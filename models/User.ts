@@ -74,7 +74,7 @@ const UserSchema = new Schema<IUser>(
   }
 );
 
-UserSchema.index({ username: 1 }, { unique: true });
+// username.unique already declares this unique index; do not declare it twice.
 UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ roleId: 1 });

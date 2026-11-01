@@ -22,6 +22,7 @@ type RegisterRow = {
   day: string;
   source: string;
   customerName: string;
+  businessCategory?: string;
   qty: number;
   qtyDisplay: string;
   totalAmount: number;
@@ -135,8 +136,8 @@ export function SalesReportPageClient() {
 
   return (
     <ReportShell
-      title="Sales Report"
-      subtitle="Sales register with daily subtotals, chicken-cut matrix, and product summaries."
+      title="Main Sales Report"
+      subtitle="Main customer sales, including owner outlets. Outlet retail sales are reported separately."
       generatedAt={data?.generatedAt}
       periodLabel={periodLabel}
       preset={preset}
@@ -217,7 +218,10 @@ export function SalesReportPageClient() {
           </div>
 
           {tab === "register" && (
-            <RegisterTable rows={data.rows} daily={data.daily} grand={data.grand} />
+            <>
+              <h2 className="text-lg font-bold">Customer Sales</h2>
+              <RegisterTable rows={data.rows} daily={data.daily} grand={data.grand} />
+            </>
           )}
           {tab === "product" && (
             <SummaryTable title="Sales by Product" rows={data.byProduct} />
@@ -330,7 +334,6 @@ function RegisterTable({
             <th className="p-2.5 text-right font-semibold">Net Sales</th>
             <th className="p-2.5 text-right font-semibold">Paid</th>
             <th className="p-2.5 text-right font-semibold">Balance</th>
-            <th className="p-2.5 text-right font-semibold" title="Included in Balance; not an additional expense">Owner Outlet (₱)</th>
             <th className="p-2.5 font-semibold">Status</th>
           </tr>
         </thead>
@@ -354,7 +357,6 @@ function RegisterTable({
             <td className="p-2.5 text-right">{peso(grand.total)}</td>
             <td className="p-2.5 text-right">{peso(grand.paid)}</td>
             <td className="p-2.5 text-right">{peso(grand.balance)}</td>
-            <td className="p-2.5 text-right">{peso(grand.ownerOutletAmount || 0)}</td>
             <td />
           </tr>
         </tfoot>
@@ -379,7 +381,7 @@ function DayGroup({
           <td className="p-2.5 text-slate-500">{day}</td>
           <td className="p-2.5 font-medium">{r.receiptNumber}</td>
           <td className="p-2.5">{r.customerName}</td>
-          <td className="p-2.5 text-slate-500">{r.source}</td>
+          <td className="p-2.5 text-slate-500">{r.source}{r.businessCategory && <span className="block text-xs">Category: {r.businessCategory}</span>}</td>
           <td className="p-2.5 text-right">{r.qtyDisplay}</td>
           <td className="p-2.5 text-right">{peso(r.grossSales)}</td>
           <td className="p-2.5 text-right">{peso(r.discounts)}</td>
@@ -392,7 +394,6 @@ function DayGroup({
           >
             {peso(r.balance)}
           </td>
-          <td className="p-2.5 text-right">{peso(r.ownerOutletAmount || 0)}</td>
           <td className="p-2.5 text-xs">{r.status}</td>
         </tr>
       ))}
@@ -407,7 +408,6 @@ function DayGroup({
           <td className="p-2 text-right">{peso(sub.total)}</td>
           <td className="p-2 text-right">{peso(sub.paid)}</td>
           <td className="p-2 text-right">{peso(sub.balance)}</td>
-          <td className="p-2 text-right">{peso(sub.ownerOutletAmount || 0)}</td>
           <td />
         </tr>
       )}

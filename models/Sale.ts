@@ -18,6 +18,8 @@ export interface ISale extends Document {
   saleDate: Date;
   source: SaleSource;
   transactionType?: "EXTERNAL_SALE" | "INTERNAL_TRANSFER";
+  // Regular main sale to an owner outlet; eliminated only in company-wide reports.
+  ownerOutletId?: Types.ObjectId;
   // Outlet / shift / channel are now first-class fields (previously these were
   // only encoded in `remarks` as "OUTLET:<id> SHIFT:<id>"). Old rows have them
   // unset; readers fall back to the remarks tag for backward compatibility.
@@ -87,6 +89,7 @@ const SaleSchema = new Schema<ISale>(
       required: true,
     },
     transactionType: { type: String, enum: ["EXTERNAL_SALE", "INTERNAL_TRANSFER"], default: "EXTERNAL_SALE", index: true },
+    ownerOutletId: { type: Schema.Types.ObjectId, ref: "Outlet", index: true },
 
     outletId: {
       type: Schema.Types.ObjectId,

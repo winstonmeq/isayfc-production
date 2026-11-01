@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
+    "pos.view",
+    "pos.manage",
     "outlet-inventory.view",
     "sales.view",
   ]);

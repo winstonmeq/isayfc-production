@@ -8,11 +8,16 @@ import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import BodegaProductModel from "@/models/BodegaProduct";
 import CategoryModel from "@/models/Category";
+import BodegaStockTransaction from "@/models/BodegaStockTransaction";
+import StandardPacking from "@/models/StandardPacking";
+import { activeProductUnit } from "@/lib/product-units";
+import { canChangeProductUnit } from "@/lib/product-unit-policy";
 
 function serializeBodegaProduct(product: any) {
   return {
     _id: product._id.toString(),
     name: product.name,
+    unitCode: product.unitCode || "HEAD",
     categoryId: product.categoryId?._id?.toString?.() || product.categoryId?.toString?.() || "",
     categoryName: product.categoryId?.name || "",
     stockQty: product.stockQty || 0,
@@ -130,6 +135,14 @@ async function handlePATCH(
     }
   }
 
+  const current = await BodegaProductModel.findOne({ _id: id, isActive: true }).lean();
+  if (!current) return NextResponse.json({ success: false, message: "Product not found." }, { status: 404 });
+  const packed = !!await StandardPacking.exists({ productId: id, isActive: true, standardPacking: { $gt: 0 } });
+  const oldCode = packed ? "PACK" : current.unitCode || "HEAD";
+  const unit = await activeProductUnit(body.unitCode ?? oldCode, "HEAD");
+  if (!unit || (packed ? unit.code !== "PACK" : !["HEAD", "PCS"].includes(unit.code))) return NextResponse.json({ success: false, message: "Bodega stock uses HEAD or PCS; PACK is managed through Standard PCS & Packs." }, { status: 400 });
+  const history = unit.code !== oldCode && !!await BodegaStockTransaction.exists({ bodegaProductId: id });
+  if (!canChangeProductUnit(Number(current.stockQty || current.stockHeads || current.stockKilos || 0), history, oldCode, unit.code)) return NextResponse.json({ success: false, message: "Cannot change units after stock or transactions exist. Create a separate product instead." }, { status: 409 });
   const updatedProduct = await BodegaProductModel.findOneAndUpdate(
     {
       _id: id,
@@ -137,6 +150,7 @@ async function handlePATCH(
     },
     {
       name,
+      unitCode: unit.code,
       categoryId: categoryId || undefined,
       buyingPrice: cleanNumber(body.buyingPrice),
       sellingPrice: cleanNumber(body.sellingPrice),

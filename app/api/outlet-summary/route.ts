@@ -20,11 +20,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-  const { response } = await requirePermission([
-    "dashboard.view",
-    "outlets.view",
-    "reports.profit",
-  ]);
+  const { response } = await requirePermission("reports.outlet-comparison");
   if (response) return response;
 
   await dbConnect();

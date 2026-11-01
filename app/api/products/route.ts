@@ -13,11 +13,14 @@ import {
 } from "@/lib/crud-utils";
 import CategoryModel from "@/models/Category";
 import ProductModel from "@/models/Product";
+import { activeProductUnit } from "@/lib/product-units";
+import { validUnitQuantity } from "@/lib/product-unit-policy";
 
 function serializeProduct(product: any) {
   return {
     _id: product._id.toString(),
     name: product.name,
+    unitCode: product.unitCode || "PCS",
     categoryId: product.categoryId?._id?.toString?.() || product.categoryId?.toString?.(),
     categoryName: product.categoryId?.name || "",
     buyingPrice: product.buyingPrice || 0,
@@ -115,7 +118,11 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
+  const unit = await activeProductUnit(body.unitCode);
+  if (!unit) return NextResponse.json({ success: false, message: "Select an active unit from Units setup." }, { status: 400 });
+  if (!validUnitQuantity(cleanNumber(body.stockPcs), unit.allowsDecimal)) return NextResponse.json({ success: false, message: "Stock quantity does not match the selected unit." }, { status: 400 });
   const product = await ProductModel.create({
+    unitCode: unit!.code,
     name,
     categoryId,
     buyingPrice: cleanNumber(body.buyingPrice),

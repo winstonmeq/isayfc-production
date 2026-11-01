@@ -4,22 +4,15 @@ import { isValidObjectId } from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
 import MenuCatalogItemModel from "@/models/MenuCatalogItem";
-import OutletModel from "@/models/Outlet";
 import OutletMenuItemModel from "@/models/OutletMenuItem";
-import UserModel from "@/models/User";
+import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
+import { removeOutletMenuItem } from "@/lib/remove-outlet-menu-item";
 
 export const dynamic = "force-dynamic";
 
 async function canManageOutlet(userId: string, outletId: string) {
   if (!isValidObjectId(outletId)) return false;
-  const user = await UserModel.findById(userId).select("role outletId").lean<{
-    role?: string;
-    outletId?: { toString(): string };
-  }>();
-  if (!user) return false;
-  const isAdmin = String(user.role || "").toUpperCase() === "ADMIN";
-  if (!isAdmin && user.outletId?.toString() !== outletId) return false;
-  return Boolean(await OutletModel.exists({ _id: outletId, isActive: true, status: "ACTIVE" }));
+  return Boolean(await findAuthorizedPosOutlet(userId, outletId));
 }
 
 export async function GET(req: NextRequest) {
@@ -154,8 +147,7 @@ export async function POST(req: NextRequest) {
   if (!item) return NextResponse.json({ success: false, message: "Outlet menu item not found." }, { status: 404 });
 
   if (body?.action === "REMOVE") {
-    item.isActive = false;
-    await item.save();
+    await removeOutletMenuItem(outletId, menuItemId);
     return NextResponse.json({ success: true, message: `${item.name} removed from this outlet.` });
   }
   if (body?.action === "UPDATE") {
@@ -170,4 +162,18 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ success: false, message: "Invalid menu action." }, { status: 400 });
+}
+
+export async function DELETE(req: NextRequest) {
+  const { session, response } = await requirePermission("pos.manage");
+  if (response) return response;
+  await dbConnect();
+  const body = await req.json().catch(() => null);
+  const outletId = String(body?.outletId || "");
+  const menuItemId = String(body?.menuItemId || "");
+  if (!(await canManageOutlet(session!.user.id, outletId))) return NextResponse.json({ success: false, message: "Select an authorized outlet." }, { status: 400 });
+  if (!isValidObjectId(menuItemId)) return NextResponse.json({ success: false, message: "Select a valid menu item." }, { status: 400 });
+  const item = await removeOutletMenuItem(outletId, menuItemId);
+  if (!item) return NextResponse.json({ success: false, message: "Outlet menu item not found." }, { status: 404 });
+  return NextResponse.json({ success: true, message: `${item.name} removed from this outlet menu. It remains in the shared catalog.`, menuItemId });
 }

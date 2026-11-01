@@ -4,6 +4,7 @@ import mongoose, { Document, Model, Schema, Types } from "mongoose";
 export interface IBodegaProduct extends Document {
   _id: Types.ObjectId;
   name: string;
+  unitCode?: string;
   categoryId?: Types.ObjectId;
   stockQty: number;
   stockBags: number;
@@ -30,6 +31,7 @@ const BodegaProductSchema = new Schema<IBodegaProduct>(
       ref: "Category",
     },
 
+    unitCode: { type: String, trim: true, uppercase: true, index: true },
     stockQty: {
       type: Number,
       default: 0,

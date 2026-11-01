@@ -1,4 +1,3 @@
-import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 // app/api/sales/lines/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
@@ -136,7 +135,6 @@ export async function GET(req: NextRequest) {
     };
   }
 
-  saleFilter.$and = [...(saleFilter.$and || []), { $nor: internalOutletMatchClauses() }];
   const sales = await SaleModel.find(saleFilter)
     .populate("customerId", "name")
     .populate("outletId", "name code")
@@ -270,6 +268,7 @@ export async function GET(req: NextRequest) {
           ? new Date(sale.saleDate).toISOString()
           : undefined,
         customerName: sale.customerId?.name || "Walk-in",
+        transactionType: sale.transactionType || "EXTERNAL_SALE",
         source: displaySource,
         outletCode: getOutletCode(sale),
         outletName: sale.outletId?.name || "",

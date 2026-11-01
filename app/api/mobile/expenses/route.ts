@@ -23,6 +23,8 @@ type ExpenseListRow = {
 
 export async function GET(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
+    "pos.view",
+    "pos.manage",
     "expenses-bodega.view",
     "expenses-bodega.manage",
     "sales.manage",
@@ -86,6 +88,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const { user, response } = await requireMobileAuth(req, [
+    "pos.manage",
     "expenses-bodega.manage",
     "sales.manage",
   ]);

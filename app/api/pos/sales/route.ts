@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   const outletId = String(body?.outletId || "");
   const user = await UserModel.findById(session!.user.id).select("role outletId").lean<any>();
   const assigned = user?.outletId?.toString() || "";
-  const isAdmin = String(user?.role || "").toUpperCase() === "ADMIN";
+  const isAdmin = session!.user.role === "ADMIN";
   const outlet = isValidObjectId(outletId) && (isAdmin || assigned === outletId)
     ? await OutletModel.findOne({ _id: outletId, isActive: true, status: "ACTIVE" }).lean()
     : null;

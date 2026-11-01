@@ -4,17 +4,17 @@ export const ROLE_PERMISSION_GROUPS = [
     permissions: [{ key: "dashboard.view", label: "View Dashboard" }],
   },
   {
-    group: "Outlets",
+    group: "Outlet Setup & Deliveries",
     permissions: [
       { key: "outlets.view", label: "View Outlets" },
       { key: "outlets.manage", label: "Manage Outlets" },
       { key: "outlet-inventory.view", label: "View Outlet Inventory" },
       { key: "outlet-inventory.manage", label: "Manage Outlet Inventory" },
-      { key: "stock-transfers.view", label: "View Stock Transfers" },
-      { key: "stock-transfers.manage", label: "Manage Stock Transfers (Main Branch)" },
+      { key: "stock-transfers.view", label: "View Outlet Deliveries" },
+      { key: "stock-transfers.manage", label: "Manage Outlet Deliveries (Main Branch)" },
       { key: "stock-transfers.confirm", label: "Confirm Incoming Deliveries (Outlet)" },
-      { key: "outlet-repack.manage", label: "Repack / Break-Bulk (Outlet)" },
-      { key: "cash.manage", label: "Open / Close Cash (Cashier)" },
+      { key: "outlet-repack.manage", label: "Outlet Production / Mixing (Mobile)" },
+      { key: "cash.manage", label: "Mobile Cash Shifts" },
     ],
   },
   {
@@ -26,8 +26,8 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "suppliers.manage", label: "Manage Suppliers" },
       { key: "categories.view", label: "View Categories" },
       { key: "categories.manage", label: "Manage Categories" },
-      { key: "products.view", label: "View Products" },
-      { key: "products.manage", label: "Manage Products" },
+      { key: "products.view", label: "View Grocery Products & Product Units" },
+      { key: "products.manage", label: "Manage Grocery Products & Product Units" },
       { key: "bodega-products.view", label: "View Bodega Products" },
       { key: "bodega-products.manage", label: "Manage Bodega Products" },
     ],
@@ -46,7 +46,7 @@ export const ROLE_PERMISSION_GROUPS = [
   {
     group: "Production",
     permissions: [
-      { key: "slicing.view", label: "View Slicing" },
+      { key: "slicing.view", label: "Slicing History & Chicken Reconciliation" },
       { key: "slicing.manage", label: "Manage Slicing" },
       { key: "standard-packing.view", label: "View Standard PCS & Packs" },
       { key: "standard-packing.manage", label: "Manage Standard PCS & Packs" },
@@ -58,14 +58,13 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "sales.view", label: "View Sales" },
       {
         key: "sales.manage",
-        label: "Create Main Sales (Chicken and Grocery)",
+        label: "Create Main Sales (Including Outlet Customers)",
       },
       { key: "sales-lines.view", label: "View Sales Per Item" },
       { key: "discounts.view", label: "View Discounts" },
       { key: "discounts.manage", label: "Manage Discount Setup" },
       { key: "customer-deliveries.view", label: "View Customer Deliveries" },
       { key: "customer-deliveries.manage", label: "Manage Customer Deliveries" },
-      { key: "customer-inventory.view", label: "View Customer Inventory" },
     ],
   },
   {
@@ -74,14 +73,17 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "pos.view", label: "View Outlet Daily Sales and Operations" },
       { key: "pos.manage", label: "Encode Outlet Sales and Activities" },
       { key: "pos.employee-finance.manage", label: "Collect Employee Credit and Reimburse Outside Purchases" },
+      { key: "reports.outlet-sales", label: "Outlet Sales & Profit Report (All Outlets)" },
+      { key: "reports.outlet-comparison", label: "Outlet Comparison (All Outlets)" },
+      { key: "payments.outlet-collections", label: "Outlet Collections Report (All Outlets)" },
     ],
   },
   {
-    group: "Payments",
+    group: "Payment",
     permissions: [
-      { key: "payments.view", label: "View Payments" },
-      { key: "payments.manage", label: "Manage Payments" },
-      { key: "accounts-payable.view", label: "View Accounts Payable" },
+      { key: "payments.view", label: "Payment History & Customer Balances" },
+      { key: "payments.manage", label: "Record / Void Customer Payments" },
+      { key: "accounts-payable.view", label: "Accounts Payable & Supplier Payment History" },
       { key: "accounts-payable.manage", label: "Manage Accounts Payable" },
     ],
   },
@@ -89,7 +91,7 @@ export const ROLE_PERMISSION_GROUPS = [
     group: "Expenses",
     permissions: [
       { key: "expenses-bodega.view", label: "View Business Expenses" },
-      { key: "expenses-bodega.manage", label: "Manage Business Expenses" },
+      { key: "expenses-bodega.manage", label: "Manage Business Expenses & Expense Types" },
     ],
   },
   {
@@ -97,22 +99,18 @@ export const ROLE_PERMISSION_GROUPS = [
     permissions: [
       { key: "inventory.view", label: "View Inventory" },
       { key: "inventory.manage", label: "Manage Inventory" },
-      { key: "stock-adjustment.manage", label: "Manage Stock Adjustment" },
-      { key: "stock-counts.view", label: "View Stock Counts" },
-      { key: "stock-counts.manage", label: "Manage and Post Stock Counts" },
       { key: "inventory-adjustments.view", label: "View Inventory Adjustments" },
       { key: "inventory-adjustments.manage", label: "Post Inventory Adjustments" },
     ],
   },
   {
-    group: "Reports",
+    group: "Main & Overall Reports",
     permissions: [
-      { key: "reports.sales", label: "Sales Report" },
+      { key: "reports.sales", label: "Main Sales Report" },
       { key: "reports.inventory", label: "Inventory Report" },
       { key: "reports.payments", label: "Payment Report" },
-      { key: "reports.customer-balance", label: "Customer Balance Report" },
-      { key: "reports.product-movement", label: "Product Movement Report" },
-      { key: "reports.profit", label: "Profit Reports" },
+      { key: "reports.profit", label: "Main Income Statement & Profit Reports" },
+      { key: "reports.overall", label: "Overall Business Report — Main + All Outlets" },
     ],
   },
   {
@@ -124,9 +122,7 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "users.manage", label: "Manage Users" },
       { key: "roles.view", label: "View Roles" },
       { key: "roles.manage", label: "Manage Roles" },
-      { key: "activity-logs.view", label: "View Activity Logs" },
       { key: "audit-logs.view", label: "View Audit Logs" },
-      { key: "settings.manage", label: "Manage Settings" },
     ],
   },
 ] as const;
@@ -135,10 +131,52 @@ export const ROLE_PERMISSION_KEYS = ROLE_PERMISSION_GROUPS.flatMap((group) =>
   group.permissions.map((permission) => permission.key)
 );
 
-export type RolePermission = (typeof ROLE_PERMISSION_KEYS)[number];
+// Retired permissions remain type-compatible with old endpoints, but cannot be assigned.
+export type RolePermission = (typeof ROLE_PERMISSION_KEYS)[number] | "stock-counts.view" | "stock-counts.manage" | "customer-inventory.view";
 
 export function isValidRolePermission(value: string) {
-  return ROLE_PERMISSION_KEYS.includes(value as RolePermission);
+  return (ROLE_PERMISSION_KEYS as readonly string[]).includes(value);
+}
+
+/** Write access includes the matching page; never grants unrelated modules. */
+export function normalizeRolePermissions(input: readonly string[]): RolePermission[] {
+  const migrated = input.map((key) => key === "activity-logs.view" ? "audit-logs.view" : key);
+  const permissions = new Set<RolePermission>(migrated.filter(isValidRolePermission) as RolePermission[]);
+  for (const permission of [...permissions]) {
+    if (permission.endsWith(".manage")) {
+      const view = permission.replace(/\.manage$/, ".view");
+      if (isValidRolePermission(view)) permissions.add(view as RolePermission);
+    }
+  }
+  return [...permissions];
+}
+
+export const ROLE_PRESETS = [
+  { name: "Outlet Cashier", permissions: ["pos.view", "pos.manage", "pos.employee-finance.manage", "stock-transfers.confirm", "outlet-repack.manage", "cash.manage"] },
+  { name: "Main Sales Clerk", permissions: ["sales.view", "sales.manage", "sales-lines.view", "customers.view", "discounts.view", "stock-transfers.view"] },
+  { name: "Payment Clerk", permissions: ["payments.view", "payments.manage", "accounts-payable.view", "accounts-payable.manage", "supplier-invoices.view"] },
+  { name: "Owner Report Viewer", permissions: ["reports.overall", "reports.sales", "reports.profit", "reports.inventory", "reports.payments", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },
+] as const;
+
+export function roleNeedsOutlet(roleName: string, permissions: readonly string[]) {
+  // Operational permissions alone do not make a supervisor a store cashier.
+  // Keep assignment mandatory for cashier roles without broadening store access.
+  void permissions;
+  return /\bCASHIER\b/.test(roleName.trim().toUpperCase());
+}
+
+/** Store selection is granted to the named supervisor role, never to cashiers. */
+export function canSelectPosOutlets(access: { role: string; roleName: string; permissions: readonly string[] }) {
+  return access.role === "ADMIN" || (
+    access.roleName.trim().toUpperCase() === "OUTLET SALES MANAGER" &&
+    access.permissions.some((key) => key === "pos.view" || key === "pos.manage")
+  );
+}
+
+/** The selected role, not a stale or forged form.role value, defines legacy access. */
+export function legacyRoleForSelection(name: string): "ADMIN" | "MANAGER" | "CASHIER" | "STAFF" | "USER" {
+  const role = name.toUpperCase();
+  return role === "ADMIN" || role === "MANAGER" || role === "CASHIER" || role === "STAFF" ? role : "USER";
 }
 
 // "Any of" permission sets for shared lookup endpoints (GET only).

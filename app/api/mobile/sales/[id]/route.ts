@@ -23,7 +23,7 @@ export async function DELETE(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { user, response } = await requireMobileAuth(req, "sales.manage");
+  const { user, response } = await requireMobileAuth(req, ["pos.manage", "sales.manage"]);
   if (response) return response;
   if (!user.outlet) {
     return NextResponse.json(

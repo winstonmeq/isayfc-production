@@ -6,7 +6,8 @@ import { outletCashSummary } from "@/lib/employee-finance";
 import { sumShiftExpenses, sumShiftSales } from "@/lib/cash-shift";
 import { addDays, startOfDayManila } from "@/lib/date-utils";
 import dbConnect from "@/lib/mongodb";
-import { requirePermission } from "@/lib/require-permission";
+import { requirePermission, getUserAccess } from "@/lib/require-permission";
+import { canSelectPosOutlets } from "@/lib/role-permissions";
 import CashShiftModel from "@/models/CashShift";
 import OutletModel from "@/models/Outlet";
 import OutletInventoryModel from "@/models/OutletInventory";
@@ -15,20 +16,12 @@ import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import ExpenseModel from "@/models/Expense";
 import UserModel from "@/models/User";
+import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 
 export const dynamic = "force-dynamic";
 
 async function allowedOutlet(userId: string, requestedId: string) {
-  const user = await UserModel.findById(userId).select("role outletId").lean<{
-    role?: string;
-    outletId?: { toString: () => string };
-  }>();
-  if (!user) return null;
-  const assigned = user.outletId?.toString() || "";
-  if (String(user.role || "").toUpperCase() !== "ADMIN" && requestedId !== assigned) {
-    return null;
-  }
-  return OutletModel.findOne({ _id: requestedId, isActive: true, status: "ACTIVE" }).lean();
+  return findAuthorizedPosOutlet(userId, requestedId);
 }
 
 export async function GET(req: NextRequest) {
@@ -39,12 +32,13 @@ export async function GET(req: NextRequest) {
   const user = await UserModel.findById(session!.user.id)
     .select("role outletId")
     .lean<{ role?: string; outletId?: { toString: () => string } }>();
-  const isAdmin = String(user?.role || "").toUpperCase() === "ADMIN";
+  const access = await getUserAccess(session!.user.id);
+  const canSelectStores = !!access?.isActive && canSelectPosOutlets(access);
   const assignedOutletId = user?.outletId?.toString() || "";
   const outlets = await OutletModel.find({
     isActive: true,
     status: "ACTIVE",
-    ...(isAdmin ? {} : { _id: assignedOutletId }),
+    ...(canSelectStores ? {} : { _id: { $in: assignedOutletId ? [assignedOutletId] : [] } }),
   })
     .sort({ name: 1 })
     .select("name code")

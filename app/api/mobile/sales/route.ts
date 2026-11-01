@@ -73,7 +73,7 @@ async function nextReceiptNumber(): Promise<string> {
 }
 
 export async function GET(req: NextRequest) {
-  const { user, response } = await requireMobileAuth(req, ["sales.view", "sales.manage"]);
+  const { user, response } = await requireMobileAuth(req, ["pos.view", "pos.manage", "sales.view", "sales.manage"]);
   if (response) return response;
   if (!user.outlet) {
     return NextResponse.json(
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, response } = await requireMobileAuth(req, "sales.manage");
+  const { user, response } = await requireMobileAuth(req, ["pos.manage", "sales.manage"]);
   if (response) return response;
 
   if (!user.outlet) {

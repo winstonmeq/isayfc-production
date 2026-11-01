@@ -25,6 +25,7 @@ export type TransferRow = {
   saleId?: string;
   outletId: string;
   outletName: string;
+  businessCategory?: string;
   outletCode: string;
   totalItems: number;
   transactionAmount?: number;

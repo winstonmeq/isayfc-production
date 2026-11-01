@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-  const { response } = await requirePermission("payments.view");
+  const { response } = await requirePermission("payments.outlet-collections");
   if (response) return response;
 
   await dbConnect();

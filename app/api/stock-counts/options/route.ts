@@ -6,7 +6,7 @@ import Product from "@/models/Product";
 import OutletInventory from "@/models/OutletInventory";
 
 export async function GET(req: NextRequest) {
-  const { response } = await requirePermission(["stock-counts.view", "stock-counts.manage"]);
+  const { response } = await requirePermission(["inventory-adjustments.view", "inventory-adjustments.manage"]);
   if (response) return response;
   await dbConnect();
   const type = (new URL(req.url).searchParams.get("type") || "BODEGA").toUpperCase();

@@ -29,6 +29,7 @@ function normalizeExpenseType(value: unknown): ExpenseType {
 function serializeExpense(expense: any) {
   return {
     _id: expense._id.toString(),
+    isAutomatic: expense.origin === "OWNER_OUTLET_DELIVERY",
     name: expense.name,
     expenseCategory: expense.outletId
       ? "OUTLET"
@@ -65,6 +66,9 @@ async function handlePATCH(
   }
 
   await dbConnect();
+  if (await ExpenseModel.exists({ _id: id, origin: "OWNER_OUTLET_DELIVERY" })) {
+    return NextResponse.json({ success: false, message: "Automatic delivery expenses cannot be edited or deleted. Review the linked delivery and sale." }, { status: 409 });
+  }
   await ensureDefaultExpenseTypes();
 
   const body = await req.json();
@@ -120,7 +124,7 @@ async function handlePATCH(
   }
 
   const expense = await ExpenseModel.findOneAndUpdate(
-    { _id: id, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
+    { _id: id, origin: { $ne: "OWNER_OUTLET_DELIVERY" }, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
     {
       name,
       expenseCategory,
@@ -164,8 +168,12 @@ async function handleDELETE(
 
   await dbConnect();
 
+  if (await ExpenseModel.exists({ _id: id, origin: "OWNER_OUTLET_DELIVERY" })) {
+    return NextResponse.json({ success: false, message: "Automatic delivery expenses cannot be edited or deleted. Review the linked delivery and sale." }, { status: 409 });
+  }
+
   const expense = await ExpenseModel.findOneAndUpdate(
-    { _id: id, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
+    { _id: id, origin: { $ne: "OWNER_OUTLET_DELIVERY" }, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
     { isActive: false },
     { new: true }
   );

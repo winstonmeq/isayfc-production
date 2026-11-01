@@ -2,6 +2,7 @@
 "use client";
 
 import { EntryDialogContent } from "@/components/erp/EntryForm";
+import { ProductUnitSelect } from "@/components/units/ProductUnitSelect";
 
 import { useEffect, useState } from "react";
 import {
@@ -55,6 +56,7 @@ type CategoryOption = {
 };
 
 type ProductItem = {
+  unitCode?: string;
   _id: string;
   name: string;
   categoryId: string;
@@ -75,6 +77,7 @@ type ApiMeta = {
 };
 
 const emptyForm = {
+  unitCode: "PCS",
   name: "",
   categoryId: "",
   buyingPrice: "0",
@@ -215,6 +218,7 @@ export function ProductsPageClient() {
     setForm({
       name: product.name,
       categoryId: product.categoryId,
+      unitCode: product.unitCode || "PCS",
       buyingPrice: String(product.buyingPrice),
       unitPrice: String(product.unitPrice),
       stockPcs: String(product.stockPcs),
@@ -436,7 +440,7 @@ export function ProductsPageClient() {
                   <TableHead className="text-center text-white">Category</TableHead>
                   <TableHead className="text-center text-white">Buying Price</TableHead>
                   <TableHead className="text-center text-white">Unit Price</TableHead>
-                  <TableHead className="text-center text-white">Stocks (PCS)</TableHead>
+                  <TableHead className="text-center text-white">Stock Quantity</TableHead>
                   <TableHead className="text-center text-white">Stock (Bags)</TableHead>
                   <TableHead className="text-center text-white">Stock (Kilos)</TableHead>
                   <TableHead className="text-center text-white">Action</TableHead>
@@ -462,7 +466,7 @@ export function ProductsPageClient() {
                 ) : (
                   products.map((product) => (
                     <TableRow key={product._id}>
-                      <TableCell className="text-center">{product.name}</TableCell>
+                      <TableCell className="text-center">{product.name}<span className="block text-xs text-slate-500">Unit: {product.unitCode || "PCS"}</span></TableCell>
                       <TableCell className="text-center">
                         {product.categoryName || "—"}
                       </TableCell>
@@ -473,7 +477,7 @@ export function ProductsPageClient() {
                         {formatPeso(product.unitPrice)}
                       </TableCell>
                       <TableCell className="text-center">
-                        {product.stockPcs.toLocaleString()}
+                        {product.stockPcs.toLocaleString()} {product.unitCode || "PCS"}
                       </TableCell>
                       <TableCell className="text-center">
                         {product.stockBags.toLocaleString()}
@@ -560,6 +564,7 @@ export function ProductsPageClient() {
 
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
+              <ProductUnitSelect value={form.unitCode} onChange={(value) => updateForm("unitCode", value)} />
               <Label>Product Name</Label>
               <Input
                 value={form.name}
@@ -613,7 +618,7 @@ export function ProductsPageClient() {
             </div>
 
             <div className="space-y-2">
-              <Label>Stock PCS</Label>
+              <Label>Stock ({form.unitCode})</Label>
               <Input
                 type="number"
                 min="0"

@@ -70,8 +70,8 @@ export function ProfitReportPageClient() {
 
   return (
     <ReportShell
-      title="Profit Report"
-      subtitle="Main-company income statement for Chicken and Grocery operations."
+      title="Main Branch Management Income Statement"
+      subtitle="Main customer sales less cost of sales and operating expenses, including accepted outlet deliveries at selling amount. Outlet retail is separate."
       generatedAt={data?.generatedAt}
       periodLabel={periodLabel}
       preset={preset}
@@ -100,7 +100,7 @@ export function ProfitReportPageClient() {
               value={peso(data.expenseTotal)}
             />
             <StatCard
-              label="Net Profit"
+              label="Main Operating Result"
               value={peso(data.netProfit)}
               highlight={data.netProfit >= 0 ? "good" : "bad"}
             />
@@ -156,7 +156,7 @@ export function ProfitReportPageClient() {
                 />
 
                 <tr className="border-t-2 border-slate-300 bg-slate-100">
-                  <td className="px-4 py-3 text-base font-black">Net Profit</td>
+                  <td className="px-4 py-3 text-base font-black">Main Operating Result</td>
                   <td
                     className={`px-4 py-3 text-right text-base font-black ${
                       data.netProfit >= 0

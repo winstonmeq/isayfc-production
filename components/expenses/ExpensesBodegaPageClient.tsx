@@ -60,6 +60,8 @@ type ExpenseTypeOption = {
 
 type ExpenseRow = {
   _id: string;
+  isAutomatic?: boolean;
+  businessCategory?: string;
   name: string;
   expenseCategory: ExpenseCategory;
   type: ExpenseType;
@@ -660,7 +662,7 @@ export function ExpensesBodegaPageClient() {
                       <TableCell>
                         {(meta.page - 1) * meta.limit + index + 1}
                       </TableCell>
-                      <TableCell className="font-medium">{expense.name}</TableCell>
+                      <TableCell className="font-medium">{expense.name}{expense.businessCategory === "OUTLET" && <span className="block text-xs text-slate-500">Category: OUTLET</span>}</TableCell>
                       <TableCell>
                         <Badge variant={expense.expenseCategory === "GROCERY" ? "secondary" : "outline"}>
                           {getCategoryLabel(expense.expenseCategory)}
@@ -676,10 +678,12 @@ export function ExpensesBodegaPageClient() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-center gap-2">
+                          {expense.isAutomatic && <span className="self-center text-xs text-muted-foreground">Automatic delivery</span>}
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => openEditDialog(expense)}
+                            disabled={expense.isAutomatic}
                           >
                             <Pencil className="mr-1 h-4 w-4" />
                             Edit
@@ -688,6 +692,7 @@ export function ExpensesBodegaPageClient() {
                             size="sm"
                             variant="destructive"
                             onClick={() => deleteExpense(expense)}
+                            disabled={expense.isAutomatic}
                           >
                             <Trash2 className="mr-1 h-4 w-4" />
                             Delete

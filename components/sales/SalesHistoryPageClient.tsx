@@ -47,11 +47,14 @@ type CustomerOption = {
 };
 
 type SaleItem = {
+  transactionType?: string;
+  transactionLabel?: string;
   _id: string;
   receiptNumber: string;
   customerName: string;
   outletCode?: string;
   outletName?: string;
+  businessCategory?: string;
   saleSource: "OUTLET" | "CHICKEN" | "GROCERY" | "CHICKEN + GROCERY";
   saleDate?: string;
   totalAmount: number;
@@ -427,6 +430,7 @@ export function SalesHistoryPageClient() {
                   </TableHead>
                   <TableHead className="text-center text-white">Customer</TableHead>
                   <TableHead className="text-center text-white">Source</TableHead>
+                  <TableHead className="text-center text-white">Category</TableHead>
                   <TableHead className="text-center text-white">Total (₱)</TableHead>
                   <TableHead className="text-center text-white">Remarks</TableHead>
                   <TableHead className="text-center text-white">Created By</TableHead>
@@ -437,14 +441,14 @@ export function SalesHistoryPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-32 text-center">
+                    <TableCell colSpan={10} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : displayRows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={9}
+                      colSpan={10}
                       className="h-32 text-center text-muted-foreground"
                     >
                       No sales found.
@@ -470,6 +474,7 @@ export function SalesHistoryPageClient() {
                             : source}
                         </span>
                       </TableCell>
+                      <TableCell className="text-center font-semibold">{sale.businessCategory || (source === "CHICKEN" ? "BODEGA" : source === "GROCERY" ? "GROCERY" : "OUTLET")}</TableCell>
                       <TableCell className="text-right">
                         {totalAmount.toLocaleString(undefined, {
                           minimumFractionDigits: 2,
@@ -548,7 +553,7 @@ export function SalesHistoryPageClient() {
                   <strong>Sale Source:</strong> {viewSource}
                 </p>
                 <p>
-                  <strong>Total:</strong> {formatPeso(visibleTotal)}
+                  <strong>{viewData.transactionType === "INTERNAL_TRANSFER" ? "Transfer Value (Reference):" : "Total:"}</strong> {formatPeso(visibleTotal)}
                 </p>
                 <p>
                   <strong>Subtotal:</strong> {formatPeso(visibleLines.reduce((sum: number, line: any) => sum + Number(line.grossLineTotal ?? line.lineTotal ?? 0), 0))}

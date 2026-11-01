@@ -20,7 +20,7 @@ async function main() {
   const { default: dbConnect } = await import("../lib/mongodb");
   const { default: UserModel } = await import("../models/User");
   const { default: RoleModel } = await import("../models/Role");
-  const { ROLE_PERMISSION_KEYS } = await import("../lib/role-permissions");
+  const { ROLE_PERMISSION_KEYS, ROLE_PRESETS } = await import("../lib/role-permissions");
 
   await dbConnect();
 
@@ -55,14 +55,8 @@ async function main() {
     {
       $setOnInsert: {
         name: "CASHIER",
-        description: "Cashier role for sales and payment operations.",
-        permissions: [
-          "dashboard.view",
-          "sales.view",
-          "sales.manage",
-          "payments.view",
-          "payments.manage",
-        ],
+        description: "Outlet cashier; assigned outlet only. Main-system access is separate.",
+        permissions: [...ROLE_PRESETS[0].permissions],
         isSystem: false,
         isActive: true,
       },

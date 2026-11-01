@@ -19,7 +19,7 @@ import dbConnect from "@/lib/mongodb";
 import RoleModel from "@/models/Role";
 import OutletModel from "@/models/Outlet";
 import UserModel from "@/models/User";
-import type { RolePermission } from "@/lib/role-permissions";
+import { legacyRoleForSelection, normalizeRolePermissions, type RolePermission } from "@/lib/role-permissions";
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
@@ -113,6 +113,7 @@ export async function loadMobileUser(userId: string): Promise<MobileUser | null>
 
   const role = user.roleId;
   const roleActive = role ? role.isActive !== false : true;
+  if (!roleActive) return null;
   const assignedOutlet = user.outletId;
   const outlet =
     assignedOutlet?.isActive !== false && assignedOutlet?.status === "ACTIVE"
@@ -124,10 +125,10 @@ export async function loadMobileUser(userId: string): Promise<MobileUser | null>
     name: String(user.name || ""),
     username: String(user.username || ""),
     email: String(user.email || ""),
-    role: String(user.role || ""),
+    role: legacyRoleForSelection(String(role?.name || user.role || "USER")),
     roleName: String(role?.name || ""),
     permissions:
-      roleActive && Array.isArray(role?.permissions) ? role.permissions : [],
+      roleActive && Array.isArray(role?.permissions) ? normalizeRolePermissions(role.permissions) : [],
     outletInactive: Boolean(assignedOutlet && !outlet),
     outlet: outlet
       ? {

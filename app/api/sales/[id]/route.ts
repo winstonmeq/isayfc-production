@@ -35,6 +35,8 @@ function serializeSale(sale: any, lines: any[] = []) {
     customerName: sale.customerId?.name || "Walk-in",
     saleDate: sale.saleDate ? new Date(sale.saleDate).toISOString() : undefined,
     source: sale.source,
+    transactionType: sale.transactionType || "EXTERNAL_SALE",
+    transactionLabel: sale.transactionType === "INTERNAL_TRANSFER" ? "Legacy Internal Record" : "Customer Sale",
     saleSource: getSaleOrigin(sale),
     totalAmount: sale.totalAmount || 0,
     subtotal: Number(sale.subtotal ?? sale.totalAmount ?? 0),

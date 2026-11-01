@@ -5,7 +5,7 @@ import dbConnect from "@/lib/mongodb";
 import { invalidateUserAccessCache, requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanString } from "@/lib/crud-utils";
-import { isValidRolePermission } from "@/lib/role-permissions";
+import { normalizeRolePermissions } from "@/lib/role-permissions";
 import RoleModel from "@/models/Role";
 
 function serializeRole(role: any) {
@@ -13,8 +13,8 @@ function serializeRole(role: any) {
     _id: role._id.toString(),
     name: role.name,
     description: role.description || "",
-    permissions: role.permissions || [],
-    permissionCount: Number(role.permissions?.length || 0),
+    permissions: normalizeRolePermissions(role.permissions || []),
+    permissionCount: normalizeRolePermissions(role.permissions || []).length,
     isSystem: Boolean(role.isSystem),
     isActive: Boolean(role.isActive),
     createdAt: role.createdAt ? new Date(role.createdAt).toISOString() : undefined,
@@ -25,13 +25,7 @@ function serializeRole(role: any) {
 function cleanPermissions(input: unknown) {
   if (!Array.isArray(input)) return [];
 
-  return Array.from(
-    new Set(
-      input
-        .map((item) => cleanString(item))
-        .filter((item) => item && isValidRolePermission(item))
-    )
-  );
+  return normalizeRolePermissions(input.map((item) => cleanString(item)));
 }
 
 export async function GET(

@@ -33,7 +33,7 @@ function serializeOutlet(outlet: any) {
 }
 
 export async function GET(req: NextRequest) {
-  const { response } = await requirePermission("outlets.view");
+  const { response } = await requirePermission(req.nextUrl.searchParams.get("lookup") === "true" ? ["outlets.view", "users.manage"] : "outlets.view");
   if (response) return response;
 
   await dbConnect();

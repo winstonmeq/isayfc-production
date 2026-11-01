@@ -8,6 +8,7 @@ import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ProductModel from "@/models/Product";
+import { productQuantityAllowed } from "@/lib/product-units";
 
 async function handlePOST(
   req: NextRequest,
@@ -61,6 +62,10 @@ async function handlePOST(
       },
       { status: 404 }
     );
+  }
+
+  if (!(await productQuantityAllowed(product.unitCode, addPcs))) {
+    return NextResponse.json({ success: false, message: "Invalid quantity for this product's unit." }, { status: 400 });
   }
 
   const transactions = [];

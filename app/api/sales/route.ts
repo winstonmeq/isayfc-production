@@ -1,4 +1,3 @@
-import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId } from "mongoose";
 
@@ -25,7 +24,7 @@ import StandardPackingModel from "@/models/StandardPacking";
 import OutletModel from "@/models/Outlet";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
-import { generateTransferNumber } from "@/lib/stock-transfers";
+import { generateTransferNumber, dispatchTransferInTransaction, StockTransferError } from "@/lib/stock-transfers";
 import {
   packingSnapshot,
   toBaseUnitCost,
@@ -34,6 +33,8 @@ import { correctionReason, recordCorrection } from "@/lib/corrections";
 import { manilaDateString } from "@/lib/date-utils";
 import { initialSaleFulfillment } from "@/lib/sale-fulfillment";
 import { getOutletCode, getSaleOrigin } from "@/lib/sale-origin";
+import { saleBusinessCategory } from "@/lib/transaction-category";
+import { productQuantityAllowed } from "@/lib/product-units";
 
 type SaleSource = "CHICKEN" | "BODEGA" | "MIXED";
 
@@ -55,6 +56,7 @@ type SaleItemInput = {
 };
 
 type PreparedSaleItem = {
+  unitCode: string;
   discountId?: mongoose.Types.ObjectId;
   discountName?: string;
   discountType?: "PERCENTAGE" | "AMOUNT";
@@ -76,7 +78,7 @@ type PreparedSaleItem = {
   stockUnit: "PACK" | "HEAD" | "QTY";
   packSize: number;
   stockPcsOut: number;
-  baseUnit: "HEAD" | "PCS" | "QTY";
+  baseUnit: "HEAD" | "PCS" | "QTY" | "KG";
   baseQty: number;
   entryUnit: "HEAD" | "PACK" | "QTY";
   multiplier: number;
@@ -99,6 +101,7 @@ function serializeSale(sale: any, sourceBreakdown: any[] = []) {
     _id: sale._id.toString(),
     customerId: sale.customerId?._id?.toString?.() || sale.customerId?.toString?.(),
     customerName: sale.customerId?.name || "Walk-in",
+    businessCategory: saleBusinessCategory(sale),
     outletCode: getOutletCode(sale),
     outletName: sale.outletId?.name || "",
     stockTransferId:
@@ -106,6 +109,8 @@ function serializeSale(sale: any, sourceBreakdown: any[] = []) {
       sale.stockTransferId?.toString?.() ||
       "",
     source: sale.source || "BODEGA",
+    transactionType: sale.transactionType || "EXTERNAL_SALE",
+    transactionLabel: sale.transactionType === "INTERNAL_TRANSFER" ? "Legacy Internal Record" : "Customer Sale",
     saleSource: getSaleOrigin(sale),
     channel: sale.channel || "WEB",
     receiptNumber: sale.receiptNumber || "",
@@ -315,10 +320,9 @@ export async function GET(req: NextRequest) {
     };
   }
 
-  filter.$and = [...(filter.$and || []), { $nor: internalOutletMatchClauses() }];
   const [items, total] = await Promise.all([
     SaleModel.find(filter)
-      .populate("customerId", "name")
+      .populate("customerId", "name outletId")
       .populate("outletId", "name code")
       .populate("createdBy", "name username")
       .sort({ saleDate: -1, createdAt: -1 })
@@ -535,6 +539,7 @@ async function handlePOST(req: NextRequest) {
         if (!product) {
           fail(404, "Selected product was not found.");
         }
+        if (itemSource === "BODEGA" && !await productQuantityAllowed(product.unitCode, qty)) fail(400, `Enter a valid quantity for ${product.name} in ${product.unitCode || "PCS"}. Count units require whole numbers.`);
 
         const price = getDatabaseSalePrice(itemSource, product);
 
@@ -560,7 +565,9 @@ async function handlePOST(req: NextRequest) {
         // SECURITY: for chicken sales, pack size must also come from the
         // active Standard PCS & Packs record, not from the browser request.
         // Products without an output pack standard are sold per head.
-        const chickenUnit = standardPackSize > 0 ? "PACK" : "HEAD";
+        if (itemSource === "CHICKEN" && product.unitCode === "PACK" && standardPackSize <= 0) fail(400, "Configure Standard PCS & Packs before selling this pack product.");
+        const chickenUnit = standardPackSize > 0 ? "PACK" : product.unitCode === "PCS" ? "QTY" : "HEAD";
+        if (itemSource === "CHICKEN" && !Number.isSafeInteger(qty)) fail(400, "Chicken pieces, heads and packs must use whole quantities.");
         const packSize = itemSource === "CHICKEN" ? standardPackSize : 1;
         const stockOut =
           itemSource === "CHICKEN" && chickenUnit === "PACK" ? qty * packSize : qty;
@@ -588,6 +595,7 @@ async function handlePOST(req: NextRequest) {
           ...(itemDiscount ? { discountId: itemDiscount._id, discountName: itemDiscount.name, discountType: itemDiscount.type, discountValue: itemDiscount.value, discountBasis: itemDiscount.basis || "PER_ROW" } : {}),
           source: itemSource,
           productType,
+          unitCode: itemSource === "CHICKEN" ? (chickenUnit === "QTY" ? "PCS" : chickenUnit) : product.unitCode || "PCS",
           productId: productType === "PRODUCT" ? product._id : undefined,
           bodegaProductId: productType === "BODEGA_PRODUCT" ? product._id : undefined,
           categoryId: getCategoryId(product),
@@ -604,7 +612,7 @@ async function handlePOST(req: NextRequest) {
                 itemSource === "CHICKEN"
                   ? chickenUnit === "PACK"
                     ? "PCS"
-                    : "HEAD"
+                    : chickenUnit === "HEAD" ? "HEAD" : "PCS"
                   : "QTY",
               multiplier: packSize,
             })
@@ -616,8 +624,8 @@ async function handlePOST(req: NextRequest) {
             itemSource === "CHICKEN"
               ? chickenUnit === "PACK"
                 ? "PCS"
-                : "HEAD"
-              : "QTY",
+                : chickenUnit === "HEAD" ? "HEAD" : "PCS"
+              : product.unitCode === "KG" ? "KG" : "QTY",
           baseQty: stockOut,
           entryUnit:
             itemSource === "CHICKEN" ? chickenUnit : "QTY",
@@ -651,6 +659,7 @@ async function handlePOST(req: NextRequest) {
             source,
             customerId,
             transactionType: "EXTERNAL_SALE",
+            ownerOutletId: linkedOutletId,
             saleDate: effectiveSaleDate,
             receiptNumber,
             totalPacks,
@@ -698,6 +707,7 @@ async function handlePOST(req: NextRequest) {
             bodegaProductId: item.bodegaProductId,
             productId: item.productId,
             productName: item.productName,
+            unitCode: item.unitCode,
             categoryName: item.categoryName,
             packSize: item.packSize,
             unitLabel:
@@ -818,6 +828,7 @@ async function handlePOST(req: NextRequest) {
           categoryId: item.categoryId,
           categoryName: item.categoryName,
           productName: item.productName,
+          unitCode: item.unitCode,
           qty: item.qty,
           price: item.price,
           lineTotal: item.lineTotal,
@@ -841,6 +852,17 @@ async function handlePOST(req: NextRequest) {
       }
 
       await SaleLineModel.insertMany(saleLinesToInsert, { session: mongoSession });
+
+      // Save and dispatch are one atomic operation. Outlet receipt remains separate.
+      // Direct customer sales use the stock writes above; outlet sales use ONLY
+      // the transfer dispatcher, so their stock cannot be deducted twice.
+      if (stockTransfer) {
+        await dispatchTransferInTransaction({
+          transferId: String(stockTransfer._id),
+          userId: authSession?.user?.id,
+          mongoSession,
+        });
+      }
 
       if (bodegaStockTransactions.length > 0) {
         await BodegaStockTransactionModel.insertMany(bodegaStockTransactions, {
@@ -878,14 +900,14 @@ async function handlePOST(req: NextRequest) {
       {
         success: true,
         message: linkedOutletId
-          ? "Outlet customer sale created with a pending delivery. Receipt recognizes the main sale and customer balance."
+          ? "Outlet sale saved and delivery dispatched. The outlet can now receive it. Acceptance posts the unpaid balance and linked main delivery expenses."
           : "Sale created successfully.",
         data: serializeSale(populatedSale),
       },
       { status: 201 }
     );
   } catch (error) {
-    if (error instanceof ApiError) {
+    if (error instanceof ApiError || error instanceof StockTransferError) {
       return NextResponse.json(
         { success: false, message: error.message },
         { status: error.status }

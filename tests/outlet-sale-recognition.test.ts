@@ -15,7 +15,7 @@ test("receipt pipeline recognizes the sale and calculates balance without changi
   const [update] = outletSaleRecognitionUpdate(date);
   assert.equal(update.$set.fulfillmentStatus, "RECOGNIZED");
   assert.equal(update.$set.recognizedAt, date);
-  assert.deepEqual(update.$set.balance, { $max: [{ $subtract: ["$totalAmount", "$paidAmount"] }, 0] });
+  assert.deepEqual(update.$set.balance, { $cond: [{ $eq: ["$transactionType", "INTERNAL_TRANSFER"] }, 0, { $max: [{ $subtract: ["$totalAmount", "$paidAmount"] }, 0] }] });
   assert.equal("paidAmount" in update.$set, false);
   assert.match(JSON.stringify(update.$set.status), /UNPAID/);
 });
