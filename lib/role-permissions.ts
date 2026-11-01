@@ -72,6 +72,7 @@ export const ROLE_PERMISSION_GROUPS = [
     permissions: [
       { key: "pos.view", label: "View Outlet Daily Sales and Operations" },
       { key: "pos.manage", label: "Encode Outlet Sales and Activities" },
+      { key: "pos.all-outlets", label: "Operate All Outlets / Select Store (Supervisors Only)" },
       { key: "pos.employee-finance.manage", label: "Collect Employee Credit and Reimburse Outside Purchases" },
       { key: "reports.outlet-sales", label: "Outlet Sales & Profit Report (All Outlets)" },
       { key: "reports.outlet-comparison", label: "Outlet Comparison (All Outlets)" },
@@ -153,6 +154,7 @@ export function normalizeRolePermissions(input: readonly string[]): RolePermissi
 
 export const ROLE_PRESETS = [
   { name: "Outlet Cashier", permissions: ["pos.view", "pos.manage", "pos.employee-finance.manage", "stock-transfers.confirm", "outlet-repack.manage", "cash.manage"] },
+  { name: "Outlet Sales Manager", permissions: ["pos.view", "pos.manage", "pos.all-outlets", "pos.employee-finance.manage", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },
   { name: "Main Sales Clerk", permissions: ["sales.view", "sales.manage", "sales-lines.view", "customers.view", "discounts.view", "stock-transfers.view"] },
   { name: "Payment Clerk", permissions: ["payments.view", "payments.manage", "accounts-payable.view", "accounts-payable.manage", "supplier-invoices.view"] },
   { name: "Owner Report Viewer", permissions: ["reports.overall", "reports.sales", "reports.profit", "reports.inventory", "reports.payments", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },
@@ -165,10 +167,11 @@ export function roleNeedsOutlet(roleName: string, permissions: readonly string[]
   return /\bCASHIER\b/.test(roleName.trim().toUpperCase());
 }
 
-/** Store selection is granted to the named supervisor role, never to cashiers. */
+/** Scope follows explicit permissions, not the spelling of a custom manager role. */
 export function canSelectPosOutlets(access: { role: string; roleName: string; permissions: readonly string[] }) {
   return access.role === "ADMIN" || (
-    access.roleName.trim().toUpperCase() === "OUTLET SALES MANAGER" &&
+    !roleNeedsOutlet(access.roleName, access.permissions) && access.role !== "CASHIER" &&
+    (access.permissions.includes("pos.all-outlets") || access.permissions.includes("reports.outlet-comparison")) &&
     access.permissions.some((key) => key === "pos.view" || key === "pos.manage")
   );
 }
