@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     Sale.find({ outletId, isVoided: false, source: "OUTLET", saleDate: { $gte: start, $lt: end } }).sort({ saleDate: 1 }).lean(),
     Expense.find({ outletId, expenseCategory: "OUTLET", isActive: true, expenseDate: { $gte: start, $lt: end } }).sort({ expenseDate: 1 }).lean(),
     Ledger.find({ outletId, type: "REPACK_IN", transactionDate: { $gte: start, $lt: end } }).sort({ transactionDate: 1 }).lean(),
-    OutletEmployeeCash.find({ outletId, businessDate: { $gte: start, $lt: end } }).sort({ businessDate: 1 }).lean(),
+    OutletEmployeeCash.find({ outletId, receivedAt: { $ne: "MAIN" }, businessDate: { $gte: start, $lt: end } }).sort({ businessDate: 1 }).lean(),
   ]);
   const lines = await SaleLine.find({ saleId: { $in: sales.map(sale => sale._id) } }).lean();
   const saleRows = sales.map(sale => {

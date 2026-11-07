@@ -12,6 +12,7 @@ import {
   getPagination,
 } from "@/lib/crud-utils";
 import ProductModel from "@/models/Product";
+import { flagProductPriceReview } from "@/lib/product-price-review";
 import InventoryTransactionModel from "@/models/InventoryTransaction";
 import PurchaseBatchModel from "@/models/PurchaseBatch";
 import PurchaseItemModel from "@/models/PurchaseItem";
@@ -327,6 +328,7 @@ async function handlePOST(req: NextRequest) {
 
         product.stockPcs = newStock;
         product.buyingPrice = Math.round(weightedCost * 10000) / 10000;
+        flagProductPriceReview(product, previousCost, item.buyingPrice);
         await product.save({ session: mongoSession });
 
         purchaseItemsToInsert.push({
@@ -367,7 +369,7 @@ async function handlePOST(req: NextRequest) {
   return NextResponse.json(
     {
       success: true,
-      message: "Purchase batch created successfully.",
+      message: "Purchase batch saved. Products with changed costs require selling-price approval in Grocery Products > Review Price.",
       data: serializePurchaseBatch(batch.toObject()),
     },
     { status: 201 }

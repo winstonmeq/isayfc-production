@@ -27,7 +27,7 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "categories.view", label: "View Categories" },
       { key: "categories.manage", label: "Manage Categories" },
       { key: "products.view", label: "View Grocery Products & Product Units" },
-      { key: "products.manage", label: "Manage Grocery Products & Product Units" },
+      { key: "products.manage", label: "Manage Grocery Products, Units & Approve Selling Prices" },
       { key: "bodega-products.view", label: "View Bodega Products" },
       { key: "bodega-products.manage", label: "Manage Bodega Products" },
     ],
@@ -172,6 +172,17 @@ export function canSelectPosOutlets(access: { role: string; roleName: string; pe
     !roleNeedsOutlet(access.roleName, access.permissions) && access.role !== "CASHIER" &&
     (access.permissions.includes("pos.all-outlets") || access.permissions.includes("reports.outlet-comparison")) &&
     access.permissions.some((key) => key === "pos.view" || key === "pos.manage")
+  );
+}
+
+/** Shared store boundary for outlet reads and mutations; never bypass cashier scope. */
+export function canAccessPosOutlet(
+  access: { role: string; roleName: string; permissions: readonly string[] },
+  assignedOutletId: string,
+  requestedOutletId: string,
+) {
+  return Boolean(requestedOutletId) && (
+    canSelectPosOutlets(access) || requestedOutletId === assignedOutletId
   );
 }
 

@@ -32,6 +32,7 @@ type UnifiedProduct = {
   stockPcs: number;
   packSize: number;
   price: number;
+  priceReviewRequired?: boolean;
 };
 
 type CartItem = UnifiedProduct & { quantity: number; kilosOut?: number; discountId?: string };
@@ -59,6 +60,7 @@ function ProductPicker({ products, value, onChange }: { products: UnifiedProduct
                   <Check className={cn("mr-2 h-4 w-4", value === product.key ? "opacity-100" : "opacity-0")} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{product.name}</div>
+                    {product.priceReviewRequired && <div className="text-xs font-semibold text-amber-700">Selling price review required</div>}
                     <div className="truncate text-xs text-muted-foreground">
                       {product.type === "CHICKEN" ? "Bodega" : "Grocery"} · {product.availableQty.toLocaleString()} {product.saleUnit.toLowerCase()} available · {formatPeso(product.price)}
                     </div>
@@ -75,6 +77,16 @@ function ProductPicker({ products, value, onChange }: { products: UnifiedProduct
 
 export function AllSalesPageClient() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [employees, setEmployees] = useState<Array<{ _id: string; code: string; name: string; customerId: string }>>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/employees", { signal: controller.signal, cache: "no-store" }).then(async response => {
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.message || "Unable to load employees.");
+      if (!controller.signal.aborted) setEmployees(json.employees);
+    }).catch(error => { if (!controller.signal.aborted) toast.error(error.message); });
+    return () => controller.abort();
+  }, []);
   const [products, setProducts] = useState<UnifiedProduct[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [saleDate, setSaleDate] = useState(() => manilaDateString());
@@ -149,6 +161,7 @@ export function AllSalesPageClient() {
         stockPcs: Number(product.stockPcs || 0),
         packSize: 0,
         price: Number(product.unitPrice || 0),
+        priceReviewRequired: !!product.priceReviewRequired,
       })),
     ].sort((a, b) => a.name.localeCompare(b.name)));
   }
@@ -161,6 +174,7 @@ export function AllSalesPageClient() {
 
   function addItem() {
     if (!selectedProduct) return toast.error("Select a product.");
+    if (selectedProduct.priceReviewRequired) return toast.error("A manager must approve this product's selling price in Grocery Products > Review Price. Reload this page after approval.");
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0 || (selectedProduct.saleUnit !== "KG" && !Number.isSafeInteger(qty))) return toast.error("Enter a positive quantity; heads, pieces and packs require whole numbers.");
     const kilosOut = selectedProduct.saleUnit === "HEAD" ? Number(chickenKilos) : undefined;
@@ -229,7 +243,7 @@ export function AllSalesPageClient() {
     <div className="space-y-5">
       <header><h1 className="text-2xl font-black">New Sale</h1><p className="mt-1 text-sm text-slate-500">Main-branch chicken and grocery sales. Combine products on one receipt; outlet retail sales remain in Outlet Operations.</p></header>
       <Card><CardContent className="grid gap-4 p-5 lg:grid-cols-3">
-        <div className="space-y-2"><Label>Customer *</Label><CustomerPicker customers={customers} value={customerId} onChange={setCustomerId} /></div>
+        <div className="space-y-2"><Label>Customer *</Label><CustomerPicker customers={customers} value={customerId} onChange={setCustomerId} /><label className="grid gap-1 text-sm">Employee credit (optional)<select className="h-10 rounded-md border bg-white px-3" value={employees.find(e => e.customerId === customerId)?._id || ""} onChange={e => setCustomerId(employees.find(employee => employee._id === e.target.value)?.customerId || "")}><option value="">Regular customer sale</option>{employees.map(employee => <option key={employee._id} value={employee._id}>{employee.code} — {employee.name}</option>)}</select></label></div>
         <div className="space-y-2"><Label>Sale Date *</Label><Input type="date" value={saleDate} onChange={(event) => setSaleDate(event.target.value)} /></div>
         <div className="space-y-2"><Label>Receipt Number *</Label><Input value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="e.g. 0003801" /></div>
       </CardContent></Card>

@@ -20,6 +20,7 @@ import { emptyPosDailyReport } from "@/lib/pos-empty-report";
 import { classifyOutletInventoryRows } from "@/lib/outlet-product-classification";
 import { parseReportRange } from "@/lib/report-utils";
 import { outletDirectorySummary } from "@/lib/outlet-directory-summary";
+import { OutletEmployeeCash } from "@/models/OutletEmployeeFinance";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
   const outletId = outlet._id.toString();
   const dayStart = startOfDayManila();
   const dayEnd = addDays(dayStart, 1);
-  const [menu, inventory, shift, recentSales, dailySales, dailyExpenses] = await Promise.all([
+  const [menu, inventory, shift, recentSales, dailySales, dailyExpenses, employeeCash] = await Promise.all([
     OutletMenuItemModel.find({ outletId, isActive: true, isAvailable: true })
       .sort({ category: 1, sortOrder: 1, name: 1 })
       .lean<any[]>(),
@@ -96,11 +97,12 @@ export async function GET(req: NextRequest) {
       .lean<any[]>(),
     SaleModel.find({ outletId, source: "OUTLET", isVoided: { $ne: true }, saleDate: { $gte: dayStart, $lt: dayEnd } })
       .sort({ saleDate: 1, createdAt: 1 })
-      .select("receiptNumber totalAmount totalQty paidAmount saleDate shiftId paymentMethod")
+      .select("receiptNumber totalAmount totalQty paidAmount balance saleDate shiftId paymentMethod employeeName")
       .lean<any[]>(),
     ExpenseModel.find({ outletId, expenseCategory: "OUTLET", isActive: true, expenseDate: { $gte: dayStart, $lt: dayEnd } })
       .select("amount deductFromCashSale expenseNature")
       .lean<any[]>(),
+    OutletEmployeeCash.find({ outletId, receivedAt: { $ne: "MAIN" }, businessDate: { $gte: dayStart, $lt: dayEnd } }).lean<any[]>(),
   ]);
 
   const dailySaleIds = dailySales.map((row) => row._id);
@@ -188,10 +190,10 @@ export async function GET(req: NextRequest) {
     })),
     dailyReport: {
       cash: outletCashSummary(
-        dailySales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0),
-        0,
+        dailySales.filter(sale => sale.paymentMethod !== "CREDIT").reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0),
+        employeeCash.filter(row => row.kind === "EMPLOYEE_COLLECTION").reduce((sum, row) => sum + Number(row.amount || 0), 0),
         cashSaleExpenses,
-        0,
+        employeeCash.filter(row => row.kind === "EMPLOYEE_REIMBURSEMENT").reduce((sum, row) => sum + Number(row.amount || 0), 0),
       ),
       date: dayStart.toISOString(),
       revenue: dailyRevenue,
@@ -210,8 +212,9 @@ export async function GET(req: NextRequest) {
           totalAmount: sales,
           totalQty: Number(row.totalQty || 0),
           paymentMethod: row.paymentMethod,
+          employeeName: row.employeeName,
           paidAmount: Number(row.paidAmount || 0),
-          balance: 0,
+          balance: Number(row.balance || 0),
           cogs,
           grossProfit: sales - cogs,
           saleDate: row.saleDate,

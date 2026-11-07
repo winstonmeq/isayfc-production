@@ -222,6 +222,12 @@ export const appNavItems: AppNavItem[] = [
         icon: CreditCard,
         permission: "payments.manage",
       },
+      {
+        title: "Employee Credits",
+        href: "/payments/employee-credits",
+        icon: CreditCard,
+        permission: "payments.view",
+      },
     ],
   },
   {

@@ -1,7 +1,7 @@
 import OutletModel from "@/models/Outlet";
 import UserModel from "@/models/User";
 import { getUserAccess } from "@/lib/require-permission";
-import { canSelectPosOutlets } from "@/lib/role-permissions";
+import { canAccessPosOutlet } from "@/lib/role-permissions";
 import { isValidObjectId } from "mongoose";
 
 export async function findAuthorizedPosOutlet(userId: string, outletId: string) {
@@ -15,7 +15,7 @@ export async function findAuthorizedPosOutlet(userId: string, outletId: string) 
   const assignedOutletId = user.outletId?.toString() || "";
   const access = await getUserAccess(userId);
   if (!access?.isActive) return null;
-  if (!canSelectPosOutlets(access) && outletId !== assignedOutletId) return null;
+  if (!canAccessPosOutlet(access, assignedOutletId, outletId)) return null;
 
   return OutletModel.findOne({
     _id: outletId,

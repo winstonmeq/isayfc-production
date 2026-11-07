@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import ProductModel from "@/models/Product";
+import { flagProductPriceReview } from "@/lib/product-price-review";
 import InventoryTransactionModel from "@/models/InventoryTransaction";
 import PurchaseBatchModel from "@/models/PurchaseBatch";
 import PurchaseItemModel from "@/models/PurchaseItem";
@@ -101,6 +102,7 @@ async function reversePurchaseStock(
     product.buyingPrice = newStock > 0
       ? Math.max(0, Math.round((remainingValue / newStock) * 10000) / 10000)
       : 0;
+    flagProductPriceReview(product, previousCost);
     await product.save({ session: mongoSession });
 
     inventoryTransactions.push({
@@ -389,6 +391,7 @@ async function handlePATCH(
 
         product.stockPcs = newStock;
         product.buyingPrice = Math.round(weightedCost * 10000) / 10000;
+        flagProductPriceReview(product, previousCost, item.buyingPrice);
         await product.save({ session: mongoSession });
 
         purchaseItemsToInsert.push({

@@ -2,6 +2,7 @@
 "use client";
 
 import { ProductUsageSelect } from "@/components/products/ProductUsageSelect";
+import { ProductPriceReviewDialog } from "@/components/products/ProductPriceReviewDialog";
 import { PRODUCT_USAGE_OPTIONS, productUsageLabel } from "@/lib/product-usage";
 import { EntryDialogContent } from "@/components/erp/EntryForm";
 import { ProductUnitSelect } from "@/components/units/ProductUnitSelect";
@@ -67,6 +68,7 @@ type ProductItem = {
   categoryName: string;
   buyingPrice: number;
   unitPrice: number;
+  priceReviewRequired?: boolean;
   stockPcs: number;
   stockBags: number;
   stockKilos: number;
@@ -117,6 +119,8 @@ export function ProductsPageClient() {
   const [draftSearch, setDraftSearch] = useState("");
   const [categoryId, setCategoryId] = useState("ALL");
   const [usageFilter, setUsageFilter] = useState("ALL");
+  const [priceReviewId, setPriceReviewId] = useState<string | null>(null);
+  const [pendingPriceOnly, setPendingPriceOnly] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -161,6 +165,7 @@ export function ProductsPageClient() {
     if (search) params.set("search", search);
     if (categoryId !== "ALL") params.set("categoryId", categoryId);
     if (usageFilter !== "ALL") params.set("usage", usageFilter);
+    if (pendingPriceOnly) params.set("priceReview", "pending");
 
     try {
       const res = await fetch(`/api/products?${params.toString()}`, {
@@ -198,7 +203,7 @@ export function ProductsPageClient() {
   useEffect(() => {
     void loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, search, categoryId, usageFilter]);
+  }, [page, limit, search, categoryId, usageFilter, pendingPriceOnly]);
 
   function updateForm(name: keyof typeof emptyForm, value: string) {
     setForm((current) => ({
@@ -358,6 +363,7 @@ export function ProductsPageClient() {
       <div className="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-sm lg:flex-row lg:items-end">
         <div className="w-full lg:max-w-sm">
           <Label>Search Product</Label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={pendingPriceOnly} onChange={e => { setPendingPriceOnly(e.target.checked); setPage(1); }} />Price review required</label>
           <Input
             value={draftSearch}
             onChange={(event) => setDraftSearch(event.target.value)}
@@ -511,6 +517,7 @@ export function ProductsPageClient() {
                       </TableCell>
                       <TableCell className="text-center">
                         {formatPeso(product.unitPrice)}
+                        {product.priceReviewRequired && <span className="block text-xs font-semibold text-amber-700">Price review required</span>}
                       </TableCell>
                       <TableCell className="text-center">
                         {product.stockPcs.toLocaleString()} {product.unitCode || "PCS"}
@@ -526,6 +533,7 @@ export function ProductsPageClient() {
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setPriceReviewId(product._id)}>Review Price</Button>
                           <Button
                             size="icon"
                             className="bg-emerald-600 hover:bg-emerald-700"
@@ -653,8 +661,10 @@ export function ProductsPageClient() {
                 min="0"
                 step="0.01"
                 value={form.unitPrice}
+                disabled={!!editingProduct}
                 onChange={(event) => updateForm("unitPrice", event.target.value)}
               />
+              {editingProduct && <p className="text-xs text-muted-foreground">Use Review Price to change the selling price and keep approval history.</p>}
             </div>
 
             <div className="space-y-2">
@@ -799,6 +809,7 @@ export function ProductsPageClient() {
           </form>
         </EntryDialogContent>
       </Dialog>
+      {priceReviewId && <ProductPriceReviewDialog key={priceReviewId} productId={priceReviewId} onClose={() => setPriceReviewId(null)} onSaved={() => { void loadProducts(); }} />}
     </div>
   );
 }

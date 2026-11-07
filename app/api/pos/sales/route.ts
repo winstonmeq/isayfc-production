@@ -7,13 +7,13 @@ import { manilaDateString } from "@/lib/date-utils";
 import { packingSnapshot, toBaseUnitCost } from "@/lib/inventory-units";
 import dbConnect from "@/lib/mongodb";
 import { requirePermission } from "@/lib/require-permission";
-import OutletModel from "@/models/Outlet";
 import OutletInventoryModel from "@/models/OutletInventory";
 import OutletMenuItemModel from "@/models/OutletMenuItem";
 import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
-import UserModel from "@/models/User";
+import Employee from "@/models/Employee";
+import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 
 export const dynamic = "force-dynamic";
 
@@ -40,24 +40,23 @@ export async function POST(req: NextRequest) {
     lateEntryReason?: string;
     paymentMethod?: string;
     employeeId?: string;
+    employeeAccountId?: string;
     idempotencyKey?: string;
   };
   const outletId = String(body?.outletId || "");
-  const user = await UserModel.findById(session!.user.id).select("role outletId").lean<any>();
-  const assigned = user?.outletId?.toString() || "";
-  const isAdmin = session!.user.role === "ADMIN";
-  const outlet = isValidObjectId(outletId) && (isAdmin || assigned === outletId)
-    ? await OutletModel.findOne({ _id: outletId, isActive: true, status: "ACTIVE" }).lean()
-    : null;
+  // Use the same scope as the outlet directory and other outlet operations.
+  // Supervisors need not be assigned to a single store; cashiers still do.
+  const outlet = await findAuthorizedPosOutlet(session!.user.id, outletId);
   if (!outlet) {
-    return NextResponse.json({ success: false, message: "Select an authorized outlet." }, { status: 400 });
+    return NextResponse.json({ success: false, message: "You cannot record sales for this outlet. Check your outlet assignment or Operate All Outlets permission." }, { status: 403 });
   }
 
   const cart = Array.isArray(body?.items) ? body.items : [];
   if (!cart.length) {
     return NextResponse.json({ success: false, message: "Cart is empty." }, { status: 400 });
   }
-  const paymentMethod = "CASH";
+  const paymentMethod = String(body?.paymentMethod || "CASH").toUpperCase();
+  if (!["CASH", "CREDIT"].includes(paymentMethod)) return NextResponse.json({ success: false, message: "Select cash or employee credit." }, { status: 400 });
   const idempotencyKey = String(body?.idempotencyKey || "");
   const entryHash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
 
@@ -69,11 +68,14 @@ export async function POST(req: NextRequest) {
         const previous = await SaleModel.findOne({ outletId, idempotencyKey }).session(mongoSession);
         if (previous) {
           if (previous.entryHash !== entryHash) throw new PosError(409, "This transaction key was already used. Reload sales before entering a different sale.");
-          result = { id: String(previous._id), receiptNumber: previous.receiptNumber, totalAmount: previous.totalAmount, totalQty: previous.totalQty, change: previous.change || 0, saleDate: previous.saleDate.toISOString(), paymentMethod: "CASH" };
+          result = { id: String(previous._id), receiptNumber: previous.receiptNumber, totalAmount: previous.totalAmount, totalQty: previous.totalQty, change: previous.change || 0, saleDate: previous.saleDate.toISOString(), paymentMethod: previous.paymentMethod, employeeName: previous.employeeName };
           return;
         }
       }
       const encodedAt = new Date();
+      const employee = paymentMethod === "CREDIT" && isValidObjectId(body?.employeeAccountId)
+        ? await Employee.findOne({ _id: body!.employeeAccountId, isActive: true }).session(mongoSession).lean<any>() : null;
+      if (paymentMethod === "CREDIT" && !employee) throw new PosError(400, "Select an active employee for credit.");
       const isLateEntry = body?.isLateEntry === true;
       let saleAt = encodedAt;
       let lateEntryReason = "";
@@ -153,8 +155,8 @@ export async function POST(req: NextRequest) {
       }
 
       totalAmount = Math.round(totalAmount * 100) / 100;
-      const cashReceived = Number(body?.cashReceived);
-      if (!Number.isFinite(cashReceived) || cashReceived < totalAmount) {
+      const cashReceived = paymentMethod === "CREDIT" ? 0 : Number(body?.cashReceived);
+      if (paymentMethod === "CASH" && (!Number.isFinite(cashReceived) || cashReceived < totalAmount)) {
         throw new PosError(400, `Cash received must be at least ${totalAmount.toFixed(2)}.`);
       }
       const receiptNumber = `POS-${manilaDateString(saleAt).replaceAll("-", "")}-${randomUUID().slice(0, 8).toUpperCase()}`;
@@ -167,15 +169,16 @@ export async function POST(req: NextRequest) {
         source: "OUTLET",
         outletId,
         channel: "WEB",
-        paymentMethod: "CASH",
+        paymentMethod,
+        ...(employee ? { employeeAccountId: employee._id, employeeName: employee.name } : {}),
         ...(idempotencyKey ? { idempotencyKey, entryHash } : {}),
         cashReceived,
-        change: cashReceived - totalAmount,
+        change: paymentMethod === "CREDIT" ? 0 : cashReceived - totalAmount,
         totalAmount,
-        paidAmount: totalAmount,
-        balance: 0,
+        paidAmount: paymentMethod === "CREDIT" ? 0 : totalAmount,
+        balance: paymentMethod === "CREDIT" ? totalAmount : 0,
         totalQty,
-        status: "PAID",
+        status: paymentMethod === "CREDIT" ? "UNPAID" : "PAID",
         remarks: `WEB POS OUTLET:${outletId} ${String(body?.remarks || "").trim()}${auditRemark}`,
         createdBy: session!.user.id,
       }], { session: mongoSession });
@@ -214,7 +217,7 @@ export async function POST(req: NextRequest) {
           createdBy: session!.user.id,
         }], { session: mongoSession });
       }
-      result = { id: sale._id.toString(), receiptNumber, totalAmount, totalQty, change: cashReceived - totalAmount, saleDate: saleAt.toISOString(), encodedAt: encodedAt.toISOString(), isLateEntry, paymentMethod: "CASH" };
+      result = { id: sale._id.toString(), receiptNumber, totalAmount, totalQty, change: paymentMethod === "CREDIT" ? 0 : cashReceived - totalAmount, saleDate: saleAt.toISOString(), encodedAt: encodedAt.toISOString(), isLateEntry, paymentMethod, employeeName: employee?.name };
     });
     return NextResponse.json({ success: true, message: "Sale recorded.", sale: result });
   } catch (error) {

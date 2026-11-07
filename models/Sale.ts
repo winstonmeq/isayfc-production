@@ -13,6 +13,7 @@ export interface ISale extends Document {
   customerId?: Types.ObjectId;
   employeeId?: Types.ObjectId;
   employeeName?: string;
+  employeeAccountId?: Types.ObjectId;
   entryHash?: string;
   stockTransferId?: Types.ObjectId;
   saleDate: Date;
@@ -71,6 +72,7 @@ const SaleSchema = new Schema<ISale>(
     },
     employeeId: { type: Schema.Types.ObjectId, ref: "OutletEmployee" },
     employeeName: { type: String, trim: true },
+    employeeAccountId: { type: Schema.Types.ObjectId, ref: "Employee" },
     entryHash: String,
 
     stockTransferId: {
@@ -235,6 +237,7 @@ SaleSchema.index(
 );
 
 if (mongoose.models.Sale && !mongoose.models.Sale.schema.path("returnedAmount")) mongoose.models.Sale.schema.add({ returnedAmount: { type: Number, default: 0 }, refundedAmount: { type: Number, default: 0 } });
+if (mongoose.models.Sale && !mongoose.models.Sale.schema.path("employeeAccountId")) mongoose.models.Sale.schema.add({ employeeAccountId: { type: Schema.Types.ObjectId, ref: "Employee" } });
 const SaleModel: Model<ISale> =
   mongoose.models.Sale || mongoose.model<ISale>("Sale", SaleSchema);
 

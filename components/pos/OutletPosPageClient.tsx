@@ -285,6 +285,9 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
   const [saleItemsPage, setSaleItemsPage] = useState(1);
   const [saleItemsPageSize, setSaleItemsPageSize] = useState(25);
   const [cashReceived, setCashReceived] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [employeeAccountId, setEmployeeAccountId] = useState("");
+  const [employees, setEmployees] = useState<Array<{ _id: string; code: string; name: string }>>([]);
   const [entryMode, setEntryMode] = useState<"TRANSACTION" | "DAILY_TOTAL">("TRANSACTION");
   const [saleEntryOpen, setSaleEntryOpen] = useState(false);
   const saleRequestKey = useRef("");
@@ -338,6 +341,15 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
     } finally { setLoading(false); }
   }, [initialOutletId]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!saleEntryOpen || !outletId) return;
+    const controller = new AbortController();
+    setEmployees([]);
+    fetch(`/api/employees?outletId=${encodeURIComponent(outletId)}`, { signal: controller.signal, cache: "no-store" })
+      .then(async response => { const json = await response.json(); if (!response.ok || !json.success) throw new Error(json.message || "Unable to load employees."); if (!controller.signal.aborted) setEmployees(json.employees); })
+      .catch(error => { if (!controller.signal.aborted) setNotice({ kind: "error", text: error.message }); });
+    return () => controller.abort();
+  }, [saleEntryOpen, outletId]);
 
   const menu = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -436,10 +448,11 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
     const soldItems = rows.map((x) => ({ ...x }));
     setWorking(true); setNotice(null);
     try {
-      const response = await fetch("/api/pos/sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outletId, paymentMethod: "CASH", idempotencyKey: saleRequestKey.current, cashReceived: cash, remarks: `${entryMode === "DAILY_TOTAL" ? "DAILY TOTALS ENTRY" : "INDIVIDUAL TRANSACTION"}${lateEntry ? `; LATE ENTRY: ${lateEntryReason.trim()}` : ""}`, isLateEntry: lateEntry, originalSaleAt: lateEntry ? new Date(originalSaleAt).toISOString() : undefined, lateEntryReason: lateEntry ? lateEntryReason : undefined, items: soldItems.map((x) => ({ menuItemId: x.id, qty: x.qty })) }) });
+      const response = await fetch("/api/pos/sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outletId, paymentMethod, employeeAccountId: paymentMethod === "CREDIT" ? employeeAccountId : undefined, idempotencyKey: saleRequestKey.current, cashReceived: paymentMethod === "CREDIT" ? 0 : cash, remarks: `${entryMode === "DAILY_TOTAL" ? "DAILY TOTALS ENTRY" : "INDIVIDUAL TRANSACTION"}${lateEntry ? `; LATE ENTRY: ${lateEntryReason.trim()}` : ""}`, isLateEntry: lateEntry, originalSaleAt: lateEntry ? new Date(originalSaleAt).toISOString() : undefined, lateEntryReason: lateEntry ? lateEntryReason : undefined, items: soldItems.map((x) => ({ menuItemId: x.id, qty: x.qty })) }) });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.message || "Unable to record sale.");
-      setReceipt({ receiptNumber: payload.sale.receiptNumber, outletName, total: payload.sale.totalAmount, cash, change: payload.sale.change, items: soldItems, saleDate: payload.sale.saleDate, isLateEntry: payload.sale.isLateEntry, paymentMethod: "CASH" });
+      setReceipt({ receiptNumber: payload.sale.receiptNumber, outletName, total: payload.sale.totalAmount, cash: paymentMethod === "CREDIT" ? 0 : cash, change: payload.sale.change, items: soldItems, saleDate: payload.sale.saleDate, isLateEntry: payload.sale.isLateEntry, paymentMethod: payload.sale.paymentMethod, employeeName: payload.sale.employeeName });
+      setPaymentMethod("CASH"); setEmployeeAccountId("");
       saleRequestKey.current = "";
       setSaleEntryOpen(false); setCashReceived(""); setCart({}); setLateEntry(false); setLateEntryReason(""); setOriginalSaleAt(localDateTimeValue()); await load(outletId, true);
     } catch (error) { setNotice({ kind: "error", text: error instanceof Error ? error.message : "Unable to record sale." }); }
@@ -659,12 +672,12 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
               <p className="text-xs text-slate-500">Enter completed sales once. Do not repeat transactions already recorded.</p>
             </div>
             <div className="space-y-3 rounded-lg border bg-slate-50 p-4">
-              <label className="block text-sm font-medium">Cash collected<Input disabled={working} className="mt-1 h-10 bg-white text-right" type="number" min={total} step="0.01" value={cashReceived} onChange={(e) => setCashReceived(e.target.value)} /></label>
-              <div className="flex justify-between text-sm"><span>Change / excess cash</span><strong>{money.format(Math.max(0, cash - total))}</strong></div>
+              <label className="block text-sm font-medium">Payment<select className="mt-1 h-10 w-full rounded-md border bg-white px-3" disabled={working} value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option value="CASH">Cash</option><option value="CREDIT">Employee Credit</option></select></label>
+              {paymentMethod === "CREDIT" ? <label className="block text-sm font-medium">Employee<select className="mt-1 h-10 w-full rounded-md border bg-white px-3" disabled={working} value={employeeAccountId} onChange={e => setEmployeeAccountId(e.target.value)}><option value="">Select employee</option>{employees.map(e => <option key={e._id} value={e._id}>{e.code} — {e.name}</option>)}</select><span className="text-xs text-slate-500">Collect through Payment → Employee Credits.</span></label> : <><label className="block text-sm font-medium">Cash collected<Input disabled={working} className="mt-1 h-10 bg-white text-right" type="number" min={total} step="0.01" value={cashReceived} onChange={(e) => setCashReceived(e.target.value)} /></label><div className="flex justify-between text-sm"><span>Change / excess cash</span><strong>{money.format(Math.max(0, cash - total))}</strong></div></>}
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t bg-white px-5 py-4"><div className="mr-auto"><span className="mr-2 text-sm text-slate-500">Total</span><strong className="text-xl">{money.format(total)}</strong></div><Button variant="outline" disabled={working} onClick={() => setSaleEntryOpen(false)}>Cancel</Button><Button className="min-w-28" disabled={working || !rows.length || cash < total || (lateEntry && (!originalSaleAt || lateEntryReason.trim().length < 3))} onClick={() => void checkout()}>{working && <Loader2 className="mr-2 animate-spin" />}Save Sale</Button></div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t bg-white px-5 py-4"><div className="mr-auto"><span className="mr-2 text-sm text-slate-500">Total</span><strong className="text-xl">{money.format(total)}</strong></div><Button variant="outline" disabled={working} onClick={() => setSaleEntryOpen(false)}>Cancel</Button><Button className="min-w-28" disabled={working || !rows.length || (paymentMethod === "CREDIT" ? !employeeAccountId : cash < total) || (lateEntry && (!originalSaleAt || lateEntryReason.trim().length < 3))} onClick={() => void checkout()}>{working && <Loader2 className="mr-2 animate-spin" />}Save Sale</Button></div>
       </section>
     </div>}
     {expensesOpen && <OutletExpensesDialog outletId={outletId} outletName={outletName} inventory={data?.inventory || []} onClose={() => setExpensesOpen(false)} onUpdated={() => load(outletId, true)} />}
@@ -867,7 +880,7 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
           <div className="text-center"><h3 className="font-black">ISAY FRIED CHICKEN</h3><p className="text-xs">{receipt.outletName}</p><p className="text-xs">{receipt.receiptNumber} · {new Date(receipt.saleDate).toLocaleString("en-PH")}</p></div>
           <div className="my-4 border-t border-dashed" />
           {receipt.items.map((item) => <div key={item.id} className="flex justify-between text-sm"><span>{item.qty} x {item.name}</span><b>{money.format(item.qty * item.price)}</b></div>)}
-          <div className="mt-3 border-t border-dashed pt-3"><div className="flex justify-between text-lg font-black"><span>TOTAL</span><span>{money.format(receipt.total)}</span></div><div className="flex justify-between text-sm"><span>Cash</span><span>{money.format(receipt.cash)}</span></div><div className="flex justify-between text-sm"><span>Change</span><span>{money.format(receipt.change)}</span></div></div>
+          <div className="mt-3 border-t border-dashed pt-3"><div className="flex justify-between text-lg font-black"><span>TOTAL</span><span>{money.format(receipt.total)}</span></div>{receipt.paymentMethod === "CREDIT" ? <p className="text-sm">Employee Credit — {receipt.employeeName} · Amount owed {money.format(receipt.total)}</p> : <><div className="flex justify-between text-sm"><span>Cash</span><span>{money.format(receipt.cash)}</span></div><div className="flex justify-between text-sm"><span>Change</span><span>{money.format(receipt.change)}</span></div></>}</div>
           <p className="mt-5 text-center text-xs">Thank you! Please come again.</p>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3"><Button type="button" variant="outline" onClick={() => setReceipt(null)}>Close</Button><Button type="button" variant="outline" onClick={() => window.print()}><Printer className="mr-2" />Print</Button><Button type="button" className="bg-[#d71920] font-black" onClick={() => { setReceipt(null); setCashReceived(""); setSaleEntryOpen(true); }}>Add Another Sale</Button></div>

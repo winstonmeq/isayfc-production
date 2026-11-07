@@ -10,6 +10,7 @@ import CategoryModel from "@/models/Category";
 import { categoryMatchesSource } from "@/lib/category-source";
 import { isInventorySourceCategory, PRODUCT_CATEGORY_ERROR } from "@/lib/product-classification";
 import ProductModel from "@/models/Product";
+import { flagProductPriceReview } from "@/lib/product-price-review";
 
 function roundMoney(value: number) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -131,14 +132,18 @@ async function handlePATCH(
     );
   }
 
+  const current = await ProductModel.findOne({ _id: id, isActive: true }).lean();
+  if (!current) return NextResponse.json({ success: false, message: "Product not found." }, { status: 404 });
+  if (cleanNumber(body.unitPrice) !== current.unitPrice) return NextResponse.json({ success: false, message: "Use Grocery Products > Review Price to change selling prices." }, { status: 409 });
+  const review = { buyingPrice: cleanNumber(body.buyingPrice), unitPrice: current.unitPrice };
+  flagProductPriceReview(review, current.buyingPrice);
   const updatedProduct = await ProductModel.findOneAndUpdate(
-    { _id: id, isActive: true },
+    { _id: id, isActive: true, updatedAt: current.updatedAt },
     {
       name,
       categoryId,
       ...(body.usage !== undefined ? { usage: body.usage } : {}),
-      buyingPrice: cleanNumber(body.buyingPrice),
-      unitPrice: cleanNumber(body.unitPrice),
+      ...review,
       lowStockAlert: cleanNumber(body.lowStockAlert),
     },
     { new: true }

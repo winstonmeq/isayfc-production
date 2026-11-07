@@ -95,6 +95,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
         "/payments/history",
         "/payments",
         "/payments/add",
+        "/payments/employee-credits",
         "/accounts-payable",
         "/supplier-payment-history",
       ],

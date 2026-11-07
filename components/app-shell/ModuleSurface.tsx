@@ -175,6 +175,10 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/payments/employee-credits": dynamic(
+    () => import("@/components/payments/EmployeeCreditsPageClient").then(m => m.EmployeeCreditsPageClient),
+    { loading: LoadingModule }
+  ),
   "/accounts-payable": dynamic(
     () =>
       import("@/components/suppliers/SupplierFinancePage").then(

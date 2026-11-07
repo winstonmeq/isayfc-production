@@ -9,6 +9,7 @@ export interface IPayment extends Document {
   appliedAmount: number;
   unappliedAmount: number;
   referenceNumber?: string;
+  employeeCollectionHash?: string;
   receiptImageUrl?: string;
   remarks?: string;
   createdBy?: Types.ObjectId;
@@ -55,6 +56,7 @@ const PaymentSchema = new Schema<IPayment>(
       trim: true,
       uppercase: true,
     },
+    employeeCollectionHash: { type: String },
 
     receiptImageUrl: {
       type: String,
@@ -89,6 +91,7 @@ PaymentSchema.index({ paymentDate: -1 });
 PaymentSchema.index({ isVoided: 1 });
 PaymentSchema.index({ referenceNumber: 1 });
 
+if (mongoose.models.Payment && !mongoose.models.Payment.schema.path("employeeCollectionHash")) mongoose.models.Payment.schema.add({ employeeCollectionHash: { type: String } });
 const PaymentModel: Model<IPayment> =
   mongoose.models.Payment || mongoose.model<IPayment>("Payment", PaymentSchema);
 

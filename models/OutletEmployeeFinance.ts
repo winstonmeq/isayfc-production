@@ -33,6 +33,7 @@ const cashSchema = new Schema({
   employeeId: { type: Schema.Types.ObjectId, required: true },
   employeeName: { type: String, required: true },
   kind: { type: String, enum: ["EMPLOYEE_COLLECTION", "EMPLOYEE_REIMBURSEMENT"], required: true },
+  receivedAt: { type: String, enum: ["MAIN", "OUTLET"], default: "OUTLET" },
   referenceId: { type: Schema.Types.ObjectId, required: true },
   amount: { type: Number, required: true, min: 0 },
   businessDate: { type: Date, required: true, index: true },
@@ -45,5 +46,6 @@ cashSchema.set("collection", "outletemployeecashmovements");
 cashSchema.index({ outletId: 1, requestKey: 1 }, { unique: true });
 
 export const OutletEmployee = mongoose.models.OutletEmployee || mongoose.model("OutletEmployee", employeeSchema);
+if (mongoose.models.OutletEmployeeCash && !mongoose.models.OutletEmployeeCash.schema.path("receivedAt")) mongoose.models.OutletEmployeeCash.schema.add({ receivedAt: { type: String, enum: ["MAIN", "OUTLET"], default: "OUTLET" } });
 export const OutletEmployeePurchase = mongoose.models.OutletEmployeePurchase || mongoose.model("OutletEmployeePurchase", purchaseSchema);
 export const OutletEmployeeCash = mongoose.models.OutletEmployeeCash || mongoose.model("OutletEmployeeCash", cashSchema);

@@ -15,6 +15,7 @@ import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import CategoryModel from "@/models/Category";
 import CustomerModel from "@/models/Customer";
+import Employee from "@/models/Employee";
 import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ProductModel from "@/models/Product";
 import SaleModel from "@/models/Sale";
@@ -456,6 +457,8 @@ async function handlePOST(req: NextRequest) {
     );
   }
   const linkedOutletId = customer.outletId?.toString();
+  const employeeAccount = await Employee.findOne({ customerId }).lean<any>();
+  if (employeeAccount && (!employeeAccount.isActive || linkedOutletId)) return NextResponse.json({ success: false, message: "Select an active employee account." }, { status: 400 });
   if (linkedOutletId) {
     const outletExists = await OutletModel.exists({
       _id: linkedOutletId,
@@ -543,6 +546,7 @@ async function handlePOST(req: NextRequest) {
         if (!product) {
           fail(404, "Selected product was not found.");
         }
+        if (productType === "PRODUCT" && product.priceReviewRequired) fail(409, `Selling price review required for ${product.name}. Ask a manager to approve it in Grocery Products > Review Price.`);
         if (itemSource === "BODEGA" && !await productQuantityAllowed(product.unitCode, qty)) fail(400, `Enter a valid quantity for ${product.name} in ${product.unitCode || "PCS"}. Count units require whole numbers.`);
 
         const price = getDatabaseSalePrice(itemSource, product);
@@ -669,6 +673,7 @@ async function handlePOST(req: NextRequest) {
           {
             source,
             customerId,
+            ...(employeeAccount ? { employeeAccountId: employeeAccount._id, employeeName: employeeAccount.name, paymentMethod: "CREDIT" as const } : {}),
             transactionType: "EXTERNAL_SALE",
             ownerOutletId: linkedOutletId,
             saleDate: effectiveSaleDate,

@@ -31,6 +31,9 @@ function serializeProduct(product: any) {
     categoryName: product.categoryId?.name || "",
     buyingPrice: product.buyingPrice || 0,
     unitPrice: product.unitPrice || 0,
+    priceReviewRequired: !!product.priceReviewRequired,
+    priceReviewPreviousCost: product.priceReviewPreviousCost,
+    lastPurchaseCost: product.lastPurchaseCost,
     stockPcs: product.stockPcs || 0,
     stockBags: product.stockBags || 0,
     stockKilos: product.stockKilos || 0,
@@ -51,9 +54,11 @@ export async function GET(req: NextRequest) {
   const search = cleanString(searchParams.get("search"));
   const categoryId = cleanString(searchParams.get("categoryId"));
   const usage = cleanString(searchParams.get("usage"));
+  const pendingPrice = searchParams.get("priceReview") === "pending";
 
   const filter: QueryFilter<any> = {
     isActive: true,
+    ...(pendingPrice ? { priceReviewRequired: true } : {}),
   };
 
   if (search) {

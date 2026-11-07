@@ -320,6 +320,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
           name?: string;
           buyingPrice?: number;
           unitPrice?: number;
+          priceReviewRequired?: boolean;
           unitCode?: string;
           categoryId?: { name?: string } | Types.ObjectId | null;
         }>();
@@ -327,6 +328,7 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       if (!product) {
         transferFail(404, "One of the selected grocery products was not found.");
       }
+      if (product.priceReviewRequired) transferFail(409, `Selling price review required for ${product.name}. Approve it in Grocery Products first.`);
 
       if (!(await productQuantityAllowed(product.unitCode, qty))) {
         transferFail(400, "Invalid quantity for this product's unit.");
