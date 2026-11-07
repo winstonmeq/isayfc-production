@@ -42,7 +42,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
   ].some(
     (route) => selectedModule === route || pathname === route
   );
-  const isProductionModule = ["/slicing"].some(
+  const isProductionModule = ["/slicing", "/profit/chicken-slicing"].some(
     (route) =>
       selectedModule === route ||
       selectedModule.startsWith(`${route}/`) ||
@@ -130,7 +130,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
       ["reports.sales", "/reports/sales"],
       ["reports.inventory", "/reports/inventory"],
       ["reports.payments", "/reports/payments"],
-      ["reports.profit", "/reports/profit"],
+      ["reports.profit", "/reports/gross-sales"],
       ["reports.overall", "/reports/overall"],
     ].find(([permission]) => isAdmin || permissions.includes(permission))?.[1] ||
     "";
@@ -224,11 +224,11 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           },
         ]
       : []),
-    ...(canAccessAnyRoute(["/slicing"])
+    ...(canAccessAnyRoute(["/slicing", "/profit/chicken-slicing"])
       ? [
           {
             label: "Production",
-            href: `/operations?module=${encodeURIComponent(firstAllowed(["/slicing"]))}`,
+            href: `/operations?module=${encodeURIComponent(firstAllowed(["/slicing", "/profit/chicken-slicing"]))}`,
             active: isProductionModule,
           },
         ]
@@ -248,17 +248,6 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
             label: "Payment",
             href: `/finance?module=${encodeURIComponent(firstAllowed(["/payments", "/accounts-payable"]))}`,
             active: !isPosModule && isCollectionsModule,
-          },
-        ]
-      : []),
-    ...(canAccessAnyFinanceRoute([
-      "/profit/chicken-slicing",
-    ])
-      ? [
-          {
-            label: "Profitability",
-            href: `/finance?module=${encodeURIComponent("/profit/chicken-slicing")}`,
-            active: isProfitabilityModule,
           },
         ]
       : []),
@@ -285,11 +274,11 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           },
         ]
       : []),
-    ...(canAccessAnyRoute(OUTLET_ROUTES)
+    ...(canAccessAnyRoute(OUTLET_ROUTES) || permissions.includes("pos.view") || isAdmin
       ? [
           {
             label: "Outlet Operations",
-            href: appNavItems.find((item) => item.title === "Outlet Operations")?.children?.find((child) => isAdmin || !child.permission || permissions.includes(child.permission))?.href || "/pos",
+            href: "/pos",
             active: isPosModule,
           },
         ]

@@ -4,10 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "test:setup": "tsx scripts/business-test-environment.ts setup",
+    "dev:business-test": "tsx scripts/business-test-environment.ts start",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --pretty false",
+    "production:check": "tsx scripts/production-check.ts",
     "test": "tsx --test tests/*.test.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
     "cleanup:test": "tsx scripts/cleanup-test-data.ts --confirm",

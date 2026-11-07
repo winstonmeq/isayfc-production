@@ -10,6 +10,9 @@ const EXPECTED_DATABASE = "letsonDB";
 const CLEAR_COLLECTIONS = [
   "deliveryitems", "deliveries", "salelines", "sales", "paymentallocations", "payments",
   "outletstocktransactions",
+  "outletstockcontrols",
+  "maincustomerreturns",
+  "mainproductionbatches",
   "stocktransferitems", "stocktransfers", "slicingitems", "slicingbatches",
   "inventoryadjustments", "stockcounts", "bodegastocktransactions", "inventorytransactions",
   "supplierpayments", "supplierinvoices", "cashshifts", "expenses",

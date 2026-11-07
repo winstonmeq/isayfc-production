@@ -43,13 +43,14 @@ export async function sumShiftSales(
   return { total, count: sales.length };
 }
 
-/** Sum the active expenses belonging to a given shift. */
+/** Sum the active expenses belonging to a given shift. Only cash sale expenses (deductFromCashSale !== false) reduce cash drawer. */
 export async function sumShiftExpenses(
   shiftId: string,
   session?: ClientSession
 ) {
   const query = ExpenseModel.find({
     isActive: true,
+    deductFromCashSale: { $ne: false },
     ...shiftMatch(shiftId),
   }).select("amount");
   if (session) query.session(session);

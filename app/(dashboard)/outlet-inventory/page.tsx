@@ -1,5 +1,5 @@
-import { OutletInventoryPageClient } from "@/components/outlets/OutletInventoryPageClient";
+import { redirect } from "next/navigation";
 
 export default function OutletInventoryPage() {
-  return <OutletInventoryPageClient />;
+  redirect("/pos");
 }

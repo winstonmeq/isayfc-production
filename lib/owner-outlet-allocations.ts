@@ -1,7 +1,6 @@
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import CustomerModel from "@/models/Customer";
-import Expense from "@/models/Expense";
 import { recognizedSaleRange } from "@/lib/business-flow";
 import { roundMoney } from "@/lib/report-utils";
 
@@ -12,12 +11,11 @@ export async function getOwnerOutletAllocations(start: Date, end: Date, source?:
     fulfillmentStatus: "RECOGNIZED", $expr: recognizedSaleRange(start, end) })
     .populate("customerId", "name").sort({ recognizedAt: 1, _id: 1 }).lean();
   const selectedSource = source === "CHICKEN" || source === "BODEGA" ? source : undefined;
-  const expenses = await Expense.find({ origin: "OWNER_OUTLET_DELIVERY", isActive: true, linkedSaleId: { $in: orders.map((order) => order._id) } }).lean();
   const lines = orders.length ? await SaleLineModel.find({ saleId: { $in: orders.map((order) => order._id) }, ...(selectedSource ? { source: selectedSource } : {}) }).lean() : [];
   const rows = orders.filter((order) => !selectedSource || lines.some((line) => String(line.saleId) === String(order._id))).map((order) => {
     const items = lines.filter((line) => String(line.saleId) === String(order._id));
-    const missingCostLines = 0;
-    const actualCost = roundMoney(expenses.filter((expense) => String(expense.linkedSaleId) === String(order._id)).reduce((sum, expense) => sum + expense.amount, 0));
+    const missingCostLines = items.length ? items.filter(item => item.unitCost == null || !Number.isFinite(item.unitCost) || item.unitCost < 0 || !Number.isFinite(Number(item.baseQty ?? item.stockPcsOut ?? item.qty))).length : 1;
+    const actualCost = roundMoney(items.reduce((sum, item) => sum + Number(item.unitCost || 0) * Number(item.baseQty ?? item.stockPcsOut ?? item.qty ?? 0), 0));
     const customer = order.customerId as unknown as { name?: string } | null;
     return { id: String(order._id), receiptNumber: order.receiptNumber, date: order.recognizedAt || order.saleDate,
       outlet: customer?.name || "Owner-owned outlet", products: items.map((item) => `${item.productName}: ${item.qty} ${item.stockUnit || "QTY"}`).join(", "),

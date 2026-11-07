@@ -10,10 +10,11 @@ import {
   cleanString,
   escapeRegex,
   getPagination,
-  serializeDocuments,
   serializeDocument,
 } from "@/lib/crud-utils";
 import CategoryModel, { ICategory } from "@/models/Category";
+import { isCategorySource, categorySource, categorySourceLabel, categorySourceScope } from "@/lib/category-source";
+import { isInventorySourceCategory, PRODUCT_CATEGORY_ERROR } from "@/lib/product-classification";
 
 export async function GET(req: NextRequest) {
   const { response } = await requirePermission(CATEGORY_LOOKUP_PERMISSIONS);
@@ -30,6 +31,9 @@ export async function GET(req: NextRequest) {
   const filter: QueryFilter<ICategory> = {
     isActive: true,
   };
+  const source = searchParams.get("source");
+  if (source && !isCategorySource(source)) return NextResponse.json({ success: false, message: "Select a valid category source." }, { status: 400 });
+  if (isCategorySource(source)) Object.assign(filter, categorySourceScope(source));
 
   if (search) {
     filter.name = {
@@ -45,7 +49,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    data: serializeDocuments(items),
+    data: items.map((item) => ({ ...serializeDocument(item), source: isCategorySource(item.source) ? item.source : "", sourceLabel: categorySourceLabel(item.source) })),
     meta: {
       page,
       limit,
@@ -63,8 +67,10 @@ async function handlePOST(req: NextRequest) {
   await dbConnect();
 
   const body = await req.json();
+  if (body.source !== undefined && !isCategorySource(body.source)) return NextResponse.json({ success: false, message: "Select a valid category source." }, { status: 400 });
 
   const name = cleanString(body.name);
+  if (isInventorySourceCategory(name)) return NextResponse.json({ success: false, message: PRODUCT_CATEGORY_ERROR }, { status: 400 });
   const description = cleanString(body.description);
 
   if (!name) {
@@ -80,6 +86,7 @@ async function handlePOST(req: NextRequest) {
   const category = await CategoryModel.create({
     name,
     description,
+    source: categorySource(body.source),
   });
 
   return NextResponse.json(

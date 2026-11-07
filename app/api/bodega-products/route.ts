@@ -1,3 +1,4 @@
+import { isProductUsage, productUsage, productUsageLabel } from "@/lib/product-usage";
 import { NextRequest, NextResponse } from "next/server";
 import { activeProductUnit } from "@/lib/product-units";
 import { isValidObjectId, Types } from "mongoose";
@@ -14,6 +15,8 @@ import {
 } from "@/lib/crud-utils";
 import BodegaProductModel from "@/models/BodegaProduct";
 import CategoryModel from "@/models/Category";
+import { categoryMatchesSource } from "@/lib/category-source";
+import { isInventorySourceCategory, PRODUCT_CATEGORY_ERROR } from "@/lib/product-classification";
 import StandardPackingModel from "@/models/StandardPacking";
 import {
   formatStock,
@@ -29,6 +32,7 @@ type PopulatedCategory = {
 
 type LeanBodegaProduct = {
   unitCode?: string;
+  usage?: string;
   _id: Types.ObjectId | string;
   name?: string;
   categoryId?: PopulatedCategory | Types.ObjectId | string | null;
@@ -116,7 +120,7 @@ function serializeBodegaProduct(
 
   const packSize = packingOptions[0]?.packSize || 0;
   const isPackProduct = packSize > 0;
-  const baseUnit = isPackProduct ? "PCS" : isWholeChicken ? "HEAD" : "PCS";
+  const baseUnit = product.unitCode === "KG" ? "KG" : isPackProduct ? "PCS" : isWholeChicken ? "HEAD" : "PCS";
   const stockBreakdown = getPackBreakdown(product.stockQty, packSize);
   const sellingPrice = numberValue(product.sellingPrice);
   const buyingPrice = numberValue(product.buyingPrice);
@@ -135,6 +139,9 @@ function serializeBodegaProduct(
   return {
     _id: idToString(product._id),
     name: product.name || "",
+    inventorySource: "BODEGA",
+    usage: productUsage(product.usage),
+    usageLabel: productUsageLabel(product.usage),
     unitCode: isPackProduct ? "PACK" : product.unitCode || "HEAD",
     categoryId: getCategoryId(product.categoryId),
     categoryName: getCategoryName(product.categoryId),
@@ -151,7 +158,7 @@ function serializeBodegaProduct(
     stockPcs: stockBreakdown.totalPcs,
     stockPacks: stockBreakdown.packs,
     stockLoosePcs: stockBreakdown.loosePcs,
-    stockDisplay: formatStockDisplay(product.stockQty, packSize),
+    stockDisplay: product.unitCode === "KG" ? `${numberValue(product.stockQty)} kg` : formatStockDisplay(product.stockQty, packSize),
 
     buyingPrice,
     sellingPrice,
@@ -175,6 +182,7 @@ export async function GET(req: NextRequest) {
   const { page, limit, skip } = getPagination(searchParams);
   const search = cleanString(searchParams.get("search"));
   const categoryId = cleanString(searchParams.get("categoryId"));
+  const usage = cleanString(searchParams.get("usage"));
 
   const filter: Record<string, unknown> = {
     isActive: true,
@@ -189,6 +197,10 @@ export async function GET(req: NextRequest) {
 
   if (categoryId && isValidObjectId(categoryId)) {
     filter.categoryId = new Types.ObjectId(categoryId);
+  }
+
+  if (usage && usage !== "ALL" && isProductUsage(usage)) {
+    filter.usage = usage;
   }
 
   const [rawItems, total] = await Promise.all([
@@ -284,6 +296,7 @@ async function handlePOST(req: NextRequest) {
   await dbConnect();
 
   const body = await req.json();
+  if (body.usage !== undefined && !isProductUsage(body.usage)) return NextResponse.json({ success: false, message: "Select a valid product usage." }, { status: 400 });
   const name = cleanString(body.name);
   const categoryId = cleanString(body.categoryId);
 
@@ -308,11 +321,13 @@ async function handlePOST(req: NextRequest) {
   }
 
   if (categoryId) {
-    const categoryExists = await CategoryModel.exists({
+    const categoryExists = await CategoryModel.findOne({
       _id: new Types.ObjectId(categoryId),
       isActive: true,
     });
 
+    if (isInventorySourceCategory(categoryExists?.name)) return NextResponse.json({ success: false, message: PRODUCT_CATEGORY_ERROR }, { status: 400 });
+  if (categoryExists && !categoryMatchesSource(categoryExists.source, "BODEGA")) return NextResponse.json({ success: false, message: "Choose a bodega or Shared category for this product." }, { status: 400 });
     if (!categoryExists) {
       return NextResponse.json(
         {
@@ -325,9 +340,10 @@ async function handlePOST(req: NextRequest) {
   }
 
   const unit = await activeProductUnit(body.unitCode, "HEAD");
-  if (!unit || !["HEAD", "PCS"].includes(unit.code)) return NextResponse.json({ success: false, message: "Use HEAD or PCS for bodega stock. Configure packs through Standard PCS & Packs." }, { status: 400 });
+  if (!unit || !["HEAD", "PCS", "KG"].includes(unit.code)) return NextResponse.json({ success: false, message: "Use HEAD, PCS or KG for bodega stock. Configure packs through Standard PCS & Packs." }, { status: 400 });
   const product = await BodegaProductModel.create({
     unitCode: unit.code,
+    ...(body.usage !== undefined ? { usage: body.usage } : {}),
     name,
     categoryId: categoryId ? new Types.ObjectId(categoryId) : undefined,
     stockQty: cleanNumber(body.stockQty),

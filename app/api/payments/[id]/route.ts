@@ -77,6 +77,7 @@ async function handleDELETE(
         );
 
         if (!sale || sale.isVoided) continue;
+        if (Number(sale.returnedAmount || 0) > 0) fail(409, "This payment funds a posted customer return. A finance correction is required before voiding it.");
 
         sale.paidAmount = Math.max(
           Number(sale.paidAmount || 0) - Number(allocation.amount || 0),

@@ -9,6 +9,10 @@ export const DEFAULT_EXPENSE_TYPES = [
   ["REPAIR_AND_MAINTENANCE", "Repair & Maintenance"],
   ["SALARIES", "Salaries"],
   ["INCENTIVES_AND_ALLOWANCES", "Incentives & Allowances"],
+  ["ELECTRICITY_AND_UTILITIES", "Electricity & Utilities"],
+  ["RENT_EXPENSES", "Rent Expenses"],
+  ["SELLING_EXPENSES", "Selling Expenses & Packaging"],
+  ["OPERATING_EXPENSES", "Operating Expenses"],
   ["OTHERS", "Others"],
 ] as const;
 

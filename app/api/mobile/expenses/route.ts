@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
   await connectDb();
   await ensureDefaultExpenseTypes();
-  const expenseTypes = await ExpenseTypeModel.find({ isActive: true })
+  const expenseTypes = await ExpenseTypeModel.find({ isActive: true, code: { $ne: "OWNER_OUTLET_DELIVERY" } })
     .sort({ name: 1 })
     .select("code name")
     .lean();
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (!(await ExpenseTypeModel.exists({ code: type, isActive: true }))) {
+  if (type === "OWNER_OUTLET_DELIVERY" || !(await ExpenseTypeModel.exists({ code: type, isActive: true }))) {
     return NextResponse.json(
       { success: false, message: "Select a valid active expense type." },
       { status: 400 }

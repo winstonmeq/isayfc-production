@@ -13,6 +13,7 @@ import OutletStockTransactionModel from "@/models/OutletStockTransaction";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
 import { postOutletDelivery, OutletDeliveryPostingError } from "@/lib/post-outlet-delivery";
+import { outletProductClassification } from "@/lib/outlet-product-classification";
 import { packingSnapshot, toBaseUnitCost } from "@/lib/inventory-units";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +106,7 @@ async function handlePOST(
       const items = await StockTransferItemModel.find({
         transferId: transfer._id,
       }).session(mongoSession);
+      if (items.some(item => item.itemStatus !== "PENDING")) transferFail(409, "This delivery has product-level decisions. Complete it in the outlet Receive Deliveries page.");
 
       // Every line must be counted explicitly — no silent assumptions.
       const inputByItemId = new Map<string, ConfirmItemInput>();
@@ -172,7 +174,7 @@ async function handlePOST(
         const receivedPcs = receivedQty * unitToPcs;
         const variancePcs = (item.qty - receivedQty) * unitToPcs;
         const baseUnit =
-          item.baseUnit === "HEAD" || item.unitLabel === "HEAD"
+          item.baseUnit === "KG" ? "KG" : item.baseUnit === "HEAD" || item.unitLabel === "HEAD"
             ? "HEAD"
             : source === "GROCERY"
               ? "QTY"
@@ -225,10 +227,12 @@ async function handlePOST(
         ).session(mongoSession);
 
         let inventoryId = existingInventory?._id;
+        const classification = await outletProductClassification(source, productRef, mongoSession, item.categoryName);
         let previousStock = 0;
         let newStock = receivedPcs;
 
         if (existingInventory) {
+          existingInventory.set(classification);
           previousStock = Number(existingInventory.stockQty || 0);
           newStock = previousStock + receivedPcs;
           const existingBaseCost = toBaseUnitCost(
@@ -263,7 +267,7 @@ async function handlePOST(
                 productSource: source,
                 productId: productRef,
                 productName: item.productName,
-                categoryName: item.categoryName,
+                ...classification,
                 stockQty: receivedPcs,
                 unitLabel: baseUnit,
                 unitCode: item.unitLabel === "PACK" ? "PCS" : item.unitCode || baseUnit,

@@ -19,6 +19,7 @@ import AuditLogModel from "@/models/AuditLog";
 import ProductModel from "@/models/Product";
 import BodegaProductModel from "@/models/BodegaProduct";
 import StandardPackingModel from "@/models/StandardPacking";
+import { classifyOutletInventoryRows, outletProductClassification } from "@/lib/outlet-product-classification";
 
 const productSources: OutletInventorySource[] = ["BODEGA", "GROCERY"];
 const unitLabels: OutletInventoryUnit[] = ["PCS", "PACK", "QTY", "KG", "BAG"];
@@ -231,7 +232,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    data: items.map(serializeOutletInventory),
+    data: (await classifyOutletInventoryRows(items)).map(serializeOutletInventory),
     summary: {
       bySource: summaryRows.map((row) => ({
         source: row._id,
@@ -322,7 +323,7 @@ export async function POST(req: NextRequest) {
     productSource: productSourceInput,
     productId,
     productName: snapshot.productName,
-    categoryName: snapshot.categoryName,
+    ...await outletProductClassification(productSourceInput, productId, undefined, snapshot.categoryName),
     stockQty,
     unitLabel: isUnitLabel(unitInput) ? unitInput : snapshot.unitLabel,
     packSize: snapshot.packSize,

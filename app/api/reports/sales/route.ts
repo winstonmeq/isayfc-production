@@ -1,4 +1,5 @@
 import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+import { mainPaymentStatus, INTERNAL_PAYMENT_LABEL } from "@/lib/main-payment-policy";
 import { ownerOutletAmount } from "@/lib/owner-outlet-amount";
 import { saleBusinessCategory } from "@/lib/transaction-category";
 // Main-company sales register with daily totals, product/category summaries,
@@ -23,6 +24,7 @@ import {
 import { getMainSalesReportSource } from "@/lib/report-scope";
 import { recognizedSaleRange } from "@/lib/business-flow";
 import { salesReportAmounts, discountReportSummary } from "@/lib/sales-report-amounts";
+import { postedMainReturns } from "@/lib/main-return-report";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -239,9 +241,9 @@ export async function GET(req: NextRequest) {
         qtyDisplay: formatSoldQuantity(sold),
         totalAmount: filteredTotal,
         paidAmount: filteredPaid,
-        balance: roundMoney(Math.max(filteredTotal - filteredPaid, 0)),
+        balance: s.status === "INTERNAL" ? 0 : roundMoney(Math.max(filteredTotal - filteredPaid, 0)),
         ownerOutletAmount: ownerOutletAmount(s.customerId?.outletId, roundMoney(Math.max(filteredTotal - filteredPaid, 0))),
-        status: String(s.status || ""),
+        status: mainPaymentStatus(s.status),
       };
     });
   });
@@ -337,6 +339,7 @@ export async function GET(req: NextRequest) {
   // Cash sales = fully paid (balance 0); credit = has an outstanding balance.
   const split = rows.reduce(
     (acc, r) => {
+      if (r.status === INTERNAL_PAYMENT_LABEL) return acc;
       if (r.balance > 0) {
         acc.creditCount += 1;
         acc.creditTotal = roundMoney(acc.creditTotal + r.totalAmount);
@@ -476,8 +479,13 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const returns = await postedMainReturns(start, end, source || undefined);
+  const returnsTotal = roundMoney(returns.reduce((sum, row) => sum + row.amount, 0));
   return NextResponse.json({
     success: true,
+    returns,
+    returnsTotal,
+    netAfterReturns: roundMoney(grand.total - returnsTotal),
     range: { start: start.toISOString(), end: end.toISOString() },
     generatedAt: manilaDateString(),
     rows,

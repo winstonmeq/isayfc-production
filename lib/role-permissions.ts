@@ -46,8 +46,8 @@ export const ROLE_PERMISSION_GROUPS = [
   {
     group: "Production",
     permissions: [
-      { key: "slicing.view", label: "Slicing History & Chicken Reconciliation" },
-      { key: "slicing.manage", label: "Manage Slicing" },
+      { key: "slicing.view", label: "Slicing, Main Production Batches & Chicken Reconciliation" },
+      { key: "slicing.manage", label: "Manage Slicing & Main Production Batches" },
       { key: "standard-packing.view", label: "View Standard PCS & Packs" },
       { key: "standard-packing.manage", label: "Manage Standard PCS & Packs" },
     ],
@@ -73,7 +73,6 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "pos.view", label: "View Outlet Daily Sales and Operations" },
       { key: "pos.manage", label: "Encode Outlet Sales and Activities" },
       { key: "pos.all-outlets", label: "Operate All Outlets / Select Store (Supervisors Only)" },
-      { key: "pos.employee-finance.manage", label: "Collect Employee Credit and Reimburse Outside Purchases" },
       { key: "reports.outlet-sales", label: "Outlet Sales & Profit Report (All Outlets)" },
       { key: "reports.outlet-comparison", label: "Outlet Comparison (All Outlets)" },
       { key: "payments.outlet-collections", label: "Outlet Collections Report (All Outlets)" },
@@ -153,8 +152,8 @@ export function normalizeRolePermissions(input: readonly string[]): RolePermissi
 }
 
 export const ROLE_PRESETS = [
-  { name: "Outlet Cashier", permissions: ["pos.view", "pos.manage", "pos.employee-finance.manage", "stock-transfers.confirm", "outlet-repack.manage", "cash.manage"] },
-  { name: "Outlet Sales Manager", permissions: ["pos.view", "pos.manage", "pos.all-outlets", "pos.employee-finance.manage", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },
+  { name: "Outlet Cashier", permissions: ["pos.view", "pos.manage", "stock-transfers.confirm", "outlet-repack.manage", "cash.manage"] },
+  { name: "Outlet Sales Manager", permissions: ["pos.view", "pos.manage", "pos.all-outlets", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },
   { name: "Main Sales Clerk", permissions: ["sales.view", "sales.manage", "sales-lines.view", "customers.view", "discounts.view", "stock-transfers.view"] },
   { name: "Payment Clerk", permissions: ["payments.view", "payments.manage", "accounts-payable.view", "accounts-payable.manage", "supplier-invoices.view"] },
   { name: "Owner Report Viewer", permissions: ["reports.overall", "reports.sales", "reports.profit", "reports.inventory", "reports.payments", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },

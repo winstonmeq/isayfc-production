@@ -59,6 +59,7 @@ import {
 import { cn, formatPeso } from "@/lib/utils";
 import { useSession } from "next-auth/react";
 import { manilaDateString } from "@/lib/date-utils";
+import { purchasePageTotals } from "@/lib/purchase-page-totals";
 
 type ProductOption = {
   _id: string;
@@ -214,6 +215,7 @@ export function PurchaseBatchesPageClient() {
   const [dueDate, setDueDate] = useState("");
   const [paymentMode, setPaymentMode] = useState<"CASH" | "CREDIT">("CREDIT");
   const [batches, setBatches] = useState<PurchaseBatch[]>([]);
+  const pageTotals = purchasePageTotals(batches);
   const [products, setProducts] = useState<ProductOption[]>([]);
 
   const [meta, setMeta] = useState<ApiMeta>({
@@ -228,14 +230,12 @@ export function PurchaseBatchesPageClient() {
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [minTotal, setMinTotal] = useState("");
-  const [maxTotal, setMaxTotal] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
 
   const [appliedFilters, setAppliedFilters] = useState({
     dateFrom: "",
     dateTo: "",
-    minTotal: "",
-    maxTotal: "",
+    supplierId: "",
   });
 
   const [datePurchased, setDatePurchased] = useState(
@@ -331,8 +331,7 @@ export function PurchaseBatchesPageClient() {
 
     if (appliedFilters.dateFrom) params.set("dateFrom", appliedFilters.dateFrom);
     if (appliedFilters.dateTo) params.set("dateTo", appliedFilters.dateTo);
-    if (appliedFilters.minTotal) params.set("minTotal", appliedFilters.minTotal);
-    if (appliedFilters.maxTotal) params.set("maxTotal", appliedFilters.maxTotal);
+    if (appliedFilters.supplierId) params.set("supplierId", appliedFilters.supplierId);
 
     try {
       const res = await fetch(`/api/purchase-batches?${params.toString()}`, {
@@ -492,8 +491,7 @@ export function PurchaseBatchesPageClient() {
     setAppliedFilters({
       dateFrom,
       dateTo,
-      minTotal,
-      maxTotal,
+      supplierId: supplierFilter,
     });
 
     setPage(1);
@@ -502,14 +500,12 @@ export function PurchaseBatchesPageClient() {
   function resetFilters() {
     setDateFrom("");
     setDateTo("");
-    setMinTotal("");
-    setMaxTotal("");
+    setSupplierFilter("");
 
     setAppliedFilters({
       dateFrom: "",
       dateTo: "",
-      minTotal: "",
-      maxTotal: "",
+      supplierId: "",
     });
 
     setPage(1);
@@ -636,7 +632,7 @@ export function PurchaseBatchesPageClient() {
     <div className="space-y-5">
       <Card className="rounded-2xl border-slate-200 shadow-sm">
         <CardContent className="p-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
+          <div className="grid items-end gap-3 md:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
             <div className="space-y-2">
               <Label>Date From</Label>
               <Input
@@ -656,25 +652,11 @@ export function PurchaseBatchesPageClient() {
             </div>
 
             <div className="space-y-2">
-              <Label>Min Total</Label>
-              <Input
-                type="number"
-                min="0"
-                value={minTotal}
-                onChange={(event) => setMinTotal(event.target.value)}
-                placeholder="0"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Max Total</Label>
-              <Input
-                type="number"
-                min="0"
-                value={maxTotal}
-                onChange={(event) => setMaxTotal(event.target.value)}
-                placeholder="0"
-              />
+              <Label htmlFor="purchase-supplier-filter">Supplier</Label>
+              <select id="purchase-supplier-filter" className="h-10 w-full rounded-lg border bg-white px-3" value={supplierFilter} onChange={event => setSupplierFilter(event.target.value)}>
+                <option value="">All suppliers</option>
+                {suppliers.map(supplier => <option key={supplier._id} value={supplier._id}>{supplier.name}</option>)}
+              </select>
             </div>
 
             <div className="flex items-end gap-2">
@@ -837,6 +819,7 @@ export function PurchaseBatchesPageClient() {
                   ))
                 )}
               </TableBody>
+              {!isLoading && batches.length > 0 && <tfoot className="border-t bg-slate-100 font-semibold"><TableRow><TableCell colSpan={4}>Page Total ({batches.length} batches)</TableCell><TableCell className="text-center">{pageTotals.lines.toLocaleString()}</TableCell><TableCell className="text-right">{pageTotals.quantity.toLocaleString()}</TableCell><TableCell className="text-right">{formatPeso(pageTotals.amount)}</TableCell><TableCell colSpan={2} /><TableCell className="text-right">{formatPeso(pageTotals.paid)}</TableCell><TableCell className="text-right">{formatPeso(pageTotals.balance)}</TableCell><TableCell colSpan={2} /></TableRow></tfoot>}
             </Table>
           </div>
 

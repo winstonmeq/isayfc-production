@@ -34,7 +34,7 @@ type UnifiedProduct = {
   price: number;
 };
 
-type CartItem = UnifiedProduct & { quantity: number; discountId?: string };
+type CartItem = UnifiedProduct & { quantity: number; kilosOut?: number; discountId?: string };
 
 function ProductPicker({ products, value, onChange }: { products: UnifiedProduct[]; value: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -60,7 +60,7 @@ function ProductPicker({ products, value, onChange }: { products: UnifiedProduct
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{product.name}</div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {product.type === "CHICKEN" ? "Chicken" : "Grocery"} · {product.availableQty.toLocaleString()} {product.saleUnit.toLowerCase()} available · {formatPeso(product.price)}
+                      {product.type === "CHICKEN" ? "Bodega" : "Grocery"} · {product.availableQty.toLocaleString()} {product.saleUnit.toLowerCase()} available · {formatPeso(product.price)}
                     </div>
                   </div>
                 </CommandItem>
@@ -81,6 +81,7 @@ export function AllSalesPageClient() {
   const [receiptNumber, setReceiptNumber] = useState("");
   const [selectedKey, setSelectedKey] = useState("");
   const [quantity, setQuantity] = useState("0");
+  const [chickenKilos, setChickenKilos] = useState("");
   const [productFilter, setProductFilter] = useState<MainSaleProductFilter>("ALL");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,8 +131,8 @@ export function AllSalesPageClient() {
         id: product.bodegaProductId,
         type: "CHICKEN",
         name: product.name,
-        categoryName: product.categoryName || "CHICKEN",
-        saleUnit: product.saleUnit,
+        categoryName: product.categoryName || "Uncategorized",
+        saleUnit: product.saleUnit === "QTY" ? "PCS" : product.saleUnit,
         availableQty: Number(product.availableQty || 0),
         stockPcs: Number(product.stockPcs || 0),
         packSize: Number(product.packSize || 0),
@@ -142,7 +143,7 @@ export function AllSalesPageClient() {
         id: product._id,
         type: "BODEGA",
         name: product.name,
-        categoryName: product.categoryName || "GROCERY",
+        categoryName: product.categoryName || "Uncategorized",
         saleUnit: product.unitCode || "PCS",
         availableQty: Number(product.stockPcs || 0),
         stockPcs: Number(product.stockPcs || 0),
@@ -161,17 +162,20 @@ export function AllSalesPageClient() {
   function addItem() {
     if (!selectedProduct) return toast.error("Select a product.");
     const qty = Number(quantity);
-    if (!Number.isSafeInteger(qty) || qty <= 0) return toast.error("Enter a whole quantity greater than zero.");
+    if (!Number.isFinite(qty) || qty <= 0 || (selectedProduct.saleUnit !== "KG" && !Number.isSafeInteger(qty))) return toast.error("Enter a positive quantity; heads, pieces and packs require whole numbers.");
+    const kilosOut = selectedProduct.saleUnit === "HEAD" ? Number(chickenKilos) : undefined;
+    if (selectedProduct.saleUnit === "HEAD" && (!Number.isFinite(kilosOut) || Number(kilosOut) <= 0)) return toast.error("Enter the actual kilos of chicken being released.");
     const existingQty = cart.find((item) => item.key === selectedProduct.key)?.quantity || 0;
     if (existingQty + qty > selectedProduct.availableQty) return toast.error(`Only ${selectedProduct.availableQty} ${selectedProduct.saleUnit.toLowerCase()} available for ${selectedProduct.name}.`);
     setCart((current) => {
       const existing = current.find((item) => item.key === selectedProduct.key);
       return existing
-        ? current.map((item) => item.key === selectedProduct.key ? { ...item, quantity: item.quantity + qty } : item)
-        : [...current, { ...selectedProduct, quantity: qty }];
+        ? current.map((item) => item.key === selectedProduct.key ? { ...item, quantity: item.quantity + qty, ...(kilosOut != null ? { kilosOut: Number(item.kilosOut || 0) + kilosOut } : {}) } : item)
+        : [...current, { ...selectedProduct, quantity: qty, kilosOut }];
     });
     setSelectedKey("");
     setQuantity("0");
+    setChickenKilos("");
   }
 
   async function saveSale() {
@@ -201,6 +205,7 @@ export function AllSalesPageClient() {
             productId: item.id,
             bodegaProductId: item.type === "CHICKEN" ? item.id : undefined,
             quantity: item.quantity,
+            kilosOut: item.kilosOut,
             discountId: item.discountId || undefined,
           })),
         }),
@@ -228,15 +233,15 @@ export function AllSalesPageClient() {
         <div className="space-y-2"><Label>Sale Date *</Label><Input type="date" value={saleDate} onChange={(event) => setSaleDate(event.target.value)} /></div>
         <div className="space-y-2"><Label>Receipt Number *</Label><Input value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="e.g. 0003801" /></div>
       </CardContent></Card>
-      {customers.some((customer) => customer._id === customerId && customer.outletId && customer.outletId !== "NONE") && <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Outlet customer sale: acceptance records an unpaid balance and a main delivery expense at selling amount. Record any payment separately.</p>}
       <Card><CardHeader><CardTitle>Add Product</CardTitle><div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Product type filter">{([{ value: "ALL", label: "All" }, { value: "CHICKEN", label: "Chicken" }, { value: "BODEGA", label: "Grocery" }] as const).map((filter) => <Button key={filter.value} type="button" variant={productFilter === filter.value ? "default" : "outline"} aria-pressed={productFilter === filter.value} onClick={() => { setProductFilter(filter.value); setSelectedKey(""); setQuantity("0"); }}>{filter.label}</Button>)}</div></CardHeader><CardContent className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
         <ProductPicker products={visibleProducts} value={selectedKey} onChange={setSelectedKey} />
-        <Input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Quantity" />
+        <Input type="number" min="0" step={selectedProduct?.saleUnit === "KG" ? "any" : "1"} value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Quantity" />
+        {selectedProduct?.saleUnit === "HEAD" && <label className="text-sm">Actual Kilos<Input type="number" min="0" step="any" value={chickenKilos} onChange={event => setChickenKilos(event.target.value)} /></label>}
         <Button onClick={addItem}><Plus className="mr-2 h-4 w-4" />Add</Button>
 
       </CardContent></Card>
       <Card><CardHeader><CardTitle>Sale Items</CardTitle></CardHeader><CardContent>
-        {cart.length === 0 ? <div className="py-16 text-center text-muted-foreground"><ShoppingCart className="mx-auto mb-2 h-8 w-8" />No items yet.</div> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Product</TableHead><TableHead>Unit</TableHead><TableHead className="text-right">Quantity</TableHead><TableHead className="text-right">Price</TableHead><TableHead>Discount</TableHead><TableHead className="text-right">Total</TableHead><TableHead /></TableRow></TableHeader><TableBody>{cart.map((item) => <TableRow key={item.key}><TableCell>{item.type === "CHICKEN" ? "Chicken" : "Grocery"}</TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell>{item.saleUnit}</TableCell><TableCell className="text-right">{item.quantity}</TableCell><TableCell className="text-right">{formatPeso(item.price)}</TableCell><TableCell><ItemDiscountSelector options={discount.options} value={item.discountId} disabled={isSaving} label={`Discount for ${item.name}`} onChange={(discountId) => setCart((current) => current.map((row) => row.key === item.key ? { ...row, discountId } : row))} /></TableCell><TableCell className="text-right font-semibold">{formatPeso(discount.lineTotal(item.quantity * item.price, item.quantity, item.discountId))}</TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => setCart((current) => current.filter((row) => row.key !== item.key))}><Trash2 className="h-4 w-4 text-red-600" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}
+        {cart.length === 0 ? <div className="py-16 text-center text-muted-foreground"><ShoppingCart className="mx-auto mb-2 h-8 w-8" />No items yet.</div> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Source</TableHead><TableHead>Product</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead><TableHead className="text-right">Quantity</TableHead><TableHead className="text-right">Price</TableHead><TableHead>Discount</TableHead><TableHead className="text-right">Total</TableHead><TableHead /></TableRow></TableHeader><TableBody>{cart.map((item) => <TableRow key={item.key}><TableCell>{item.type === "CHICKEN" ? "Bodega" : "Grocery"}</TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell>{item.categoryName}</TableCell><TableCell>{item.saleUnit}</TableCell><TableCell className="text-right">{item.quantity}{item.kilosOut != null && <span className="block text-xs text-slate-500">{item.kilosOut} kg</span>}</TableCell><TableCell className="text-right">{formatPeso(item.price)}</TableCell><TableCell><ItemDiscountSelector options={discount.options} value={item.discountId} disabled={isSaving} label={`Discount for ${item.name}`} onChange={(discountId) => setCart((current) => current.map((row) => row.key === item.key ? { ...row, discountId } : row))} /></TableCell><TableCell className="text-right font-semibold">{formatPeso(discount.lineTotal(item.quantity * item.price, item.quantity, item.discountId))}</TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => setCart((current) => current.filter((row) => row.key !== item.key))}><Trash2 className="h-4 w-4 text-red-600" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}
         <EntryActions className="mt-5"><SaleDiscountSummary discount={discount} /><Button size="lg" disabled={isSaving || cart.length === 0 || Boolean(discount.error)} onClick={saveSale}>{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save Sale</Button></EntryActions>
       </CardContent></Card>
     </div>

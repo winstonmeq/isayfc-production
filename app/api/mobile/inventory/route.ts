@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMobileAuth } from "@/lib/mobile-auth";
 import connectDb from "@/lib/mongodb";
 import OutletInventoryModel from "@/models/OutletInventory";
+import { classifyOutletInventoryRows } from "@/lib/outlet-product-classification";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
     .sort({ productName: 1 })
     .lean();
 
-  const data = (items as any[]).map((it) => ({
+  const data = (await classifyOutletInventoryRows(items)).map((it) => ({
     id: it._id.toString(),
     productName: it.productName || "",
     categoryName: it.categoryName || "",

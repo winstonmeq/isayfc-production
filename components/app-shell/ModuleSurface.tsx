@@ -115,6 +115,7 @@ const moduleComponents: Record<string, ComponentType> = {
       ),
     { loading: LoadingModule }
   ),
+  "/slicing/production": dynamic(() => import("@/components/production/MainProductionPage").then(m => m.MainProductionPage), { loading: LoadingModule }),
   "/slicing/standard-packing": dynamic(
     () =>
       import("@/components/slicing/StandardPackingPageClient").then(
@@ -206,8 +207,8 @@ const moduleComponents: Record<string, ComponentType> = {
   ),
   "/outlet-inventory": dynamic(
     () =>
-      import("@/components/outlets/OutletInventoryPageClient").then(
-        (m) => m.OutletInventoryPageClient
+      import("@/components/outlets/LegacyOutletInventoryRedirect").then(
+        (m) => m.LegacyOutletInventoryRedirect
       ),
     { loading: LoadingModule }
   ),
@@ -243,10 +244,8 @@ const moduleComponents: Record<string, ComponentType> = {
   ),
   "/inventory-adjustments": dynamic(
     () =>
-      import("@/components/inventory/StockControlPage").then(
-        (m) => function InventoryAdjustmentsModule() {
-          return <m.StockControlPage mode="adjustment" />;
-        }
+      import("@/components/inventory/MainInventoryControlPage").then(
+        (m) => m.MainInventoryControlPage
       ),
     { loading: LoadingModule }
   ),

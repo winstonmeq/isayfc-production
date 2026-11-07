@@ -19,6 +19,7 @@ import PaymentModel from "@/models/Payment";
 import SaleModel from "@/models/Sale";
 import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import CustomerModel from "@/models/Customer";
+import { postedMainReturns } from "@/lib/main-return-report";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -178,8 +179,13 @@ export async function GET(req: NextRequest) {
     { current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0, total: 0 }
   );
 
+  const returns = await postedMainReturns(start, end);
+  const cashRefunds = roundMoney(returns.reduce((n, row) => n + row.refund, 0));
   return NextResponse.json({
     success: true,
+    returns,
+    cashRefunds,
+    netCollections: roundMoney(collectionsGrand.amount - cashRefunds),
     range: { start: start.toISOString(), end: end.toISOString() },
     generatedAt: manilaDateString(),
     collections,

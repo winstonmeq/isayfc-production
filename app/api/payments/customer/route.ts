@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/require-permission";
 import { cleanString, escapeRegex } from "@/lib/crud-utils";
 import CustomerModel from "@/models/Customer";
 import SaleModel from "@/models/Sale";
-import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+import { nonCollectibleSaleClauses } from "@/lib/main-payment-policy";
 
 export const runtime = "nodejs";
 
@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
   const customerFilter: Record<string, unknown> = {
     isActive: true,
     type: { $in: ["SALE", "BOTH"] },
+    outletId: null,
   };
 
   if (search) {
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
         $match: {
           isVoided: false,
           fulfillmentStatus: { $ne: "PENDING" },
-          $nor: internalOutletMatchClauses(),
+          $nor: nonCollectibleSaleClauses(),
           balance: { $gt: 0 },
         },
       },

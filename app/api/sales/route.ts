@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mainPaymentStatus } from "@/lib/main-payment-policy";
 import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
@@ -24,6 +25,7 @@ import StandardPackingModel from "@/models/StandardPacking";
 import OutletModel from "@/models/Outlet";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
+import { chickenRelease } from "@/lib/chicken-release";
 import { generateTransferNumber, dispatchTransferInTransaction, StockTransferError } from "@/lib/stock-transfers";
 import {
   packingSnapshot,
@@ -52,10 +54,12 @@ type SaleItemInput = {
   packSize?: number;
   stockPcsOut?: number;
   saleUnit?: string;
+  kilosOut?: number;
   remarks?: string;
 };
 
 type PreparedSaleItem = {
+  kilosOut?: number;
   unitCode: string;
   discountId?: mongoose.Types.ObjectId;
   discountName?: string;
@@ -110,7 +114,7 @@ function serializeSale(sale: any, sourceBreakdown: any[] = []) {
       "",
     source: sale.source || "BODEGA",
     transactionType: sale.transactionType || "EXTERNAL_SALE",
-    transactionLabel: sale.transactionType === "INTERNAL_TRANSFER" ? "Legacy Internal Record" : "Customer Sale",
+    transactionLabel: sale.ownerOutletId ? "Internal Outlet Sale" : sale.transactionType === "INTERNAL_TRANSFER" ? "Legacy Internal Record" : "Customer Sale",
     saleSource: getSaleOrigin(sale),
     channel: sale.channel || "WEB",
     receiptNumber: sale.receiptNumber || "",
@@ -126,7 +130,7 @@ function serializeSale(sale: any, sourceBreakdown: any[] = []) {
     discountAmount: Number(sale.discountAmount || 0),
     paidAmount: Number(sale.paidAmount || 0),
     balance: Number(sale.balance || 0),
-    status: sale.status || "UNPAID",
+    status: mainPaymentStatus(sale.status),
     paymentMethod: sale.paymentMethod || "CASH",
     remarks: sale.remarks || "",
     createdByName: sale.createdBy?.name || sale.createdBy?.username || "",
@@ -566,8 +570,14 @@ async function handlePOST(req: NextRequest) {
         // active Standard PCS & Packs record, not from the browser request.
         // Products without an output pack standard are sold per head.
         if (itemSource === "CHICKEN" && product.unitCode === "PACK" && standardPackSize <= 0) fail(400, "Configure Standard PCS & Packs before selling this pack product.");
-        const chickenUnit = standardPackSize > 0 ? "PACK" : product.unitCode === "PCS" ? "QTY" : "HEAD";
-        if (itemSource === "CHICKEN" && !Number.isSafeInteger(qty)) fail(400, "Chicken pieces, heads and packs must use whole quantities.");
+        const chickenUnit = product.unitCode === "KG" ? "QTY" : standardPackSize > 0 ? "PACK" : product.unitCode === "PCS" ? "QTY" : "HEAD";
+        if (itemSource === "CHICKEN" && product.unitCode !== "KG" && !Number.isSafeInteger(qty)) fail(400, "Chicken pieces, heads and packs must use whole quantities.");
+        let kilosOut = itemSource === "CHICKEN" && product.unitCode === "KG" ? qty : undefined;
+        let headCost: number | undefined;
+        if (itemSource === "CHICKEN" && chickenUnit === "HEAD") {
+          try { const release = chickenRelease(qty, Number(item.kilosOut), Number(product.stockHeads || 0), Number(product.stockKilos || 0), Number(product.buyingPrice)); kilosOut = release.kilosOut; headCost = release.costPerHead; }
+          catch (error) { fail(400, `${product.name}: ${error instanceof Error ? error.message : "Actual kilos required."}`); }
+        }
         const packSize = itemSource === "CHICKEN" ? standardPackSize : 1;
         const stockOut =
           itemSource === "CHICKEN" && chickenUnit === "PACK" ? qty * packSize : qty;
@@ -595,7 +605,8 @@ async function handlePOST(req: NextRequest) {
           ...(itemDiscount ? { discountId: itemDiscount._id, discountName: itemDiscount.name, discountType: itemDiscount.type, discountValue: itemDiscount.value, discountBasis: itemDiscount.basis || "PER_ROW" } : {}),
           source: itemSource,
           productType,
-          unitCode: itemSource === "CHICKEN" ? (chickenUnit === "QTY" ? "PCS" : chickenUnit) : product.unitCode || "PCS",
+          unitCode: itemSource === "CHICKEN" ? (product.unitCode === "KG" ? "KG" : chickenUnit === "QTY" ? "PCS" : chickenUnit) : product.unitCode || "PCS",
+          kilosOut,
           productId: productType === "PRODUCT" ? product._id : undefined,
           bodegaProductId: productType === "BODEGA_PRODUCT" ? product._id : undefined,
           categoryId: getCategoryId(product),
@@ -604,7 +615,7 @@ async function handlePOST(req: NextRequest) {
           qty,
           price,
           lineTotal,
-          unitCost: toBaseUnitCost(
+          unitCost: headCost ?? toBaseUnitCost(
             product.buyingPrice,
             packingSnapshot({
               unit: itemSource === "CHICKEN" ? chickenUnit : "QTY",
@@ -624,7 +635,7 @@ async function handlePOST(req: NextRequest) {
             itemSource === "CHICKEN"
               ? chickenUnit === "PACK"
                 ? "PCS"
-                : chickenUnit === "HEAD" ? "HEAD" : "PCS"
+                : chickenUnit === "HEAD" ? "HEAD" : product.unitCode === "KG" ? "KG" : "PCS"
               : product.unitCode === "KG" ? "KG" : "QTY",
           baseQty: stockOut,
           entryUnit:
@@ -718,6 +729,7 @@ async function handlePOST(req: NextRequest) {
                   : "QTY",
             buyingPrice: item.unitCost,
             companyUnitCost: item.unitCost,
+            kilosOut: item.kilosOut,
             sellingPrice: item.qty > 0 ? item.lineTotal / item.qty : 0,
             qty: item.qty,
             qtyPcs: item.stockPcsOut,
@@ -753,11 +765,13 @@ async function handlePOST(req: NextRequest) {
               isActive: true,
               stockQty: { $gte: item.stockPcsOut },
               ...(isHeadSale ? { stockHeads: { $gte: item.qty } } : {}),
+              ...(item.kilosOut != null ? { stockKilos: { $gte: item.kilosOut } } : {}),
             },
             {
               $inc: {
                 stockQty: -item.stockPcsOut,
                 ...(isHeadSale ? { stockHeads: -item.qty } : {}),
+                ...(item.kilosOut != null ? { stockKilos: -item.kilosOut } : {}),
               },
             },
             { new: true, session: mongoSession }
@@ -776,7 +790,9 @@ async function handlePOST(req: NextRequest) {
             type: "STOCK_OUT",
             quantity: item.stockPcsOut,
             heads: isHeadSale ? item.qty : 0,
-            pieces: isHeadSale ? 0 : item.stockPcsOut,
+            pieces: isHeadSale || item.baseUnit === "KG" ? 0 : item.stockPcsOut,
+            kilos: item.kilosOut || 0,
+            kilosDelta: item.kilosOut == null ? undefined : -item.kilosOut,
             previousStock,
             newStock,
             remarks: `SALE ${receiptNumber}`,
@@ -840,6 +856,7 @@ async function handlePOST(req: NextRequest) {
           discountValue: item.discountValue,
           discountBasis: item.discountBasis,
           unitCost: item.unitCost,
+          kilosOut: item.kilosOut,
           stockUnit: item.stockUnit,
           packSize: item.packSize,
           stockPcsOut: item.stockPcsOut,
@@ -900,7 +917,7 @@ async function handlePOST(req: NextRequest) {
       {
         success: true,
         message: linkedOutletId
-          ? "Outlet sale saved and delivery dispatched. The outlet can now receive it. Acceptance posts the unpaid balance and linked main delivery expenses."
+          ? "Internal outlet sale saved and delivery dispatched. No customer payment required. The outlet can now receive it."
           : "Sale created successfully.",
         data: serializeSale(populatedSale),
       },

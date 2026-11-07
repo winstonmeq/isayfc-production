@@ -14,3 +14,22 @@ export function remainingAmount(total: number, paid: number, payment: number) {
 export function outletCashSummary(cashSales: number, collections: number, expenses: number, reimbursements: number) {
   return { cashSales, collections, expenses, reimbursements, netCashMovement: Math.round((cashSales + collections - expenses - reimbursements) * 100) / 100 };
 }
+
+export function canRemoveEmployee(creditBalance: number, unreimbursedAmount: number) {
+  const credit = Math.max(0, Math.round((creditBalance || 0) * 100) / 100);
+  const unreimbursed = Math.max(0, Math.round((unreimbursedAmount || 0) * 100) / 100);
+  if (credit > 0) {
+    return {
+      canRemove: false,
+      reason: `Cannot remove employee with outstanding credit balance of ₱${credit.toFixed(2)}. Settle credit balance first.`,
+    };
+  }
+  if (unreimbursed > 0) {
+    return {
+      canRemove: false,
+      reason: `Cannot remove employee with ₱${unreimbursed.toFixed(2)} in unreimbursed outside purchases. Reimburse employee first.`,
+    };
+  }
+  return { canRemove: true };
+}
+

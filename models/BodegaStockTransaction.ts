@@ -19,6 +19,7 @@ export interface IBodegaStockTransaction extends Document {
   quantity: number;
   bags: number;
   kilos: number;
+  kilosDelta?: number;
   heads: number;
   pieces: number;
   previousStock: number;
@@ -68,6 +69,7 @@ const BodegaStockTransactionSchema = new Schema<IBodegaStockTransaction>(
 
     bags: { type: Number, default: 0, min: 0 },
     kilos: { type: Number, default: 0, min: 0 },
+    kilosDelta: Number,
     heads: { type: Number, default: 0, min: 0 },
     pieces: { type: Number, default: 0, min: 0 },
 
@@ -113,6 +115,7 @@ BodegaStockTransactionSchema.index({ type: 1 });
 BodegaStockTransactionSchema.index({ createdAt: -1 });
 BodegaStockTransactionSchema.index({ transactionDate: -1 });
 
+if (mongoose.models.BodegaStockTransaction && !mongoose.models.BodegaStockTransaction.schema.path("kilosDelta")) mongoose.deleteModel("BodegaStockTransaction");
 const BodegaStockTransactionModel: Model<IBodegaStockTransaction> =
   mongoose.models.BodegaStockTransaction ||
   mongoose.model<IBodegaStockTransaction>(

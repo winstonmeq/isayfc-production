@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   const ids = [...standards, ...sliced.map(r => r._id)];
   const products = await BodegaProduct.find({ _id: { $in: ids } }).select("name stockKilos").lean();
   const movements = await BodegaStockTransaction.find({ bodegaProductId: { $in: products.map(p => p._id) }, transactionDate: { $gte: start } })
-    .select("bodegaProductId transactionDate kilos previousStock newStock referenceType referenceId").lean();
+    .select("bodegaProductId transactionDate kilos kilosDelta previousStock newStock referenceType referenceId").lean();
   const slicingIds = movements.filter(m => m.referenceType === "SLICING_BATCH" && m.referenceId).map(m => String(m.referenceId));
   const deliveryIds = movements.filter(m => m.referenceType === "DELIVERY" && m.referenceId).map(m => String(m.referenceId));
   const [voidedSlices, voidedDeliveries] = await Promise.all([

@@ -1,6 +1,7 @@
 "use client";
 
 import { EntryDialogContent } from "@/components/erp/EntryForm";
+import { CATEGORY_SOURCE_OPTIONS, categorySourceLabel } from "@/lib/category-source";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -89,18 +90,14 @@ type ExpenseTypeSummary = {
   totalAmount: number;
 };
 
-const expenseCategoryOptions: { label: string; value: ExpenseCategory; description: string }[] = [
-  {
-    label: "Grocery/Product",
-    value: "GROCERY",
-    description: "Expenses related to grocery and product inventory operations.",
-  },
-  {
-    label: "Bodega",
-    value: "BODEGA",
-    description: "Expenses related to chicken, bodega, slicing, and delivery operations.",
-  },
-];
+const expenseCategoryOptions = CATEGORY_SOURCE_OPTIONS
+  .filter((source) => source.value === "BODEGA" || source.value === "GROCERY")
+  .map((source) => ({
+    ...source,
+    description: source.value === "GROCERY"
+      ? "Expenses related to grocery and product inventory operations."
+      : "Expenses related to chicken, bodega, slicing, and delivery operations.",
+  }));
 
 const emptyForm = {
   name: "",
@@ -268,7 +265,7 @@ export function ExpensesBodegaPageClient() {
     void loadExpenseTypes();
   }, []);
 
-  const activeExpenseTypes = expenseTypes.filter((item) => item.isActive);
+  const activeExpenseTypes = expenseTypes.filter((item) => item.isActive && item.code !== "OWNER_OUTLET_DELIVERY");
 
   function updateForm(name: keyof typeof emptyForm, value: string) {
     setForm((current) => ({
@@ -461,7 +458,7 @@ export function ExpensesBodegaPageClient() {
     <div className="space-y-6">
       <ModuleHeader
         title="Business Expenses"
-        description="Track main-branch Grocery/Product and Bodega operating expenses. Outlet expenses are recorded in the outlet POS."
+        description="Track main-branch Grocery and Bodega operating expenses. Outlet expenses are recorded in the outlet POS."
         actions={<div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={openTypeManager} className="rounded-xl">
             <Settings2 className="mr-2 h-4 w-4" />
@@ -495,7 +492,7 @@ export function ExpensesBodegaPageClient() {
           <CardHeader className="flex flex-row items-center gap-2 pb-2">
             <ShoppingBasket className="h-4 w-4 text-emerald-700" />
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Grocery/Product
+              {categorySourceLabel("GROCERY")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -534,13 +531,13 @@ export function ExpensesBodegaPageClient() {
           </div>
 
           <div>
-            <Label>Category</Label>
+            <Label>Source</Label>
             <Select value={expenseCategory} onValueChange={setExpenseCategory}>
               <SelectTrigger>
-                <SelectValue placeholder="All Categories" />
+                <SelectValue placeholder="All Sources" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Categories</SelectItem>
+                <SelectItem value="ALL">All Sources</SelectItem>
                 {expenseCategoryOptions.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
@@ -632,7 +629,7 @@ export function ExpensesBodegaPageClient() {
                 <TableRow>
                   <TableHead className="text-white">#</TableHead>
                   <TableHead className="text-white">Name</TableHead>
-                  <TableHead className="text-white">Category</TableHead>
+                  <TableHead className="text-white">Source</TableHead>
                   <TableHead className="text-white">Type</TableHead>
                   <TableHead className="text-white">Date</TableHead>
                   <TableHead className="text-right text-white">Amount</TableHead>
@@ -751,7 +748,7 @@ export function ExpensesBodegaPageClient() {
 
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <Label>Category</Label>
+                <Label>Source</Label>
                 <Select
                   value={form.expenseCategory}
                   onValueChange={(value) => updateForm("expenseCategory", value)}

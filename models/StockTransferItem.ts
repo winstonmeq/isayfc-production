@@ -36,6 +36,7 @@ export interface IStockTransferItem extends Document {
   // cost when received. It is not consolidated company revenue.
   sellingPrice: number;
   companyUnitCost?: number;
+  kilosOut?: number;
 
   // qty is what the user enters (packs for pack products, otherwise pieces/qty).
   // qtyPcs is the true base-unit quantity moved in stock = qty * (packSize||1).
@@ -119,18 +120,19 @@ const StockTransferItemSchema = new Schema<IStockTransferItem>(
       default: 0,
       min: 0,
     },
+    kilosOut: { type: Number, min: 0 },
     companyUnitCost: { type: Number, min: 0 },
 
     qty: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0,
     },
 
     qtyPcs: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0,
     },
 
     // Explicit unit snapshot for new records. qtyPcs remains for compatibility
@@ -186,6 +188,7 @@ StockTransferItemSchema.index({ bodegaProductId: 1 });
 StockTransferItemSchema.index({ productId: 1 });
 StockTransferItemSchema.index({ standardPackingId: 1 });
 
+if (mongoose.models.StockTransferItem && !mongoose.models.StockTransferItem.schema.path("kilosOut")) mongoose.deleteModel("StockTransferItem");
 const StockTransferItemModel: Model<IStockTransferItem> =
   mongoose.models.StockTransferItem ||
   mongoose.model<IStockTransferItem>(

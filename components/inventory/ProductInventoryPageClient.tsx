@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TablePagination } from "@/components/erp/TablePagination";
 import {
   Select,
   SelectContent,
@@ -121,13 +122,13 @@ export function ProductInventoryPageClient() {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [meta, setMeta] = useState<ApiMeta>({
     page: 1,
-    limit: 10,
+    limit: 25,
     total: 0,
     totalPages: 1,
   });
 
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState("10");
+  const [limit, setLimit] = useState("25");
   const [search, setSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");
   const [stockStatus, setStockStatus] = useState("ALL");
@@ -282,8 +283,8 @@ export function ProductInventoryPageClient() {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-2xl border-slate-200 shadow-sm">
-        <CardContent className="grid items-end gap-3 pt-6 md:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr_auto_auto]">
+      <Card className="gap-0 overflow-hidden rounded-lg border-slate-200 py-0 shadow-none">
+        <CardContent className="grid items-end gap-3 p-4 md:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr_auto_auto]">
           <Input
             value={draftSearch}
             onChange={(event) => setDraftSearch(event.target.value)}
@@ -346,56 +347,40 @@ export function ProductInventoryPageClient() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl border-slate-200 shadow-sm">
-        <CardHeader className="flex flex-col gap-3 border-b bg-slate-50/70 md:flex-row md:items-center md:justify-between">
+      <Card className="gap-0 overflow-hidden rounded-lg border-slate-200 py-0 shadow-none">
+        <CardHeader className="flex flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Boxes className="h-4 w-4" />
-              Grocery/Product Stock Movement
+              Grocery Inventory
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               Showing {items.length} of {meta.total} records
             </p>
           </div>
-          <Select
-            value={limit}
-            onValueChange={(value) => {
-              setLimit(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-full md:w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10 rows</SelectItem>
-              <SelectItem value="25">25 rows</SelectItem>
-              <SelectItem value="50">50 rows</SelectItem>
-              <SelectItem value="100">100 rows</SelectItem>
-            </SelectContent>
-          </Select>
+          <Button variant="outline" size="sm" asChild><Link href="/inventory-adjustments">Stock Corrections &amp; Returns</Link></Button>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="hidden overflow-x-auto lg:block">
-            <Table>
-              <TableHeader className="bg-slate-950">
+          <div className="overflow-x-auto">
+            <Table className="min-w-[1100px] text-sm [&_th]:text-center [&_td]:py-3">
+              <TableHeader className="bg-slate-100">
                 <TableRow>
-                  <TableHead rowSpan={2} className="text-white">Product</TableHead>
-                  <TableHead rowSpan={2} className="text-white">Category</TableHead>
-                  <TableHead colSpan={3} className="bg-emerald-600 text-center text-white">IN</TableHead>
-                  <TableHead colSpan={3} className="bg-rose-500 text-center text-white">OUT</TableHead>
-                  <TableHead colSpan={3} className="bg-blue-500 text-center text-white">CURRENT</TableHead>
-                  <TableHead rowSpan={2} className="text-center text-white">Action</TableHead>
+                  <TableHead rowSpan={2} className="text-slate-700">Product</TableHead>
+                  <TableHead rowSpan={2} className="text-slate-700">Category</TableHead>
+                  <TableHead colSpan={3} className="bg-emerald-50 text-center text-emerald-900">IN</TableHead>
+                  <TableHead colSpan={3} className="bg-rose-50 text-center text-rose-900">OUT</TableHead>
+                  <TableHead colSpan={3} className="bg-blue-50 text-center text-blue-900">CURRENT</TableHead>
+                  <TableHead rowSpan={2} className="text-center text-slate-700">Action</TableHead>
                 </TableRow>
                 <TableRow>
                   {["PCS", "Bags", "Kilos"].map((label) => (
-                    <TableHead key={`in-${label}`} className="text-right text-white">{label}</TableHead>
+                    <TableHead key={`in-${label}`} className="text-center text-slate-700">{label}</TableHead>
                   ))}
                   {["PCS", "Bags", "Kilos"].map((label) => (
-                    <TableHead key={`out-${label}`} className="text-right text-white">{label}</TableHead>
+                    <TableHead key={`out-${label}`} className="text-center text-slate-700">{label}</TableHead>
                   ))}
                   {["PCS", "Bags", "Kilos"].map((label) => (
-                    <TableHead key={`current-${label}`} className="text-right text-white">{label}</TableHead>
+                    <TableHead key={`current-${label}`} className="text-center text-slate-700">{label}</TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
@@ -415,19 +400,19 @@ export function ProductInventoryPageClient() {
                 ) : (
                   items.map((product) => (
                     <TableRow key={product._id}>
-                      <TableCell className="font-bold">{product.name}</TableCell>
+                      <TableCell className="font-medium">{product.name}</TableCell>
                       <TableCell>{product.categoryName || "-"}</TableCell>
-                      <TableCell className="text-right text-emerald-700">{formatNumber(product.stockInPcs)}</TableCell>
-                      <TableCell className="text-right text-emerald-700">{formatNumber(product.stockInBags)}</TableCell>
-                      <TableCell className="text-right text-emerald-700">{formatNumber(product.stockInKilos, 2)}</TableCell>
-                      <TableCell className="text-right text-rose-600">{formatNumber(product.stockOutPcs)}</TableCell>
-                      <TableCell className="text-right text-rose-600">{formatNumber(product.stockOutBags)}</TableCell>
-                      <TableCell className="text-right text-rose-600">{formatNumber(product.stockOutKilos, 2)}</TableCell>
-                      <TableCell className="text-right font-semibold">
+                      <TableCell className="text-center text-emerald-700">{formatNumber(product.stockInPcs)}</TableCell>
+                      <TableCell className="text-center text-emerald-700">{formatNumber(product.stockInBags)}</TableCell>
+                      <TableCell className="text-center text-emerald-700">{formatNumber(product.stockInKilos, 2)}</TableCell>
+                      <TableCell className="text-center text-rose-600">{formatNumber(product.stockOutPcs)}</TableCell>
+                      <TableCell className="text-center text-rose-600">{formatNumber(product.stockOutBags)}</TableCell>
+                      <TableCell className="text-center text-rose-600">{formatNumber(product.stockOutKilos, 2)}</TableCell>
+                      <TableCell className="text-center font-semibold">
                         {formatNumber(product.stockPcs)}
                       </TableCell>
-                      <TableCell className="text-right">{formatNumber(product.stockBags)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(product.stockKilos, 2)}</TableCell>
+                      <TableCell className="text-center">{formatNumber(product.stockBags)}</TableCell>
+                      <TableCell className="text-center">{formatNumber(product.stockKilos, 2)}</TableCell>
                       <TableCell>
                         <div className="flex justify-center">
                           <Button size="sm" variant="outline" asChild>
@@ -441,80 +426,12 @@ export function ProductInventoryPageClient() {
                     </TableRow>
                   ))
                 )}
+                {!isLoading && items.length > 0 && <TableRow className="bg-slate-100 font-semibold"><TableCell colSpan={2}>Page Total ({items.length} products)</TableCell>{(["stockInPcs", "stockInBags", "stockInKilos", "stockOutPcs", "stockOutBags", "stockOutKilos", "stockPcs", "stockBags", "stockKilos"] as const).map(field => <TableCell key={field} className="text-center tabular-nums">{formatNumber(items.reduce((sum, item) => sum + Number(item[field] || 0), 0), field.toLowerCase().includes("kilos") ? 2 : 0)}</TableCell>)}<TableCell /></TableRow>}
               </TableBody>
             </Table>
           </div>
 
-          <div className="space-y-3 p-4 lg:hidden">
-            {isLoading ? (
-              <div className="flex h-32 items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : items.length === 0 ? (
-              <div className="rounded-2xl border p-6 text-center text-sm text-muted-foreground">
-                No grocery/product inventory found.
-              </div>
-            ) : (
-              items.map((product) => (
-                <div key={product._id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                  <div>
-                    <p className="text-base font-black">{product.name}</p>
-                    <p className="text-sm text-muted-foreground">{product.categoryName || "No category"}</p>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-bold text-emerald-700">Stock In</p>
-                      <p className="font-bold">
-                        {formatNumber(product.stockInPcs)} PCS / {formatNumber(product.stockInBags)} bags / {formatNumber(product.stockInKilos, 2)} kg
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-bold text-rose-600">Stock Out</p>
-                      <p className="font-bold">
-                        {formatNumber(product.stockOutPcs)} PCS / {formatNumber(product.stockOutBags)} bags / {formatNumber(product.stockOutKilos, 2)} kg
-                      </p>
-                    </div>
-                    <div className="col-span-2 rounded-xl bg-blue-50 p-3">
-                      <p className="text-xs font-bold text-blue-700">Current Stock</p>
-                      <p className="font-bold">
-                        {formatNumber(product.stockPcs)} PCS / {formatNumber(product.stockBags)} bags / {formatNumber(product.stockKilos, 2)} kg
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <Button size="sm" variant="outline" className="w-full" asChild>
-                      <Link href={`/inventory/products/${product._id}`}>
-                        <Eye className="mr-1 h-4 w-4" />
-                        View Transactions
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3 border-t p-4 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-muted-foreground">
-              Page {meta.page} of {meta.totalPages}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                disabled={page <= 1 || isLoading}
-                onClick={() => setPage((current) => Math.max(current - 1, 1))}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                disabled={page >= meta.totalPages || isLoading}
-                onClick={() => setPage((current) => Math.min(current + 1, meta.totalPages))}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+          <TablePagination page={meta.page} pageSize={Number(limit)} totalPages={meta.totalPages} total={meta.total} from={meta.total ? (meta.page - 1) * Number(limit) + 1 : 0} to={Math.min(meta.page * Number(limit), meta.total)} disabled={isLoading} onPageChange={setPage} onPageSizeChange={value => { setLimit(String(value)); setPage(1); }} />
         </CardContent>
       </Card>
 
@@ -630,7 +547,7 @@ export function ProductInventoryPageClient() {
           </DialogHeader>
           <form onSubmit={saveStock} className="space-y-4">
             <div className="rounded-xl border bg-slate-50 p-4 text-sm">
-              Current selected stock: <span className="font-bold">{formatNumber(stockCurrentValue, stockForm.unit === "KILOS" ? 2 : 0)} {stockForm.unit}</span>
+              Current selected stock: <span className="font-medium">{formatNumber(stockCurrentValue, stockForm.unit === "KILOS" ? 2 : 0)} {stockForm.unit}</span>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">

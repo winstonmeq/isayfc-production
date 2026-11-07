@@ -1,3 +1,4 @@
+import { isProductUsage, productUsage, productUsageLabel } from "@/lib/product-usage";
 import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId, type QueryFilter } from "mongoose";
 
@@ -12,6 +13,8 @@ import {
   getPagination,
 } from "@/lib/crud-utils";
 import CategoryModel from "@/models/Category";
+import { categoryMatchesSource } from "@/lib/category-source";
+import { isInventorySourceCategory, PRODUCT_CATEGORY_ERROR } from "@/lib/product-classification";
 import ProductModel from "@/models/Product";
 import { activeProductUnit } from "@/lib/product-units";
 import { validUnitQuantity } from "@/lib/product-unit-policy";
@@ -20,6 +23,9 @@ function serializeProduct(product: any) {
   return {
     _id: product._id.toString(),
     name: product.name,
+    inventorySource: "GROCERY",
+    usage: productUsage(product.usage),
+    usageLabel: productUsageLabel(product.usage),
     unitCode: product.unitCode || "PCS",
     categoryId: product.categoryId?._id?.toString?.() || product.categoryId?.toString?.(),
     categoryName: product.categoryId?.name || "",
@@ -44,6 +50,7 @@ export async function GET(req: NextRequest) {
   const { page, limit, skip } = getPagination(searchParams);
   const search = cleanString(searchParams.get("search"));
   const categoryId = cleanString(searchParams.get("categoryId"));
+  const usage = cleanString(searchParams.get("usage"));
 
   const filter: QueryFilter<any> = {
     isActive: true,
@@ -58,6 +65,10 @@ export async function GET(req: NextRequest) {
 
   if (categoryId && isValidObjectId(categoryId)) {
     filter.categoryId = categoryId;
+  }
+
+  if (usage && usage !== "ALL" && isProductUsage(usage)) {
+    filter.usage = usage;
   }
 
   const [items, total] = await Promise.all([
@@ -89,6 +100,7 @@ async function handlePOST(req: NextRequest) {
   await dbConnect();
 
   const body = await req.json();
+  if (body.usage !== undefined && !isProductUsage(body.usage)) return NextResponse.json({ success: false, message: "Select a valid product usage." }, { status: 400 });
   const name = cleanString(body.name);
   const categoryId = cleanString(body.categoryId);
 
@@ -106,11 +118,13 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
-  const categoryExists = await CategoryModel.exists({
+  const categoryExists = await CategoryModel.findOne({
     _id: categoryId,
     isActive: true,
   });
 
+  if (isInventorySourceCategory(categoryExists?.name)) return NextResponse.json({ success: false, message: PRODUCT_CATEGORY_ERROR }, { status: 400 });
+  if (categoryExists && !categoryMatchesSource(categoryExists.source, "GROCERY")) return NextResponse.json({ success: false, message: "Choose a grocery or Shared category for this product." }, { status: 400 });
   if (!categoryExists) {
     return NextResponse.json(
       { success: false, message: "Category not found." },
@@ -123,6 +137,7 @@ async function handlePOST(req: NextRequest) {
   if (!validUnitQuantity(cleanNumber(body.stockPcs), unit.allowsDecimal)) return NextResponse.json({ success: false, message: "Stock quantity does not match the selected unit." }, { status: 400 });
   const product = await ProductModel.create({
     unitCode: unit!.code,
+    ...(body.usage !== undefined ? { usage: body.usage } : {}),
     name,
     categoryId,
     buyingPrice: cleanNumber(body.buyingPrice),

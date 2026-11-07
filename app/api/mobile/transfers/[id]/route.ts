@@ -1,4 +1,5 @@
 import { postOutletDelivery, OutletDeliveryPostingError } from "@/lib/post-outlet-delivery";
+import { outletProductClassification } from "@/lib/outlet-product-classification";
 import { weightedCompanyCost } from "@/lib/company-cost";
 // app/api/mobile/transfers/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
@@ -151,6 +152,7 @@ export async function POST(
       }
 
       const items = await StockTransferItemModel.find({ transferId: id }).session(mongoSession);
+      if (items.some(item => item.itemStatus !== "PENDING")) throw new ApiError(409, "This delivery has product-level decisions. Complete it in the web outlet Receive Deliveries page.");
 
       let totalReceivedQty = 0;
       let totalVarianceQty = 0;
@@ -173,7 +175,7 @@ export async function POST(
         const variancePcs = varianceQty * unitToPcs;
         const source = item.source === "GROCERY" ? "GROCERY" : "BODEGA";
         const baseUnit =
-          item.baseUnit === "HEAD" || item.unitLabel === "HEAD"
+          item.baseUnit === "KG" ? "KG" : item.baseUnit === "HEAD" || item.unitLabel === "HEAD"
             ? "HEAD"
             : source === "GROCERY"
               ? "QTY"
@@ -209,10 +211,12 @@ export async function POST(
         ).session(mongoSession);
 
         let inventoryId = existingInventory?._id;
+        const classification = await outletProductClassification(source, productRef, mongoSession, item.categoryName);
         let previousStock = 0;
         let newStock = receivedPcs;
 
         if (existingInventory) {
+          existingInventory.set(classification);
           previousStock = Number(existingInventory.stockQty || 0);
           newStock = previousStock + receivedPcs;
           const existingBaseCost = toBaseUnitCost(
@@ -247,7 +251,7 @@ export async function POST(
                 productSource: source,
                 productId: productRef,
                 productName: item.productName,
-                categoryName: item.categoryName,
+                ...classification,
                 stockQty: receivedPcs,
                 unitLabel: baseUnit,
                 unitCode: item.unitLabel === "PACK" ? "PCS" : item.unitCode || baseUnit,

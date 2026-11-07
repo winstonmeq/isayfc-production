@@ -15,6 +15,7 @@ import ExpenseTypeModel from "@/models/ExpenseType";
 import { ensureDefaultExpenseTypes, expenseTypeCode } from "@/lib/expense-types";
 import { isMainExpenseCategory } from "@/lib/expense-scope";
 import { parseExpenseDate } from "@/lib/expense-date";
+import { excludeLegacyDeliveryExpenses } from "@/lib/main-expense-policy";
 
 const expenseCategories: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"];
 
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest) {
 
   const andFilters: Record<string, any>[] = [
     { isActive: true },
+    excludeLegacyDeliveryExpenses(),
     { outletId: null },
     { expenseCategory: { $ne: "OUTLET" } },
   ];
@@ -243,7 +245,7 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
-  const validType = await ExpenseTypeModel.exists({ code: type, isActive: true });
+  const validType = type !== "OWNER_OUTLET_DELIVERY" && await ExpenseTypeModel.exists({ code: type, isActive: true });
   if (!validType) {
     return NextResponse.json(
       { success: false, message: "Select a valid active expense type." },

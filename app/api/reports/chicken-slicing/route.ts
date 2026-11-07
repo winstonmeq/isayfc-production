@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mainOperatingExpenseFilter } from "@/lib/main-expense-policy";
 import { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
@@ -63,7 +64,7 @@ function getBodegaExpenseCategoryFilter() {
 
 function buildBodegaExpenseFilter(dateFrom: string, dateTo: string) {
   const filter: Record<string, any> = {
-    isActive: true,
+    ...mainOperatingExpenseFilter(),
     ...getBodegaExpenseCategoryFilter(),
   };
 

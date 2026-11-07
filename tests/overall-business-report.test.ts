@@ -6,6 +6,27 @@ const date = "2026-11-01T08:00:00Z";
 const sale = (extra: Partial<OverallSale>): OverallSale => ({ id: "sale", date, customer: "Walk-in", ...extra });
 const outlets = [{ id: "a", name: "Outlet A" }];
 
+test("posted returns reduce net sales and restore cost only for sellable goods", () => {
+  const report = buildOverallBusinessReport([
+    sale({ source: "CHICKEN", totalAmount: 100 }),
+    sale({ id: "return-good", source: "CHICKEN", returnAmount: 30, returnCost: 18 }),
+    sale({ id: "return-damaged", source: "BODEGA", returnAmount: 20, returnCost: 0 }),
+  ], [{ saleId: "sale", baseQty: 10, unitCost: 6 }], [], []);
+  assert.equal(report.totals.grossSales, 100);
+  assert.equal(report.totals.salesReturns, 50);
+  assert.equal(report.totals.netSales, 50);
+  assert.equal(report.totals.cogs, 42);
+  assert.equal(report.totals.netProfit, 8);
+});
+
+test("return in a later period does not require original sale in the period", () => {
+  const report = buildOverallBusinessReport([sale({ source: "CHICKEN", returnAmount: 30, returnCost: 18 })], [], [], []);
+  assert.equal(report.totals.netSales, -30);
+  assert.equal(report.totals.cogs, -18);
+  assert.equal(report.totals.netProfit, -12);
+  assert.equal(report.totals.missingCostLines, 0);
+});
+
 test("regular owner-outlet customer sales and marked-up automatic expenses are both eliminated", () => {
   const report = buildOverallBusinessReport([
     sale({ id: "delivery", source: "CHICKEN", transactionType: "EXTERNAL_SALE", ownerOutletId: "a", totalAmount: 1700 }),

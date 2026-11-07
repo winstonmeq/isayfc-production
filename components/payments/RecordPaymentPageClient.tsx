@@ -122,7 +122,7 @@ export function RecordPaymentPageClient({ initialCustomerId = "" }: Props) {
         throw new Error(json.message || "Failed to load customers.");
       }
 
-      setCustomers(json.data || []);
+      setCustomers((json.data || []).filter((customer: { paymentRequired?: boolean }) => customer.paymentRequired !== false));
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to load customers."

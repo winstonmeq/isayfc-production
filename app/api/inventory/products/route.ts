@@ -1,3 +1,4 @@
+import { isProductUsage, productUsage, productUsageLabel } from "@/lib/product-usage";
 import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 
@@ -7,6 +8,8 @@ import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString, escapeRegex, getPagination } from "@/lib/crud-utils";
 import { addDays } from "@/lib/date-utils";
 import CategoryModel from "@/models/Category";
+import { categoryMatchesSource } from "@/lib/category-source";
+import { isInventorySourceCategory, PRODUCT_CATEGORY_ERROR } from "@/lib/product-classification";
 import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ProductModel from "@/models/Product";
 import { activeMovementTransactions } from "@/lib/stock-movement-report";
@@ -36,6 +39,9 @@ function serializeProduct(product: any, movement?: ProductMovement) {
   return {
     _id: product._id?.toString?.() || String(product._id),
     name: product.name || "",
+    inventorySource: "GROCERY",
+    usage: productUsage(product.usage),
+    usageLabel: productUsageLabel(product.usage),
     categoryId: product.categoryId?._id?.toString?.() || product.categoryId?.toString?.() || "",
     categoryName: product.categoryId?.name || "",
     buyingPrice,
@@ -68,6 +74,7 @@ export async function GET(req: NextRequest) {
   const { page, limit, skip } = getPagination(searchParams);
   const search = cleanString(searchParams.get("search"));
   const categoryId = cleanString(searchParams.get("categoryId"));
+  const usage = cleanString(searchParams.get("usage"));
   const stockStatus = cleanString(searchParams.get("stockStatus"));
   const dateFrom = cleanString(searchParams.get("dateFrom"));
   const dateTo = cleanString(searchParams.get("dateTo"));
@@ -82,6 +89,10 @@ export async function GET(req: NextRequest) {
 
   if (categoryId && categoryId !== "ALL" && isValidObjectId(categoryId)) {
     filter.categoryId = categoryId;
+  }
+
+  if (usage && usage !== "ALL" && isProductUsage(usage)) {
+    filter.usage = usage;
   }
 
   if (stockStatus === "LOW") {
@@ -293,6 +304,7 @@ async function handlePOST(req: NextRequest) {
   await dbConnect();
 
   const body = await req.json();
+  if (body.usage !== undefined && !isProductUsage(body.usage)) return NextResponse.json({ success: false, message: "Select a valid product usage." }, { status: 400 });
   const name = cleanString(body.name).toUpperCase();
   const categoryId = cleanString(body.categoryId);
 
@@ -310,7 +322,9 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
-  const categoryExists = await CategoryModel.exists({ _id: categoryId, isActive: true });
+  const categoryExists = await CategoryModel.findOne({ _id: categoryId, isActive: true });
+  if (isInventorySourceCategory(categoryExists?.name)) return NextResponse.json({ success: false, message: PRODUCT_CATEGORY_ERROR }, { status: 400 });
+  if (categoryExists && !categoryMatchesSource(categoryExists.source, "GROCERY")) return NextResponse.json({ success: false, message: "Choose a grocery or Shared category for this product." }, { status: 400 });
   if (!categoryExists) {
     return NextResponse.json(
       { success: false, message: "Category not found." },
@@ -329,6 +343,7 @@ async function handlePOST(req: NextRequest) {
   const product = await ProductModel.create({
     name,
     categoryId,
+    ...(body.usage !== undefined ? { usage: body.usage } : {}),
     buyingPrice: cleanNumber(body.buyingPrice),
     unitPrice: cleanNumber(body.unitPrice),
     stockPcs: cleanNumber(body.stockPcs),

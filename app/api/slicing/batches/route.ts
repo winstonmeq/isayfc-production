@@ -8,8 +8,6 @@ import SlicingBatchModel from "@/models/SlicingBatch";
 import SlicingItemModel from "@/models/SlicingItem";
 import SlicingStandardModel from "@/models/SlicingStandard";
 
-const MIN_SLICING_YIELD_RATE = 0.7;
-const MAX_SLICING_YIELD_RATE = 1.2;
 const MAX_HEADS_PER_ROW = 1_000;
 
 // A user-input problem, not a server fault: the catch returns these as 400
@@ -67,9 +65,6 @@ function toNumber(value: unknown) {
   return Number.isFinite(num) ? num : 0;
 }
 
-function formatNumber(value: number, digits = 2) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(digits);
-}
 
 export async function POST(req: NextRequest) {
   const { response } = await requirePermission("slicing.manage");
@@ -168,16 +163,7 @@ export async function POST(req: NextRequest) {
       }
 
       const totalStdPcs = heads * standardSlice;
-      const yieldRate = totalStdPcs > 0 ? actualSlicedPcs / totalStdPcs : 0;
 
-      if (
-        yieldRate < MIN_SLICING_YIELD_RATE ||
-        yieldRate > MAX_SLICING_YIELD_RATE
-      ) {
-        throw new ValidationError(
-          `Yield is ${formatNumber(yieldRate * 100)}%. Expected range is ${formatNumber(MIN_SLICING_YIELD_RATE * 100, 0)}% to ${formatNumber(MAX_SLICING_YIELD_RATE * 100, 0)}%. Please recount before saving.`
-        );
-      }
 
       const actualPacks =
         standardPacking > 0

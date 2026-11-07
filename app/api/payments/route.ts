@@ -1,4 +1,4 @@
-import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+import { nonCollectibleSaleClauses } from "@/lib/main-payment-policy";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { isValidObjectId, type QueryFilter } from "mongoose";
 
@@ -18,6 +18,7 @@ import CustomerModel from "@/models/Customer";
 import PaymentModel from "@/models/Payment";
 import PaymentAllocationModel from "@/models/PaymentAllocation";
 import SaleModel from "@/models/Sale";
+import { mainSaleBalance } from "@/lib/main-return-settlement";
 import { outletSaleMatchClauses } from "@/lib/sale-origin";
 
 export const runtime = "nodejs";
@@ -87,6 +88,8 @@ export async function GET(req: NextRequest) {
   const { page, limit, skip } = getPagination(searchParams);
   const customerId = cleanString(searchParams.get("customerId"));
   const search = cleanString(searchParams.get("search"));
+  const group = cleanString(searchParams.get("group")).toUpperCase();
+  if (group && !["ALL", "SALE", "OUTLET"].includes(group)) return NextResponse.json({ success: false, message: "Select a valid customer type." }, { status: 400 });
   const dateFrom = cleanString(searchParams.get("dateFrom"));
   const dateTo = cleanString(searchParams.get("dateTo"));
 
@@ -110,13 +113,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (search) {
+  if (search || group === "SALE" || group === "OUTLET") {
+    // Combine type, selected customer and name; retain inactive customer history.
     const customers = await CustomerModel.find({
-      isActive: true,
-      name: {
-        $regex: escapeRegex(search),
-        $options: "i",
-      },
+      ...(customerId && customerId !== "ALL" && isValidObjectId(customerId) ? { _id: customerId } : {}),
+      ...(search ? { name: { $regex: escapeRegex(search), $options: "i" } } : {}),
+      ...(group === "SALE" ? { outletId: null } : group === "OUTLET" ? { outletId: { $exists: true, $ne: null } } : {}),
     })
       .select("_id")
       .lean();
@@ -205,6 +207,8 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
+  if (customer.outletId) return NextResponse.json({ success: false, message: "Internal — No Payment Required. Record actual outlet cash through outlet remittances, not customer payments." }, { status: 409 });
+
   let receiptImageUrl = "";
   const receiptImage = formData.get("receiptImage");
 
@@ -251,7 +255,7 @@ async function handlePOST(req: NextRequest) {
       let appliedAmount = 0;
 
       const unpaidSales = await SaleModel.find({
-        $nor: [...outletSaleMatchClauses(), ...internalOutletMatchClauses()],
+        $nor: [...outletSaleMatchClauses(), ...nonCollectibleSaleClauses()],
         customerId,
         isVoided: false,
         fulfillmentStatus: { $ne: "PENDING" },
@@ -269,7 +273,7 @@ async function handlePOST(req: NextRequest) {
         const amountToApply = Math.min(remainingAmount, saleBalance);
 
         sale.paidAmount = Number(sale.paidAmount || 0) + amountToApply;
-        sale.balance = Math.max(Number(sale.totalAmount || 0) - sale.paidAmount, 0);
+        sale.balance = mainSaleBalance(sale);
 
         if (sale.balance <= 0) {
           sale.status = "PAID";

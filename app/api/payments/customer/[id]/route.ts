@@ -1,4 +1,4 @@
-import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+import { nonCollectibleSaleClauses } from "@/lib/main-payment-policy";
 // app/api/payments/customer/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId, Types } from "mongoose";
@@ -55,8 +55,10 @@ function formatSale(sale: any) {
     _id: sale._id.toString(),
     saleDate: sale.saleDate ? new Date(sale.saleDate).toISOString() : undefined,
     receiptNumber: sale.receiptNumber || "",
-    totalAmount: Number(sale.totalAmount || 0),
-    paidAmount: Number(sale.paidAmount || 0),
+    totalAmount: Number(sale.totalAmount || 0) - Number(sale.returnedAmount || 0),
+    paidAmount: Number(sale.paidAmount || 0) - Number(sale.refundedAmount || 0),
+    returnedAmount: Number(sale.returnedAmount || 0),
+    refundedAmount: Number(sale.refundedAmount || 0),
     balance: Number(sale.balance || 0),
     totalPacks: Number(sale.totalPacks || sale.totalQty || 0),
     remarks: sale.remarks || "",
@@ -85,12 +87,14 @@ function formatPayment(payment: any) {
 function summarizeSales(sales: any[]) {
   return sales.reduce(
     (sum, sale) => ({
-      totalSales: sum.totalSales + Number(sale.totalAmount || 0),
+      totalSales: sum.totalSales + Number(sale.totalAmount || 0) - Number(sale.returnedAmount || 0),
+      refunds: sum.refunds + Number(sale.refundedAmount || 0),
       totalPacks:
         sum.totalPacks + Number(sale.totalPacks || sale.totalQty || 0),
     }),
     {
       totalSales: 0,
+      refunds: 0,
       totalPacks: 0,
     }
   );
@@ -147,7 +151,7 @@ export async function GET(
     ...customerMatch,
     ...notVoidedFilter(),
     fulfillmentStatus: { $ne: "PENDING" as const },
-    $nor: [...outletSaleMatchClauses(), ...internalOutletMatchClauses()],
+    $nor: [...outletSaleMatchClauses(), ...nonCollectibleSaleClauses()],
   };
 
   const overallPaymentFilter = {
@@ -209,6 +213,8 @@ export async function GET(
 
   const filteredSales = summarizeSales(filteredSalesRecords);
   const filteredPayments = summarizePayments(filteredPaymentsRecords);
+  overallPayments.totalPaid = Math.max(0, overallPayments.totalPaid - overallSales.refunds);
+  filteredPayments.totalPaid = Math.max(0, filteredPayments.totalPaid - filteredSales.refunds);
 
   return NextResponse.json({
     success: true,

@@ -10,6 +10,7 @@ import PaymentModel from "@/models/Payment";
 import PurchaseBatchModel from "@/models/PurchaseBatch";
 import SaleModel from "@/models/Sale";
 import { internalOutletMatchClauses } from "@/lib/internal-outlet";
+import { mainOperatingExpenseFilter } from "@/lib/main-expense-policy";
 import { outletSaleMatchClauses } from "@/lib/sale-origin";
 import SupplierModel from "@/models/Supplier";
 import SlicingBatchModel from "@/models/SlicingBatch";
@@ -416,7 +417,7 @@ async function recentPayments() {
 
 async function recentExpenses() {
   const rows = await (ExpenseModel as any)
-    .find({ isActive: true })
+    .find(mainOperatingExpenseFilter())
     .select("name type expenseCategory amount expenseDate createdAt")
     .sort({ expenseDate: -1, createdAt: -1 })
     .limit(5)
@@ -566,11 +567,11 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const paymentFilter = notVoidedFilter();
   const deliveryFilter = notVoidedFilter();
   const purchaseBatchFilter = notVoidedFilter();
-  const expenseFilter = { isActive: true };
+  const expenseFilter = mainOperatingExpenseFilter();
   // BODEGA must include legacy expenses created before expenseCategory existed
   // (missing / null / empty), mirroring the Expenses API's categoryFilter.
   const bodegaExpenseFilter = {
-    isActive: true,
+    ...mainOperatingExpenseFilter(),
     $or: [
       { expenseCategory: "BODEGA" },
       { expenseCategory: { $exists: false } },
@@ -578,7 +579,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       { expenseCategory: "" },
     ],
   };
-  const groceryExpenseFilter = { isActive: true, expenseCategory: "GROCERY" };
+  const groceryExpenseFilter = { ...mainOperatingExpenseFilter(), expenseCategory: "GROCERY" };
 
   const [
     totalCustomers,

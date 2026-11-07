@@ -68,10 +68,13 @@ export async function GET(req: NextRequest) {
   const dateTo = cleanString(searchParams.get("dateTo"));
   const minTotal = cleanNumber(searchParams.get("minTotal"));
   const maxTotal = cleanNumber(searchParams.get("maxTotal"));
+  const supplierId = cleanString(searchParams.get("supplierId"));
+  if (supplierId && !isValidObjectId(supplierId)) return NextResponse.json({ success: false, message: "Select a valid supplier." }, { status: 400 });
 
   const filter: Record<string, any> = {
     isVoided: false,
   };
+  if (supplierId) filter.supplierId = new mongoose.Types.ObjectId(supplierId);
 
   if (dateFrom || dateTo) {
     filter.datePurchased = {};

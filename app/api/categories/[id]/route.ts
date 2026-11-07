@@ -7,6 +7,10 @@ import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanString, serializeDocument } from "@/lib/crud-utils";
 import CategoryModel from "@/models/Category";
+import { isCategorySource, categorySource, categorySourceLabel, categoryMatchesSource } from "@/lib/category-source";
+import Product from "@/models/Product";
+import BodegaProduct from "@/models/BodegaProduct";
+import { isInventorySourceCategory, PRODUCT_CATEGORY_ERROR } from "@/lib/product-classification";
 
 export async function GET(
   _req: NextRequest,
@@ -47,7 +51,7 @@ export async function GET(
 
   return NextResponse.json({
     success: true,
-    data: serializeDocument(category),
+    data: { ...serializeDocument(category), source: isCategorySource(category.source) ? category.source : "", sourceLabel: categorySourceLabel(category.source) },
   });
 }
 
@@ -74,8 +78,19 @@ async function handlePATCH(
   await dbConnect();
 
   const body = await req.json();
+  if (body.source !== undefined) {
+    if (!isCategorySource(body.source)) return NextResponse.json({ success: false, message: "Select a valid category source." }, { status: 400 });
+    const [grocery, bodega] = await Promise.all([
+      categoryMatchesSource(body.source, "GROCERY") ? null : Product.exists({ categoryId: id, isActive: true }),
+      categoryMatchesSource(body.source, "BODEGA") ? null : BodegaProduct.exists({ categoryId: id, isActive: true }),
+    ]);
+    if (grocery || bodega) return NextResponse.json({ success: false, message: "This category is assigned to products from another source. Keep it Shared or reassign those products first." }, { status: 409 });
+  }
 
   const name = cleanString(body.name);
+  const currentCategory = await CategoryModel.findOne({ _id: id, isActive: true }).select("name").lean();
+  if (!currentCategory) return NextResponse.json({ success: false, message: "Category not found." }, { status: 404 });
+  if (isInventorySourceCategory(name) && name.toUpperCase() !== currentCategory.name.toUpperCase()) return NextResponse.json({ success: false, message: PRODUCT_CATEGORY_ERROR }, { status: 400 });
   const description = cleanString(body.description);
 
   if (!name) {
@@ -96,9 +111,11 @@ async function handlePATCH(
     {
       name,
       description,
+      ...(body.source !== undefined ? { source: categorySource(body.source) } : {}),
     },
     {
       new: true,
+      runValidators: true,
     }
   ).lean();
 
@@ -112,10 +129,14 @@ async function handlePATCH(
     );
   }
 
+  if ((body.source !== undefined && updatedCategory.source !== body.source)) {
+    return NextResponse.json({ success: false, message: "Category classification was not saved. Restart the application server and retry." }, { status: 500 });
+  }
+
   return NextResponse.json({
     success: true,
     message: "Category updated successfully.",
-    data: serializeDocument(updatedCategory),
+    data: { ...serializeDocument(updatedCategory), source: categorySource(updatedCategory.source), sourceLabel: categorySourceLabel(updatedCategory.source) },
   });
 }
 

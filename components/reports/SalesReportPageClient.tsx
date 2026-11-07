@@ -12,6 +12,7 @@ import {
 } from "./ReportShell";
 import { buildRangeParams } from "./ReportShell";
 import { toast } from "sonner";
+import { MainReturnsTable, type MainReturnReportRow } from "./MainReturnsTable";
 
 type RegisterRow = {
   grossSales: number;
@@ -59,6 +60,9 @@ type ChickenCutsMatrix = {
   grandTotal: number;
 };
 type SalesReport = {
+  returns: MainReturnReportRow[];
+  returnsTotal: number;
+  netAfterReturns: number;
   range: { start: string; end: string };
   generatedAt: string;
   rows: RegisterRow[];
@@ -179,7 +183,8 @@ export function SalesReportPageClient() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <StatCard label="Gross Sales" value={peso(data.grand.grossSales)} />
             <StatCard label="Sales Discounts" value={peso(data.grand.discounts)} />
-            <StatCard label="Net Sales" value={peso(data.grand.total)} />
+            <StatCard label="Sales Returns" value={peso(data.returnsTotal || 0)} />
+            <StatCard label="Net Sales after Returns" value={peso(data.netAfterReturns ?? data.grand.total)} />
             <StatCard label="Transactions" value={qtyFmt(data.grand.count)} />
             <StatCard
               label="Cash Sales"
@@ -194,6 +199,7 @@ export function SalesReportPageClient() {
             />
           </div>
 
+          <MainReturnsTable rows={data.returns} />
           {/* Tabs */}
           <div className="no-print flex gap-1 border-b border-slate-200">
             {([

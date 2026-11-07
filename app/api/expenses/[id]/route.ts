@@ -66,6 +66,7 @@ async function handlePATCH(
   }
 
   await dbConnect();
+  if (await ExpenseModel.exists({ _id: id, capitalizedByBatch: { $ne: null } })) return NextResponse.json({ success: false, message: "This cost is allocated to production. Reverse the batch before changing the expense." }, { status: 409 });
   if (await ExpenseModel.exists({ _id: id, origin: "OWNER_OUTLET_DELIVERY" })) {
     return NextResponse.json({ success: false, message: "Automatic delivery expenses cannot be edited or deleted. Review the linked delivery and sale." }, { status: 409 });
   }
@@ -85,7 +86,7 @@ async function handlePATCH(
   const amount = cleanNumber(body.amount);
   const remarks = cleanString(body.remarks);
 
-  const validType = await ExpenseTypeModel.exists({ code: type, isActive: true });
+  const validType = type !== "OWNER_OUTLET_DELIVERY" && await ExpenseTypeModel.exists({ code: type, isActive: true });
   if (!validType) {
     return NextResponse.json(
       { success: false, message: "Select a valid active expense type." },
@@ -124,7 +125,7 @@ async function handlePATCH(
   }
 
   const expense = await ExpenseModel.findOneAndUpdate(
-    { _id: id, origin: { $ne: "OWNER_OUTLET_DELIVERY" }, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
+    { _id: id, origin: { $ne: "OWNER_OUTLET_DELIVERY" }, capitalizedByBatch: null, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
     {
       name,
       expenseCategory,
@@ -168,12 +169,13 @@ async function handleDELETE(
 
   await dbConnect();
 
+  if (await ExpenseModel.exists({ _id: id, capitalizedByBatch: { $ne: null } })) return NextResponse.json({ success: false, message: "This cost is allocated to production. Reverse the batch before changing the expense." }, { status: 409 });
   if (await ExpenseModel.exists({ _id: id, origin: "OWNER_OUTLET_DELIVERY" })) {
     return NextResponse.json({ success: false, message: "Automatic delivery expenses cannot be edited or deleted. Review the linked delivery and sale." }, { status: 409 });
   }
 
   const expense = await ExpenseModel.findOneAndUpdate(
-    { _id: id, origin: { $ne: "OWNER_OUTLET_DELIVERY" }, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
+    { _id: id, origin: { $ne: "OWNER_OUTLET_DELIVERY" }, capitalizedByBatch: null, isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" } },
     { isActive: false },
     { new: true }
   );

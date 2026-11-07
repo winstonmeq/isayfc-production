@@ -1,5 +1,5 @@
 export type ChickenMovement = {
-  kilos?: number; previousStock?: number; newStock?: number;
+  kilos?: number; kilosDelta?: number; previousStock?: number; newStock?: number;
   transactionDate: Date | string; referenceType?: string;
   sourceVoided?: boolean;
 };
@@ -13,8 +13,8 @@ export function reconcileChickenKilos(currentKilos: number, movements: ChickenMo
     if (at < start.getTime()) continue;
     const delta = Number(movement.newStock || 0) - Number(movement.previousStock || 0);
     const kilos = Number(movement.kilos || 0);
-    if (delta !== 0 && kilos === 0) incomplete = true;
-    const signed = Math.sign(delta) * kilos;
+    if (delta !== 0 && kilos === 0 && movement.kilosDelta == null) incomplete = true;
+    const signed = movement.kilosDelta ?? Math.sign(delta) * kilos;
     if (at >= end.getTime()) after += signed;
     else {
       during += signed;

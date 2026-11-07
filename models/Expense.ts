@@ -12,7 +12,17 @@ export interface IExpense extends Document {
   type: ExpenseType;
   expenseDate: Date;
   amount: number;
-  origin?: "MANUAL" | "OWNER_OUTLET_DELIVERY";
+  origin?: "MANUAL" | "OWNER_OUTLET_DELIVERY" | "PRODUCTION_USAGE" | "STOCK_USAGE";
+  capitalizedByBatch?: Types.ObjectId;
+  linkedInventoryId?: Types.ObjectId;
+  consumedQuantity?: number;
+  consumptionUnit?: string;
+  consumptionUnitCost?: number;
+  companyAmount?: number;
+  consumptionUsage?: string;
+  consumptionRequestHash?: string;
+  deductFromCashSale?: boolean;
+  expenseNature?: "CASH_SALE_EXPENSE" | "PERIOD_EXPENSE";
   linkedTransferId?: Types.ObjectId;
   linkedSaleId?: Types.ObjectId;
   beneficiaryOutletId?: Types.ObjectId;
@@ -31,7 +41,15 @@ const expenseCategoryValues: ExpenseCategory[] = ["GROCERY", "BODEGA", "OUTLET"]
 
 const ExpenseSchema = new Schema<IExpense>(
   {
-    origin: { type: String, enum: ["MANUAL", "OWNER_OUTLET_DELIVERY"], default: "MANUAL", index: true },
+    origin: { type: String, enum: ["MANUAL", "OWNER_OUTLET_DELIVERY", "PRODUCTION_USAGE", "STOCK_USAGE"], default: "MANUAL", index: true },
+    capitalizedByBatch: { type: Schema.Types.ObjectId, ref: "MainProductionBatch", default: null, index: true },
+    linkedInventoryId: { type: Schema.Types.ObjectId, ref: "OutletInventory" },
+    consumedQuantity: { type: Number, min: 0 },
+    consumptionUnit: String,
+    consumptionUnitCost: { type: Number, min: 0 },
+    companyAmount: { type: Number, min: 0 },
+    consumptionUsage: String,
+    consumptionRequestHash: String,
     linkedTransferId: { type: Schema.Types.ObjectId, ref: "StockTransfer", index: true },
     linkedSaleId: { type: Schema.Types.ObjectId, ref: "Sale" },
     beneficiaryOutletId: { type: Schema.Types.ObjectId, ref: "Outlet" },
@@ -66,6 +84,19 @@ const ExpenseSchema = new Schema<IExpense>(
       type: Number,
       required: true,
       min: 0,
+    },
+
+    deductFromCashSale: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+
+    expenseNature: {
+      type: String,
+      enum: ["CASH_SALE_EXPENSE", "PERIOD_EXPENSE"],
+      default: "CASH_SALE_EXPENSE",
+      index: true,
     },
 
     outletId: {
@@ -108,6 +139,8 @@ ExpenseSchema.index({ expenseDate: -1 });
 ExpenseSchema.index({ isActive: 1 });
 ExpenseSchema.index({ shiftId: 1 });
 ExpenseSchema.index({ outletId: 1, expenseDate: -1 });
+
+if (mongoose.models.Expense && !mongoose.models.Expense.schema.path("capitalizedByBatch")) mongoose.deleteModel("Expense");
 
 const ExpenseModel: Model<IExpense> =
   mongoose.models.Expense || mongoose.model<IExpense>("Expense", ExpenseSchema);

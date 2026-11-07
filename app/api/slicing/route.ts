@@ -15,8 +15,6 @@ import StandardPackingModel from "@/models/StandardPacking";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const MIN_SLICING_YIELD_RATE = 0.7;
-const MAX_SLICING_YIELD_RATE = 1.2;
 const MAX_HEADS_PER_ROW = 1_000;
 
 type SlicingItemInput = {
@@ -43,10 +41,6 @@ function fail(status: number, message: string): never {
 function toNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatNumber(value: number, digits = 2) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(digits);
 }
 
 function roundMoney(value: number) {
@@ -551,18 +545,6 @@ async function handlePOST(req: NextRequest) {
       );
       const recoveryProfit = roundMoney(outputValue - inputCost);
 
-	    if (
-	      yieldRate < MIN_SLICING_YIELD_RATE ||
-	      yieldRate > MAX_SLICING_YIELD_RATE
-	    ) {
-	      return NextResponse.json(
-	        {
-	          success: false,
-	          message: `${(slicedProduct as any).name} yield is ${formatNumber(yieldRate * 100)}%. Expected range is ${formatNumber(MIN_SLICING_YIELD_RATE * 100, 0)}% to ${formatNumber(MAX_SLICING_YIELD_RATE * 100, 0)}%. Please recount before saving.`,
-	        },
-	        { status: 400 }
-	      );
-	    }
 
     totalHeads += heads;
     totalKilos += kilos;

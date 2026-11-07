@@ -1,3 +1,4 @@
+import { isProductUsage, productUsage, productUsageLabel } from "@/lib/product-usage";
 import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 
@@ -6,6 +7,8 @@ import { requirePermission } from "@/lib/require-permission";
 import { withAuditLog } from "@/lib/audit-log";
 import { cleanNumber, cleanString } from "@/lib/crud-utils";
 import CategoryModel from "@/models/Category";
+import { categoryMatchesSource } from "@/lib/category-source";
+import { isInventorySourceCategory, PRODUCT_CATEGORY_ERROR } from "@/lib/product-classification";
 import ProductModel from "@/models/Product";
 import InventoryTransaction from "@/models/InventoryTransaction";
 import { activeProductUnit } from "@/lib/product-units";
@@ -15,6 +18,9 @@ function serializeProduct(product: any) {
   return {
     _id: product._id.toString(),
     name: product.name,
+    inventorySource: "GROCERY",
+    usage: productUsage(product.usage),
+    usageLabel: productUsageLabel(product.usage),
     unitCode: product.unitCode || "PCS",
     categoryId: product.categoryId?._id?.toString?.() || product.categoryId?.toString?.(),
     categoryName: product.categoryId?.name || "",
@@ -78,6 +84,7 @@ async function handlePATCH(
   await dbConnect();
 
   const body = await req.json();
+  if (body.usage !== undefined && !isProductUsage(body.usage)) return NextResponse.json({ success: false, message: "Select a valid product usage." }, { status: 400 });
   const name = cleanString(body.name);
   const categoryId = cleanString(body.categoryId);
 
@@ -95,11 +102,13 @@ async function handlePATCH(
     );
   }
 
-  const categoryExists = await CategoryModel.exists({
+  const categoryExists = await CategoryModel.findOne({
     _id: categoryId,
     isActive: true,
   });
 
+  if (isInventorySourceCategory(categoryExists?.name)) return NextResponse.json({ success: false, message: PRODUCT_CATEGORY_ERROR }, { status: 400 });
+  if (categoryExists && !categoryMatchesSource(categoryExists.source, "GROCERY")) return NextResponse.json({ success: false, message: "Choose a grocery or Shared category for this product." }, { status: 400 });
   if (!categoryExists) {
     return NextResponse.json(
       { success: false, message: "Category not found." },
@@ -119,6 +128,7 @@ async function handlePATCH(
     {
       name,
       unitCode: unit.code,
+      ...(body.usage !== undefined ? { usage: body.usage } : {}),
       categoryId,
       buyingPrice: cleanNumber(body.buyingPrice),
       unitPrice: cleanNumber(body.unitPrice),

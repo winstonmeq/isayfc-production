@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EntryDialogContent } from "@/components/erp/EntryForm";
 import { ErpPage, ErpPageHeader } from "@/components/erp/ErpShell";
@@ -10,7 +11,7 @@ import { formatPeso } from "@/lib/utils";
 
 type Payment = { _id: string; customerName: string; paymentDate: string; referenceNumber: string; amount: number; appliedAmount: number; unappliedAmount: number; remarks: string; createdByName: string; allocations: { saleId: string; receiptNumber: string; amount: number }[] };
 export function PaymentHistoryPageClient() {
-  const empty = { search: "", customerId: "", dateFrom: "", dateTo: "" };
+  const empty = { search: "", customerId: "", group: "ALL", dateFrom: "", dateTo: "" };
   const [filters, setFilters] = useState(empty), [applied, setApplied] = useState(empty);
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<Payment[]>([]);
@@ -35,6 +36,7 @@ export function PaymentHistoryPageClient() {
   }, [applied, page]);
   return <ErpPage><ErpPageHeader title="Payment History" />
     <form className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4 print:hidden" onSubmit={event => { event.preventDefault(); setPage(1); setApplied({ ...filters }); }}>
+      <div className="space-y-1"><span className="text-sm">Customer Type</span><Select value={filters.group} onValueChange={group => setFilters({ ...filters, group })}><SelectTrigger className="w-52" aria-label="Customer type"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All Customers</SelectItem><SelectItem value="SALE">External Customers</SelectItem><SelectItem value="OUTLET">Own Outlets</SelectItem></SelectContent></Select></div>
       <label>Customer<Input placeholder={filters.customerId ? "Selected customer (Reset to show all)" : "Search customer"} value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value, customerId: "" })} /></label>
       <label>Payment Date From<Input type="date" value={filters.dateFrom} onChange={event => setFilters({ ...filters, dateFrom: event.target.value })} /></label>
       <label>Date To<Input type="date" min={filters.dateFrom || undefined} value={filters.dateTo} onChange={event => setFilters({ ...filters, dateTo: event.target.value })} /></label>

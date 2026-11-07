@@ -1,7 +1,11 @@
 
 import mongoose from "mongoose";
+import { assertBusinessTestDatabase } from "./business-test-policy";
 
 const MONGODB_URI = process.env.MONGODB_URI!;
+const testDatabase = process.env.BUSINESS_TEST_MODE === "1"
+  ? assertBusinessTestDatabase(process.env.MONGODB_DB_NAME)
+  : undefined;
 
 if (!MONGODB_URI) {
   throw new Error("Please define MONGODB_URI in .env");
@@ -33,6 +37,12 @@ export default async function dbConnect() {
   if (!cached.promise) {
     cached.promise = mongoose.connect(MONGODB_URI!, {
       bufferCommands: false,
+      serverSelectionTimeoutMS: 10000,
+      ...(testDatabase ? { dbName: testDatabase } : {}),
+    }).catch((error) => {
+      // A temporary database outage must not poison every subsequent request.
+      cached.promise = null;
+      throw error;
     });
   }
 

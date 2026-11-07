@@ -44,7 +44,7 @@ export function OverallBusinessReportPageClient() {
     {error && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-800">{error}</p>}
     {loading && <div className="flex justify-center p-12"><Loader2 className="size-6 animate-spin" /><span className="sr-only">Loading overall report</span></div>}
     {data && totals && <>
-      <p className="text-sm text-slate-600">Owner-outlet main sales and automatic delivery expenses are eliminated from combined income. Unsold stock remains inventory. Collections, remittances, and employee reimbursements are not additional sales or operating expenses.</p>
+      <p className="text-sm text-slate-600">Internal outlet sales and markup are eliminated from combined income. Receiving products adds stock, not expenses. Unsold stock remains inventory; company COGS is recognized when sold. Collections, remittances, and employee reimbursements are not additional income or operating expenses.</p>
       {totals.missingCostLines > 0 && <p role="alert" className="rounded-lg bg-amber-50 p-4 text-amber-900">{totals.missingCostLines} sold lines or receipts lack original cost snapshots. Final combined COGS and profit are withheld. Known cost so far: {peso(totals.knownCogs)}. Review the flagged transactions below.</p>}
       <section className="space-y-3">
         <h2 className="text-lg font-bold">Combined Income Statement</h2>
@@ -52,6 +52,7 @@ export function OverallBusinessReportPageClient() {
           {([
             ["Main external customer net sales", data.mainSales], ["Outlet retail net sales", data.outletSales],
             ["Gross sales — all external customers", totals.grossSales], ["Less: sales discounts", -totals.discounts],
+            ["Less: posted customer returns", -totals.salesReturns],
             ["Net Sales", totals.netSales], ["Less: Cost of Goods Sold — original company cost", totals.cogs === null ? null : -totals.cogs],
             ["Gross Profit", totals.grossProfit], ["Less: Operating Expenses — main and outlets", -totals.operatingExpenses],
             ["OVERALL NET PROFIT", totals.netProfit],
@@ -62,15 +63,15 @@ export function OverallBusinessReportPageClient() {
         <h2 className="text-lg font-bold">Main & Outlet Summary — Original Company Cost Basis</h2>
         <p className="text-sm text-slate-500">These contributions use company cost, so they differ from outlet standalone reports that use marked-up transfer cost. Automatic main delivery expenses are excluded here.</p>
         <div className="overflow-x-auto rounded-xl border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr>
-          <th className="p-3 text-left">Branch / Outlet</th>{["Transactions", "Gross Sales", "Discounts", "Net Sales", "Company COGS", "Gross Profit", "Expenses", "Net Profit"].map((label) => <th key={label} className={head}>{label}</th>)}
-        </tr></thead><tbody>{data.branches.map((branch) => <tr key={branch.id} className="border-t"><td className="p-3">{branch.name}</td><td className={cell}>{branch.transactions}</td>{[branch.grossSales, branch.discounts, branch.netSales, branch.cogs, branch.grossProfit, branch.operatingExpenses, branch.netProfit].map((value, index) => <td key={index} className={cell}>{amount(value)}</td>)}</tr>)}</tbody>
-        <tfoot className="border-t-2 bg-slate-100 font-bold"><tr><td className="p-3">TOTAL</td><td className={cell}>{totals.transactions}</td>{[totals.grossSales, totals.discounts, totals.netSales, totals.cogs, totals.grossProfit, totals.operatingExpenses, totals.netProfit].map((value, index) => <td key={index} className={cell}>{amount(value)}</td>)}</tr></tfoot></table></div>
+          <th className="p-3 text-left">Branch / Outlet</th>{["Transactions", "Gross Sales", "Discounts", "Returns", "Net Sales", "Company COGS", "Gross Profit", "Expenses", "Net Profit"].map((label) => <th key={label} className={head}>{label}</th>)}
+        </tr></thead><tbody>{data.branches.map((branch) => <tr key={branch.id} className="border-t"><td className="p-3">{branch.name}</td><td className={cell}>{branch.transactions}</td>{[branch.grossSales, branch.discounts, branch.salesReturns, branch.netSales, branch.cogs, branch.grossProfit, branch.operatingExpenses, branch.netProfit].map((value, index) => <td key={index} className={cell}>{amount(value)}</td>)}</tr>)}</tbody>
+        <tfoot className="border-t-2 bg-slate-100 font-bold"><tr><td className="p-3">TOTAL</td><td className={cell}>{totals.transactions}</td>{[totals.grossSales, totals.discounts, totals.salesReturns, totals.netSales, totals.cogs, totals.grossProfit, totals.operatingExpenses, totals.netProfit].map((value, index) => <td key={index} className={cell}>{amount(value)}</td>)}</tr></tfoot></table></div>
       </section>
       <section className="space-y-3 print-break">
         <h2 className="text-lg font-bold">External Sales Transactions</h2>
-        <div className="overflow-x-auto rounded-xl border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr>{["Date", "Branch / Outlet", "Receipt", "Customer", "Products", "Gross Sales", "Discounts", "Net Sales", "Company COGS", "Gross Profit"].map((label) => <th key={label} className="p-3 text-left">{label}</th>)}</tr></thead>
-          <tbody>{data.rows.length ? data.rows.map((row) => <tr key={row.id} className="border-t"><td className="p-3 whitespace-nowrap">{dateLabel(row.date)}</td><td className="p-3">{row.branch}</td><td className="p-3">{row.receiptNumber}</td><td className="p-3">{row.customer}</td><td className="min-w-48 p-3">{row.products || "Missing sale lines"}</td>{[row.grossSales, row.discounts, row.netSales, row.cogs, row.grossProfit].map((value, index) => <td key={index} className={cell}>{amount(value)}</td>)}</tr>) : <tr><td colSpan={10} className="p-6 text-center text-slate-500">No external sales in this period.</td></tr>}</tbody>
-          <tfoot className="border-t-2 bg-slate-100 font-bold"><tr><td colSpan={5} className="p-3">TOTAL ({totals.transactions})</td>{[totals.grossSales, totals.discounts, totals.netSales, totals.cogs, totals.grossProfit].map((value, index) => <td key={index} className={cell}>{amount(value)}</td>)}</tr></tfoot>
+        <div className="overflow-x-auto rounded-xl border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr>{["Date", "Branch / Outlet", "Receipt", "Customer", "Products", "Gross Sales", "Discounts", "Returns", "Net Sales", "Company COGS", "Gross Profit"].map((label) => <th key={label} className="p-3 text-left">{label}</th>)}</tr></thead>
+          <tbody>{data.rows.length ? data.rows.map((row) => <tr key={row.id} className="border-t"><td className="p-3 whitespace-nowrap">{dateLabel(row.date)}</td><td className="p-3">{row.branch}</td><td className="p-3">{row.receiptNumber}</td><td className="p-3">{row.customer}</td><td className="min-w-48 p-3">{row.products || "Missing sale lines"}</td>{[row.grossSales, row.discounts, row.salesReturns, row.netSales, row.cogs, row.grossProfit].map((value, index) => <td key={index} className={cell}>{amount(value)}</td>)}</tr>) : <tr><td colSpan={11} className="p-6 text-center text-slate-500">No external sales in this period.</td></tr>}</tbody>
+          <tfoot className="border-t-2 bg-slate-100 font-bold"><tr><td colSpan={5} className="p-3">TOTAL ({totals.transactions})</td>{[totals.grossSales, totals.discounts, totals.salesReturns, totals.netSales, totals.cogs, totals.grossProfit].map((value, index) => <td key={index} className={cell}>{amount(value)}</td>)}</tr></tfoot>
         </table></div>
       </section>
       <section className="space-y-3 print-break">

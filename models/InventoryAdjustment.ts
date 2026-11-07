@@ -11,6 +11,10 @@ export interface IInventoryAdjustment extends Document {
   previousQty: number;
   adjustedQty: number;
   newQty: number;
+  previousKilos?: number;
+  previousHeads?: number;
+  newKilos?: number;
+  adjustedKilos?: number;
   reason: string;
   remarks?: string;
   stockCountId?: Types.ObjectId;
@@ -32,6 +36,10 @@ const InventoryAdjustmentSchema = new Schema<IInventoryAdjustment>({
   previousQty: { type: Number, required: true },
   adjustedQty: { type: Number, required: true },
   newQty: { type: Number, required: true },
+  previousKilos: Number,
+  previousHeads: Number,
+  newKilos: Number,
+  adjustedKilos: Number,
   reason: { type: String, required: true, trim: true, uppercase: true },
   remarks: { type: String, default: "", trim: true, uppercase: true },
   stockCountId: { type: Schema.Types.ObjectId, ref: "StockCount" },
@@ -44,5 +52,6 @@ const InventoryAdjustmentSchema = new Schema<IInventoryAdjustment>({
 InventoryAdjustmentSchema.index({ adjustmentDate: -1, inventoryType: 1 });
 InventoryAdjustmentSchema.index({ inventoryId: 1 });
 InventoryAdjustmentSchema.index({ reversalOf: 1 }, { unique: true, sparse: true });
+if (mongoose.models.InventoryAdjustment && !mongoose.models.InventoryAdjustment.schema.path("newKilos")) mongoose.deleteModel("InventoryAdjustment");
 const InventoryAdjustmentModel: Model<IInventoryAdjustment> = mongoose.models.InventoryAdjustment || mongoose.model<IInventoryAdjustment>("InventoryAdjustment", InventoryAdjustmentSchema);
 export default InventoryAdjustmentModel;

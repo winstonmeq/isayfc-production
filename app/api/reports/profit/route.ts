@@ -5,6 +5,7 @@ import { internalOutletMatchClauses } from "@/lib/internal-outlet";
 // Outlet POS activity is reported separately.
 
 import { NextRequest, NextResponse } from "next/server";
+import { excludeLegacyDeliveryExpenses } from "@/lib/main-expense-policy";
 import { recognizedSaleRange } from "@/lib/business-flow";
 import { Types } from "mongoose";
 
@@ -191,6 +192,7 @@ export async function GET(req: NextRequest) {
     {
       $match: {
         isActive: true,
+        ...excludeLegacyDeliveryExpenses(),
         expenseDate: { $gte: start, $lt: end },
         $nor: [
           { expenseCategory: "OUTLET" },

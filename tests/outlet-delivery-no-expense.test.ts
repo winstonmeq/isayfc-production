@@ -1,0 +1,30 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { Types } from "mongoose";
+import Sale from "../models/Sale";
+import SaleLine from "../models/SaleLine";
+import Transfer from "../models/StockTransfer";
+import Expense from "../models/Expense";
+import ExpenseType from "../models/ExpenseType";
+import { postOutletDelivery } from "../lib/post-outlet-delivery";
+
+test("confirming an internal outlet delivery recognizes the main sale without expense or fake payment", async t => {
+  const saleId = new Types.ObjectId(), transferId = new Types.ObjectId(), outletId = new Types.ObjectId();
+  let saves = 0;
+  const sale = { _id: saleId, source: "CHICKEN", isVoided: false, fulfillmentStatus: "PENDING", totalAmount: 395, paidAmount: 0, balance: 395, status: "PENDING", ownerOutletId: undefined as unknown, recognizedAt: undefined as unknown, save: async () => { saves++; } };
+  t.mock.method(Transfer, "findOne", () => ({ session: async () => ({ _id: transferId, outletId, saleId, status: "CONFIRMED", confirmedAt: new Date() }) }));
+  t.mock.method(Sale, "findById", () => ({ session: async () => sale }));
+  t.mock.method(SaleLine, "find", () => ({ session: () => ({ lean: async () => [{ source: "CHICKEN", qty: 1, baseQty: 50, lineTotal: 395, unitCost: 5 }] }) }));
+  t.mock.method(Expense, "create", () => { throw new Error("Delivery must not create operating expenses"); });
+  t.mock.method(ExpenseType, "updateOne", () => { throw new Error("Delivery must not create an automatic expense type"); });
+  await postOutletDelivery(String(transferId), {} as Parameters<typeof postOutletDelivery>[1]);
+  assert.equal(saves, 1);
+  assert.equal(sale.fulfillmentStatus, "RECOGNIZED");
+  assert.equal(sale.totalAmount, 395);
+  assert.equal(sale.status, "INTERNAL");
+  assert.equal(sale.paidAmount, 0);
+  assert.equal(sale.balance, 0);
+  assert.equal(sale.ownerOutletId, outletId);
+  await assert.rejects(() => postOutletDelivery(String(transferId), {} as Parameters<typeof postOutletDelivery>[1]), /already recognized/);
+  assert.equal(saves, 1);
+});

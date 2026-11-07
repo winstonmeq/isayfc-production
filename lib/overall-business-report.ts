@@ -8,12 +8,13 @@ export type OverallSale = {
   id: string; source?: string; channel?: string; remarks?: string; transactionType?: string;
   receiptNumber?: string; outletId?: string; ownerOutletId?: string; date: string; customer: string;
   totalAmount?: number; subtotal?: number; discountAmount?: number;
+  returnAmount?: number; returnCost?: number;
 };
 export type OverallLine = {
   saleId: string; productName?: string; qty?: number; baseQty?: number; stockPcsOut?: number;
   unitCost?: number | null; companyUnitCost?: number | null;
 };
-export type OverallExpense = { id: string; date: string; name: string; type: string; amount: number; origin?: string; outletId?: string; expenseCategory?: string; remarks?: string };
+export type OverallExpense = { id: string; date: string; name: string; type: string; amount: number; companyAmount?: number; origin?: string; capitalizedByBatch?: unknown; outletId?: string; expenseCategory?: string; remarks?: string };
 type Outlet = { id: string; name: string; code?: string };
 
 /** Main recognition day and outlet retail business day match their own reports. */
@@ -45,20 +46,21 @@ export function buildOverallBusinessReport(sales: OverallSale[], lines: OverallL
     const branchId = outlet ? branchKey(sale.outletId || legacyOutlet) : "MAIN";
     const own = linesBySale.get(sale.id) || [];
     const costs = own.map((line) => overallLineCost(line, outlet));
-    const missingCostLines = own.length ? costs.filter((cost) => cost === null).length : 1;
-    const knownCogs = roundMoney(costs.reduce<number>((sum, cost) => sum + (cost ?? 0), 0));
-    const amounts = salesReportAmounts(sale);
+    const missingCostLines = sale.returnAmount != null ? 0 : own.length ? costs.filter((cost) => cost === null).length : 1;
+    const knownCogs = sale.returnAmount != null ? -Number(sale.returnCost || 0) : roundMoney(costs.reduce<number>((sum, cost) => sum + (cost ?? 0), 0));
+    const amounts = sale.returnAmount != null ? { grossSales: 0, discounts: 0, netSales: -sale.returnAmount } : salesReportAmounts(sale);
     return { id: sale.id, date: sale.date, branchId, branch: branchName(branchId), outlet,
       receiptNumber: sale.receiptNumber || "", customer: sale.customer,
-      products: own.map((line) => `${line.productName || "Unnamed product"}: ${line.qty ?? 0}`).join(", "),
-      ...amounts, knownCogs, missingCostLines, cogs: missingCostLines ? null : knownCogs,
+      products: sale.returnAmount != null ? "Posted customer return" : own.map((line) => `${line.productName || "Unnamed product"}: ${line.qty ?? 0}`).join(", "),
+      ...amounts, salesReturns: Number(sale.returnAmount || 0), knownCogs, missingCostLines, cogs: missingCostLines ? null : knownCogs,
       grossProfit: missingCostLines ? null : roundMoney(amounts.netSales - knownCogs) };
   }).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-  const expenseRows = expenses.filter((expense) => expense.origin !== "OWNER_OUTLET_DELIVERY").map((expense) => {
+  const expenseRows = expenses.filter((expense) => !expense.capitalizedByBatch && expense.origin !== "OWNER_OUTLET_DELIVERY" && expense.type !== "OWNER_OUTLET_DELIVERY").map((expense) => {
     const legacyOutlet = expense.remarks?.match(/OUTLET:([a-f\d]{24})\b/i)?.[1];
     const outlet = !!expense.outletId || !!legacyOutlet || expense.expenseCategory === "OUTLET";
     const branchId = outlet ? branchKey(expense.outletId || legacyOutlet) : "MAIN";
-    return { ...expense, branchId, branch: branchName(branchId), amount: roundMoney(expense.amount) };
+    const amount = ["STOCK_USAGE", "PRODUCTION_USAGE"].includes(expense.origin || "") && expense.companyAmount != null ? expense.companyAmount : expense.amount;
+    return { ...expense, branchId, branch: branchName(branchId), amount: roundMoney(amount) };
   });
   const keys = new Set(["MAIN", ...rows.map((row) => row.branchId), ...expenseRows.map((row) => row.branchId)]);
   const summarize = (own: typeof rows, ownExpenses: typeof expenseRows) => {
@@ -68,6 +70,7 @@ export function buildOverallBusinessReport(sales: OverallSale[], lines: OverallL
     const netSales = sum("netSales");
     const operatingExpenses = roundMoney(ownExpenses.reduce((total, row) => total + row.amount, 0));
     return { transactions: own.length, grossSales: sum("grossSales"), discounts: sum("discounts"), netSales,
+      salesReturns: roundMoney(own.reduce((n, row) => n + row.salesReturns, 0)),
       knownCogs, missingCostLines, cogs: missingCostLines ? null : knownCogs,
       grossProfit: missingCostLines ? null : roundMoney(netSales - knownCogs), operatingExpenses,
       netProfit: missingCostLines ? null : roundMoney(netSales - knownCogs - operatingExpenses) };

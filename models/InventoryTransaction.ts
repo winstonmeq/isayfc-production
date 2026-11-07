@@ -19,6 +19,7 @@ export interface IInventoryTransaction extends Document {
   transactionDate: Date;
   type: InventoryTransactionType;
   unit: InventoryUnit;
+  unitCode?: string;
   quantity: number;
   previousStock: number;
   newStock: number;
@@ -64,6 +65,7 @@ const InventoryTransactionSchema = new Schema<IInventoryTransaction>(
       enum: ["PCS", "BAGS", "KILOS"],
       required: true,
     },
+    unitCode: { type: String, trim: true, uppercase: true },
 
     quantity: {
       type: Number,
@@ -113,6 +115,7 @@ InventoryTransactionSchema.index({ type: 1 });
 InventoryTransactionSchema.index({ createdAt: -1 });
 InventoryTransactionSchema.index({ transactionDate: -1 });
 
+if (mongoose.models.InventoryTransaction && !mongoose.models.InventoryTransaction.schema.path("unitCode")) mongoose.deleteModel("InventoryTransaction");
 const InventoryTransactionModel: Model<IInventoryTransaction> =
   mongoose.models.InventoryTransaction ||
   mongoose.model<IInventoryTransaction>(

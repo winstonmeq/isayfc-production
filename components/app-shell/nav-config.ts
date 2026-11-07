@@ -1,4 +1,4 @@
-﻿// components/app-shell/nav-config.ts
+// components/app-shell/nav-config.ts
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeftRight,
@@ -140,6 +140,13 @@ export const appNavItems: AppNavItem[] = [
         permission: "slicing.manage",
       },
       {
+        title: "Profitability",
+        href: "/profit/chicken-slicing",
+        icon: BarChart3,
+        permission: "reports.profit",
+      },
+      { title: "Production Batches", href: "/slicing/production", icon: Boxes, permission: "slicing.view" },
+      {
         title: "Chicken Reconciliation",
         href: "/slicing/reconciliation",
         icon: ClipboardList,
@@ -232,13 +239,6 @@ export const appNavItems: AppNavItem[] = [
     section: "Finance",
   },
   {
-    title: "Chicken Slicing Profit",
-    href: "/profit/chicken-slicing",
-    icon: BarChart3,
-    permission: "reports.profit",
-    section: "Finance",
-  },
-  {
     title: "Business Expenses",
     href: "/expenses-bodega",
     icon: ReceiptText,
@@ -277,13 +277,6 @@ export const appNavItems: AppNavItem[] = [
     icon: ShoppingBasket,
     permission: "pos.view",
     section: "Operations",
-    children: [
-      { title: "Daily Sales & Operations", href: "/pos", icon: ShoppingBasket, permission: "pos.view" },
-      { title: "Outlet Inventory", href: "/outlet-inventory", icon: Warehouse, permission: "outlet-inventory.view" },
-      { title: "Sales & Profit Report", href: "/reports/outlet-pos", icon: ReceiptText, permission: "reports.outlet-sales" },
-      { title: "Outlet Comparison", href: "/outlet-summary", icon: BarChart3, permission: "reports.outlet-comparison" },
-      { title: "Outlet Collections", href: "/payments/pos-collections", icon: WalletCards, permission: "payments.outlet-collections" },
-    ],
   },
   {
     title: "Reports",
@@ -304,7 +297,7 @@ export const appNavItems: AppNavItem[] = [
         permission: "reports.sales",
       },
       {
-        title: "Inventory Report",
+        title: "Inventory Valuation",
         href: "/reports/inventory",
         icon: Boxes,
         permission: "reports.inventory",
@@ -314,12 +307,6 @@ export const appNavItems: AppNavItem[] = [
         href: "/reports/payments",
         icon: CreditCard,
         permission: "reports.payments",
-      },
-      {
-        title: "Profit Report",
-        href: "/reports/profit",
-        icon: Gauge,
-        permission: "reports.profit",
       },
       {
         title: "Overall Business Report",

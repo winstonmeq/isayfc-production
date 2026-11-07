@@ -24,16 +24,20 @@ async function handlePOST(req: NextRequest, context: { params: Promise<{ id: str
       if (original.status === "REVERSED" || original.reversalOf || original.reversedByAdjustmentId) throw new Error("This adjustment is already reversed or is itself a reversal.");
       const current = await loadInventoryItem(original.inventoryType, original.inventoryId, session);
       const newQty = reversalQuantity(current.qty, original.newQty, original.adjustedQty);
+      if (current.whole && original.newKilos == null) throw new Error("This legacy adjustment has no weight snapshot. Post a reviewed heads and kilos correction instead.");
+      if (current.whole && (Number(current.item.stockHeads) !== original.newQty || (original.previousHeads != null && original.previousHeads !== original.previousQty))) throw new Error("Head balances differ from the adjustment snapshot. Post a reviewed heads and kilos correction instead.");
+      const newKilos = current.whole ? reversalQuantity(current.kilos, original.newKilos!, original.adjustedKilos!) : undefined;
       const date = new Date();
       const [reversal] = await InventoryAdjustment.create([{
         adjustmentNumber: `REV-${randomUUID()}`, adjustmentDate: date,
         inventoryType: original.inventoryType, inventoryId: original.inventoryId,
         productName: original.productName, unit: original.unit,
         previousQty: current.qty, newQty, adjustedQty: -original.adjustedQty,
+        ...(current.whole ? { previousKilos: current.kilos, newKilos, adjustedKilos: -original.adjustedKilos! } : {}),
         reason: "ADJUSTMENT REVERSAL", remarks: reason, reversalOf: original._id,
         createdBy: auth?.user?.id,
       }], { session });
-      await setInventoryQuantity({ type: original.inventoryType, id: original.inventoryId, newQty, date,
+      await setInventoryQuantity({ type: original.inventoryType, id: original.inventoryId, newQty, newKilos, date,
         reason: `REVERSAL ${original.adjustmentNumber}: ${reason}`, referenceType: "INVENTORY_ADJUSTMENT_REVERSAL",
         referenceId: reversal._id, createdBy: auth?.user?.id, session });
       original.status = "REVERSED";

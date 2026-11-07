@@ -9,6 +9,8 @@ import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 import { requirePermission } from "@/lib/require-permission";
 import ExpenseModel, { type ExpenseType } from "@/models/Expense";
 import ExpenseTypeModel from "@/models/ExpenseType";
+import CashShiftModel from "@/models/CashShift";
+import { outletExpenseActions } from "@/lib/outlet-expense-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -30,23 +32,48 @@ export async function GET(req: NextRequest) {
   if (!current) {
     return NextResponse.json({ success: false, message: "Select an authorized outlet." }, { status: 400 });
   }
-  const dayStart = outletExpenseDay(req.nextUrl.searchParams.get("date") ?? undefined);
-  if (!dayStart) return NextResponse.json({ success: false, message: "Select a valid business date, not in the future." }, { status: 400 });
+  const dayStart = outletExpenseDay(req.nextUrl.searchParams.get("dateFrom") ?? req.nextUrl.searchParams.get("date") ?? undefined);
+  const lastDay = outletExpenseDay(req.nextUrl.searchParams.get("dateTo") ?? req.nextUrl.searchParams.get("date") ?? req.nextUrl.searchParams.get("dateFrom") ?? undefined);
+  if (!dayStart || !lastDay || lastDay < dayStart) return NextResponse.json({ success: false, message: "Select a valid business date range, not in the future." }, { status: 400 });
   const [expenses, expenseTypes] = await Promise.all([
     ExpenseModel.find({
       outletId,
       expenseCategory: "OUTLET",
       isActive: true,
-      expenseDate: { $gte: dayStart, $lt: addDays(dayStart, 1) },
+      expenseDate: { $gte: dayStart, $lt: addDays(lastDay, 1) },
     })
       .sort({ createdAt: -1 })
-      .select("name type amount expenseDate remarks")
-      .lean<Array<{ _id: { toString(): string }; name: string; type: string; amount: number; expenseDate: Date; remarks?: string }>>(),
-    ExpenseTypeModel.find({ isActive: true }).sort({ name: 1 }).select("code name").lean(),
+      .select("name type amount expenseDate remarks deductFromCashSale expenseNature origin consumedQuantity consumptionUnit consumptionUnitCost consumptionUsage updatedAt")
+      .lean<Array<{
+        _id: { toString(): string };
+        name: string;
+        type: string;
+        amount: number;
+        expenseDate: Date;
+        remarks?: string;
+        deductFromCashSale?: boolean;
+        expenseNature?: "CASH_SALE_EXPENSE" | "PERIOD_EXPENSE";
+        origin?: string;
+        consumedQuantity?: number;
+        consumptionUnit?: string;
+        consumptionUnitCost?: number;
+        consumptionUsage?: string;
+        updatedAt: Date;
+      }>>(),
+    ExpenseTypeModel.find({ isActive: true, code: { $ne: "OWNER_OUTLET_DELIVERY" } }).sort({ name: 1 }).select("code name").lean(),
   ]);
+
+  const total = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const cashExpenses = expenses
+    .filter((item) => item.deductFromCashSale !== false)
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const periodExpenses = expenses
+    .filter((item) => item.deductFromCashSale === false)
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
   return NextResponse.json({
     success: true,
+    canManage: session?.user.role === "ADMIN" || !!session?.user.permissions?.includes("pos.manage"),
     data: expenses.map((item) => ({
       id: item._id.toString(),
       name: item.name,
@@ -54,9 +81,22 @@ export async function GET(req: NextRequest) {
       amount: Number(item.amount || 0),
       expenseDate: item.expenseDate,
       remarks: item.remarks || "",
+      deductFromCashSale: item.deductFromCashSale !== false,
+      expenseNature: item.expenseNature || (item.deductFromCashSale === false ? "PERIOD_EXPENSE" : "CASH_SALE_EXPENSE"),
+      origin: item.origin || "MANUAL",
+      quantity: item.consumedQuantity,
+      unit: item.consumptionUnit,
+      unitCost: item.consumptionUnitCost,
+      usage: item.consumptionUsage,
+      updatedAt: item.updatedAt,
+      ...outletExpenseActions(item.origin),
     })),
     expenseTypes: expenseTypes.map((item) => ({ code: item.code, name: item.name })),
-    summary: { total: expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0) },
+    summary: {
+      total,
+      cashExpenses,
+      periodExpenses,
+    },
   });
 }
 
@@ -73,8 +113,11 @@ export async function POST(req: NextRequest) {
     amount?: number;
     remarks?: string;
     expenseDate?: string;
+    deductFromCashSale?: boolean;
+    expenseNature?: "CASH_SALE_EXPENSE" | "PERIOD_EXPENSE";
   } | null;
   const outletId = String(body?.outletId || "");
+  if (body?.expenseNature && !["CASH_SALE_EXPENSE", "PERIOD_EXPENSE"].includes(body.expenseNature)) return NextResponse.json({ success: false, message: "Use Stock Usage to record inventory consumption." }, { status: 400 });
   const current = await context(outletId, session!.user.id);
   if (!current) {
     return NextResponse.json({ success: false, message: "Select an authorized outlet." }, { status: 400 });
@@ -91,8 +134,23 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ success: false, message: "Enter a valid expense amount." }, { status: 400 });
   }
-  if (!(await ExpenseTypeModel.exists({ code: type, isActive: true }))) {
+  if (type === "OWNER_OUTLET_DELIVERY" || !(await ExpenseTypeModel.exists({ code: type, isActive: true }))) {
     return NextResponse.json({ success: false, message: "Select a valid active expense type." }, { status: 400 });
+  }
+
+  // Determine expense deduction type:
+  // "CASH_SALE_EXPENSE" (default) deducts directly from cash sales & drawer.
+  // "PERIOD_EXPENSE" is deducted in whole day / week / monthly P&L (e.g. electricity, rent, salaries).
+  const isPeriod = body?.expenseNature === "PERIOD_EXPENSE" || body?.deductFromCashSale === false;
+  const deductFromCashSale = !isPeriod;
+  const expenseNature = isPeriod ? "PERIOD_EXPENSE" : "CASH_SALE_EXPENSE";
+
+  let shiftId: any = undefined;
+  if (deductFromCashSale) {
+    const openShift = await CashShiftModel.findOne({ cashierId: session!.user.id, outletId, status: "OPEN" });
+    if (openShift) {
+      shiftId = openShift._id;
+    }
   }
 
   const expense = await ExpenseModel.create({
@@ -102,6 +160,9 @@ export async function POST(req: NextRequest) {
     expenseDate,
     amount,
     outletId,
+    shiftId,
+    deductFromCashSale,
+    expenseNature,
     remarks: [`WEB POS EXPENSE OUTLET:${outletId}`, notes].filter(Boolean).join(" | "),
     createdBy: session!.user.id,
     isActive: true,
@@ -109,7 +170,16 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    message: "Outlet expense recorded.",
-    expense: { id: expense._id.toString(), name, type, amount },
+    message: isPeriod
+      ? "Period expense recorded (deducted from period profit, not daily cash sales)."
+      : "Cash sale expense recorded (deducted directly from outlet cash sales & drawer).",
+    expense: {
+      id: expense._id.toString(),
+      name,
+      type,
+      amount,
+      deductFromCashSale,
+      expenseNature,
+    },
   });
 }

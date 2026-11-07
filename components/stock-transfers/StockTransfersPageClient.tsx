@@ -90,7 +90,7 @@ type ProductOption = {
 
 type ApiMeta = { page: number; limit: number; total: number; totalPages: number };
 
-type FormItem = { key: string; qty: string };
+type FormItem = { key: string; qty: string; kilosOut?: string };
 
 function TransferProductPicker({
   products,
@@ -459,6 +459,7 @@ export function StockTransfersPageClient() {
               ? product.standardPackingId
               : undefined,
           qty: Number(item.qty),
+          kilosOut: item.kilosOut ? Number(item.kilosOut) : undefined,
         };
       });
 
@@ -988,6 +989,7 @@ export function StockTransfersPageClient() {
                                 : ""}
                         </span>
                       </div>
+                      {selected?.unitLabel === "HEAD" && <label className="text-xs">Actual Kilos<Input type="number" min="0" step="any" value={item.kilosOut || ""} onChange={event => updateItem(index, { kilosOut: event.target.value })} /></label>}
                       {pcsPreview > 0 ? (
                         <p className="mt-1 text-xs text-slate-500">
                           = {pcsPreview} pcs

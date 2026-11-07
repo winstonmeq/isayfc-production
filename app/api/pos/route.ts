@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { menuStock } from "@/lib/business-flow";
-import { OutletEmployeeCash } from "@/models/OutletEmployeeFinance";
 import { outletCashSummary } from "@/lib/employee-finance";
 
 import { sumShiftExpenses, sumShiftSales } from "@/lib/cash-shift";
@@ -18,6 +17,9 @@ import ExpenseModel from "@/models/Expense";
 import UserModel from "@/models/User";
 import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 import { emptyPosDailyReport } from "@/lib/pos-empty-report";
+import { classifyOutletInventoryRows } from "@/lib/outlet-product-classification";
+import { parseReportRange } from "@/lib/report-utils";
+import { outletDirectorySummary } from "@/lib/outlet-directory-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +47,26 @@ export async function GET(req: NextRequest) {
     .select("name code")
     .lean<Array<{ _id: { toString: () => string }; name: string; code: string }>>();
 
-  const requested = new URL(req.url).searchParams.get("outletId") || assignedOutletId || outlets[0]?._id.toString();
+  const params = new URL(req.url).searchParams;
+  if (params.get("view") === "outlets") {
+    if (params.get("summary") === "1") {
+      const { start, end } = parseReportRange(params);
+      if (start >= end) return NextResponse.json({ success: false, message: "Select a valid date range." }, { status: 400 });
+      const ids = outlets.map(row => String(row._id));
+      const [sales, expenses] = await Promise.all([
+        SaleModel.find({ outletId: { $in: ids }, source: "OUTLET", isVoided: false, saleDate: { $gte: start, $lt: end } }).select("outletId totalAmount discountAmount").lean(),
+        ExpenseModel.find({ outletId: { $in: ids }, expenseCategory: "OUTLET", isActive: true, expenseDate: { $gte: start, $lt: end } }).select("outletId amount").lean(),
+      ]);
+      const lines = await SaleLineModel.find({ saleId: { $in: sales.map(row => row._id) } }).select("saleId qty baseQty stockPcsOut unitCost lineTotal grossLineTotal discountAmount").lean();
+      const summary = outletDirectorySummary(ids.map(String), sales, lines, expenses);
+      return NextResponse.json({ success: true, range: { start, end }, outlets: outlets.map(row => ({ id: String(row._id), name: row.name, code: row.code, ...summary.get(String(row._id)) })) });
+    }
+    return NextResponse.json({ success: true, outlets: outlets.map(row => ({ id: row._id.toString(), name: row.name, code: row.code })) });
+  }
+  const explicitOutletId = params.get("outletId");
+  const requested = explicitOutletId || assignedOutletId || outlets[0]?._id.toString();
   const outlet = requested ? await allowedOutlet(session!.user.id, requested) : null;
+  if (explicitOutletId && !outlet) return NextResponse.json({ success: false, message: "This outlet is unavailable or you do not have permission to operate it." }, { status: 403 });
   if (!outlet) {
     return NextResponse.json({
       success: true,
@@ -63,7 +83,7 @@ export async function GET(req: NextRequest) {
   const outletId = outlet._id.toString();
   const dayStart = startOfDayManila();
   const dayEnd = addDays(dayStart, 1);
-  const [menu, inventory, shift, recentSales, dailySales, dailyExpenses, employeeCash] = await Promise.all([
+  const [menu, inventory, shift, recentSales, dailySales, dailyExpenses] = await Promise.all([
     OutletMenuItemModel.find({ outletId, isActive: true, isAvailable: true })
       .sort({ category: 1, sortOrder: 1, name: 1 })
       .lean<any[]>(),
@@ -76,15 +96,15 @@ export async function GET(req: NextRequest) {
       .lean<any[]>(),
     SaleModel.find({ outletId, source: "OUTLET", isVoided: { $ne: true }, saleDate: { $gte: dayStart, $lt: dayEnd } })
       .sort({ saleDate: 1, createdAt: 1 })
-      .select("receiptNumber totalAmount totalQty paidAmount saleDate shiftId paymentMethod employeeName")
+      .select("receiptNumber totalAmount totalQty paidAmount saleDate shiftId paymentMethod")
       .lean<any[]>(),
     ExpenseModel.find({ outletId, expenseCategory: "OUTLET", isActive: true, expenseDate: { $gte: dayStart, $lt: dayEnd } })
-      .select("amount")
+      .select("amount deductFromCashSale expenseNature")
       .lean<any[]>(),
-    OutletEmployeeCash.find({ outletId, businessDate: { $gte: dayStart, $lt: dayEnd } }).select("kind amount").lean(),
   ]);
 
   const dailySaleIds = dailySales.map((row) => row._id);
+  const classifiedInventory = await classifyOutletInventoryRows(inventory);
   const dailyLines = dailySaleIds.length
     ? await SaleLineModel.find({ saleId: { $in: dailySaleIds }, source: "OUTLET" }).select("saleId unitCost baseQty qty productName").lean<any[]>()
     : [];
@@ -99,7 +119,13 @@ export async function GET(req: NextRequest) {
         Number(line.unitCost || 0) * Number(line.baseQty ?? line.qty ?? 0)
     );
   }
-  const dailyExpenseTotal = dailyExpenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const cashSaleExpenses = dailyExpenses
+    .filter((row) => row.deductFromCashSale !== false)
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const periodExpenses = dailyExpenses
+    .filter((row) => row.deductFromCashSale === false)
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const dailyExpenseTotal = cashSaleExpenses + periodExpenses;
 
   const menuRows = menu.map((row) => {
     const stock = menuStock(inventory, row._id);
@@ -135,8 +161,9 @@ export async function GET(req: NextRequest) {
     success: true,
     outlets: outlets.map((row) => ({ id: row._id.toString(), name: row.name, code: row.code })),
     outletId,
+    canManageInventory: access?.role === "ADMIN" || !!access?.permissions.includes("outlet-inventory.manage"),
     menu: menuRows,
-    inventory: inventory.map((row) => ({
+    inventory: classifiedInventory.map((row) => ({
       id: row._id.toString(),
       productName: row.productName,
       categoryName: row.categoryName || "",
@@ -144,6 +171,7 @@ export async function GET(req: NextRequest) {
       unitLabel: row.unitLabel || "QTY",
       packSize: Number(row.packSize || 0),
       buyingPrice: Number(row.buyingPrice || 0),
+      usage: (row as any).usage || "UNASSIGNED",
       productSource:
         row.originType === "OUTSIDE_PURCHASE" ? "OUTSIDE PURCHASE" : row.originType === "OUTLET_PRODUCTION" ||
         String(row.remarks || "").includes("MIXING OUTPUT")
@@ -160,15 +188,17 @@ export async function GET(req: NextRequest) {
     })),
     dailyReport: {
       cash: outletCashSummary(
-        dailySales.filter((sale) => sale.paymentMethod === "CASH").reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0),
-        employeeCash.filter((row) => row.kind === "EMPLOYEE_COLLECTION").reduce((sum, row) => sum + Number(row.amount), 0),
-        dailyExpenseTotal,
-        employeeCash.filter((row) => row.kind === "EMPLOYEE_REIMBURSEMENT").reduce((sum, row) => sum + Number(row.amount), 0),
+        dailySales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0),
+        0,
+        cashSaleExpenses,
+        0,
       ),
       date: dayStart.toISOString(),
       revenue: dailyRevenue,
       cogs: dailyCogs,
       expenses: dailyExpenseTotal,
+      cashSaleExpenses,
+      periodExpenses,
       grossProfit: dailyRevenue - dailyCogs,
       netProfit: dailyRevenue - dailyCogs - dailyExpenseTotal,
       transactions: dailySales.map((row) => {
@@ -181,8 +211,7 @@ export async function GET(req: NextRequest) {
           totalQty: Number(row.totalQty || 0),
           paymentMethod: row.paymentMethod,
           paidAmount: Number(row.paidAmount || 0),
-          balance: Math.max(0, sales - Number(row.paidAmount || 0)),
-          employeeName: row.employeeName,
+          balance: 0,
           cogs,
           grossProfit: sales - cogs,
           saleDate: row.saleDate,

@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       >(),
     BodegaProductModel.find({ isActive: true })
       .populate("categoryId", "name")
-      .select("name categoryId buyingPrice sellingPrice stockQty")
+      .select("name categoryId buyingPrice sellingPrice stockQty stockKilos unitCode")
       .sort({ name: 1 })
       .lean(),
     OutletInventoryModel.find({ isActive: true })
@@ -198,14 +198,14 @@ export async function GET(req: NextRequest) {
     const savedCost = Number(product.buyingPrice || 0);
     const sellingPrice = Number(product.sellingPrice || 0);
     const packSize = packSizeByProduct.get(product._id.toString()) || 0;
-    const isWholeChicken = wholeChickenProductIds.has(product._id.toString());
-    const baseUnit = isWholeChicken ? "HEAD" : "PCS";
+    const isWholeChicken = product.unitCode !== "KG" && (product.unitCode === "HEAD" || wholeChickenProductIds.has(product._id.toString()));
+    const baseUnit = product.unitCode === "KG" ? "KG" : isWholeChicken ? "HEAD" : "PCS";
     const packing = packingSnapshot({
       unit: packSize > 0 ? "PACK" : baseUnit,
       baseUnit,
       multiplier: packSize,
     });
-    const recordedBaseCost = toBaseUnitCost(savedCost, packing);
+    const recordedBaseCost = isWholeChicken && stock > 0 ? Number(product.stockKilos || 0) * savedCost / stock : toBaseUnitCost(savedCost, packing);
     const cost =
       recordedBaseCost > 0
         ? recordedBaseCost

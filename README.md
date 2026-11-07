@@ -82,6 +82,10 @@ npm run seed:admin
 
 ## Deployment notes
 
+See [Production release checklist](docs/production-release.md). Run
+`npm run production:check` on the deployment server before release; this is a
+read-only configuration and database check, not a business acceptance test.
+
 Set `UPLOADS_DIR` to a persistent, writable directory outside the release
 directory. Uploaded receipts and menu images are served through
 `/api/uploads/...`. Back up this directory together with MongoDB.

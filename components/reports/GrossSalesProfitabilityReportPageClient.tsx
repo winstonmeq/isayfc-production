@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { MainReturnsTable, type MainReturnReportRow } from "./MainReturnsTable";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,6 +33,7 @@ type ProductColumn = {
   stockUnitsOut: number;
   grossSales: number;
   discounts: number;
+  salesReturns: number;
   netSales: number;
   cogs: number;
   grossProfit: number;
@@ -41,6 +43,7 @@ type ProductColumn = {
 };
 
 type ReportData = {
+  returns: MainReturnReportRow[];
   range: { start: string; end: string };
   generatedAt: string;
   products: ProductColumn[];
@@ -51,6 +54,7 @@ type ReportData = {
     pieceSales: number;
     grossSales: number;
     discounts: number;
+    salesReturns: number;
     netSales: number;
     beginningInventory: number;
     processedChickenCuts: number;
@@ -342,6 +346,7 @@ export function GrossSalesProfitabilityReportPageClient() {
                 products={visibleProducts}
               />
               <DataRow label="Less: Sales Discounts" total={money(visibleTotals.discounts)} values={visibleProducts.map((product) => money(product.discounts))} />
+              <DataRow label="Less: Sales Returns" total={money(visibleTotals.salesReturns)} values={visibleProducts.map((product) => money(product.salesReturns))} />
               <DataRow label="NET SALES" total={money(visibleTotals.netSales)} values={visibleProducts.map((product) => money(product.netSales))} bold rule />
             </ReportTable>
 
@@ -449,6 +454,7 @@ export function GrossSalesProfitabilityReportPageClient() {
           </div>
         </div>
       )}
+      {data && <MainReturnsTable rows={data.returns} />}
     </ReportShell>
   );
 }

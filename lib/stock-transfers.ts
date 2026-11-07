@@ -21,6 +21,7 @@ import InventoryTransactionModel from "@/models/InventoryTransaction";
 import StockTransferModel from "@/models/StockTransfer";
 import StandardPackingModel from "@/models/StandardPacking";
 import StockTransferItemModel from "@/models/StockTransferItem";
+import { chickenRelease } from "@/lib/chicken-release";
 
 export class StockTransferError extends Error {
   constructor(public status: number, message: string) {
@@ -167,17 +168,27 @@ export async function dispatchTransferInTransaction({
 
     // BODEGA stock is held in its explicit base unit (HEAD or PCS).
     const isHeadTransfer = item.unitLabel === "HEAD";
+    const kilosOut = item.baseUnit === "KG" ? baseQty : item.kilosOut;
+    if (isHeadTransfer && (!Number.isFinite(kilosOut) || Number(kilosOut) <= 0)) transferFail(400, "Actual chicken kilos are required. Recreate this delivery through New Sale with actual kilos.");
+    if (isHeadTransfer) {
+      const current = await BodegaProductModel.findById(item.bodegaProductId).session(mongoSession);
+      if (!current) transferFail(404, "Chicken product is unavailable.");
+      try { chickenRelease(Number(item.qty), Number(kilosOut), Number(current.stockHeads || 0), Number(current.stockKilos || 0), Number(current.buyingPrice)); }
+      catch (error) { transferFail(400, error instanceof Error ? error.message : "Invalid chicken weight."); }
+    }
     const product = await BodegaProductModel.findOneAndUpdate(
       {
         _id: item.bodegaProductId,
         isActive: true,
         stockQty: { $gte: baseQty },
         ...(isHeadTransfer ? { stockHeads: { $gte: Number(item.qty) } } : {}),
+        ...(kilosOut != null ? { stockKilos: { $gte: kilosOut } } : {}),
       },
       {
         $inc: {
           stockQty: -baseQty,
           ...(isHeadTransfer ? { stockHeads: -Number(item.qty) } : {}),
+          ...(kilosOut != null ? { stockKilos: -kilosOut } : {}),
         },
       },
       { new: true, session: mongoSession }
@@ -220,7 +231,8 @@ export async function dispatchTransferInTransaction({
       type: "STOCK_OUT",
       quantity: baseQty,
       heads: isHeadTransfer ? Number(item.qty) : 0,
-      pieces: isHeadTransfer ? 0 : baseQty,
+      pieces: isHeadTransfer || item.baseUnit === "KG" ? 0 : baseQty,
+      kilos: kilosOut || 0, kilosDelta: kilosOut == null ? undefined : -kilosOut,
       previousStock: newStock + baseQty,
       newStock,
       remarks: `STOCK TRANSFER ${transfer.transferNumber}`,
@@ -251,6 +263,7 @@ type TransferItemInput = {
   productId?: string;
   standardPackingId?: string;
   qty?: number;
+  kilosOut?: number;
 };
 
 /**
@@ -344,7 +357,6 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       continue;
     }
 
-    if (!Number.isSafeInteger(qty)) transferFail(400, "Chicken quantities must be whole numbers.");
     // BODEGA
     const product = await BodegaProductModel.findOne({
       _id: productKey,
@@ -356,12 +368,16 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
         name?: string;
         buyingPrice?: number;
         sellingPrice?: number;
+        unitCode?: string;
+        stockHeads?: number;
+        stockKilos?: number;
         categoryId?: { name?: string } | Types.ObjectId | null;
       }>();
 
     if (!product) {
       transferFail(404, "One of the selected products was not found.");
     }
+    if (product.unitCode !== "KG" && !Number.isSafeInteger(qty)) transferFail(400, "Chicken heads, pieces and packs require whole quantities.");
 
     const standardPackingId = cleanString(input?.standardPackingId);
     if (standardPackingId && !isValidObjectId(standardPackingId)) {
@@ -388,13 +404,18 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
 
     const packSize = Math.max(0, Math.trunc(Number(standard?.standardPacking || 0)));
     const isPack = packSize > 0;
-    const isWholeChicken = !isPack && Boolean(
+    const isWholeChicken = product.unitCode !== "KG" && !isPack && (product.unitCode === "HEAD" || Boolean(
       await StandardPackingModel.exists({
         isActive: true,
         wholeChickenId: new Types.ObjectId(productKey),
       })
-    );
-    const baseUnit = isWholeChicken ? "HEAD" as const : "PCS" as const;
+    ));
+    const baseUnit = product.unitCode === "KG" ? "KG" as const : isWholeChicken ? "HEAD" as const : "PCS" as const;
+    let headRelease: { kilosOut: number; costPerHead: number } | undefined;
+    if (isWholeChicken) {
+      try { headRelease = chickenRelease(qty, Number(input.kilosOut), Number(product.stockHeads || 0), Number(product.stockKilos || 0), Number(product.buyingPrice)); }
+      catch (error) { transferFail(400, error instanceof Error ? error.message : "Actual kilos required."); }
+    }
     const packing = packingSnapshot({
       packingId: standard?._id.toString(),
       unit: isPack ? "PACK" : baseUnit,
@@ -411,10 +432,12 @@ export async function prepareTransferItems(itemsInput: TransferItemInput[]) {
       categoryName: categoryNameOf(product.categoryId),
       packSize,
       // Pack products are entered/counted in PACKS; others in PCS.
-      unitLabel: (isPack ? "PACK" : baseUnit) as "PACK" | "HEAD" | "PCS",
+      unitLabel: (isPack ? "PACK" : baseUnit === "KG" ? "QTY" : baseUnit) as "PACK" | "HEAD" | "PCS" | "QTY",
+      unitCode: baseUnit,
+      kilosOut: headRelease?.kilosOut ?? (baseUnit === "KG" ? qty : undefined),
       buyingPrice: Number(product.buyingPrice || 0),
       sellingPrice: Number(product.sellingPrice || 0),
-      companyUnitCost: toBaseUnitCost(Number(product.buyingPrice || 0), packing),
+      companyUnitCost: headRelease?.costPerHead ?? toBaseUnitCost(Number(product.buyingPrice || 0), packing),
       qty,
       qtyPcs: toBaseQuantity(qty, packing),
       baseUnit,

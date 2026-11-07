@@ -328,6 +328,7 @@ async function handleDELETE(
         linkedToSale = false;
       }
 
+      if (await StockTransferItemModel.exists({ transferId: transfer._id, itemStatus: { $ne: "PENDING" } }).session(mongoSession)) transferFail(409, "Products were already accepted or rejected. Review the receipt instead of cancelling and restoring stock twice.");
       // If stock already left the bodega, restore it.
       if (transfer.status === "IN_TRANSIT") {
         stockRestored = true;
@@ -381,6 +382,7 @@ async function handleDELETE(
             {
               $inc: {
                 stockQty: baseQty,
+                ...(item.kilosOut != null || item.baseUnit === "KG" ? { stockKilos: item.baseUnit === "KG" ? baseQty : Number(item.kilosOut) } : {}),
                 ...(isHeadTransfer
                   ? { stockHeads: Number(item.qty || 0) }
                   : {}),
@@ -403,7 +405,9 @@ async function handleDELETE(
             type: "VOID_REVERSAL",
             quantity: baseQty,
             heads: isHeadTransfer ? Number(item.qty || 0) : 0,
-            pieces: isHeadTransfer ? 0 : baseQty,
+            pieces: isHeadTransfer || item.baseUnit === "KG" ? 0 : baseQty,
+            kilos: item.baseUnit === "KG" ? baseQty : Number(item.kilosOut || 0),
+            kilosDelta: item.baseUnit === "KG" ? baseQty : item.kilosOut,
             previousStock: newStock - baseQty,
             newStock,
             remarks: `CANCEL TRANSFER ${transfer.transferNumber}`,

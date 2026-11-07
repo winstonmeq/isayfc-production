@@ -1,8 +1,11 @@
 // components/products/ProductsPageClient.tsx
 "use client";
 
+import { ProductUsageSelect } from "@/components/products/ProductUsageSelect";
+import { PRODUCT_USAGE_OPTIONS, productUsageLabel } from "@/lib/product-usage";
 import { EntryDialogContent } from "@/components/erp/EntryForm";
 import { ProductUnitSelect } from "@/components/units/ProductUnitSelect";
+import { isInventorySourceCategory } from "@/lib/product-classification";
 
 import { useEffect, useState } from "react";
 import {
@@ -57,6 +60,7 @@ type CategoryOption = {
 
 type ProductItem = {
   unitCode?: string;
+  usage?: string;
   _id: string;
   name: string;
   categoryId: string;
@@ -77,6 +81,7 @@ type ApiMeta = {
 };
 
 const emptyForm = {
+  usage: "UNASSIGNED",
   unitCode: "PCS",
   name: "",
   categoryId: "",
@@ -111,6 +116,7 @@ export function ProductsPageClient() {
   const [search, setSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");
   const [categoryId, setCategoryId] = useState("ALL");
+  const [usageFilter, setUsageFilter] = useState("ALL");
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -126,7 +132,7 @@ export function ProductsPageClient() {
 
   async function loadCategories() {
     try {
-      const res = await fetch("/api/categories?limit=100", {
+      const res = await fetch("/api/categories?limit=100&source=GROCERY", {
         cache: "no-store",
       });
 
@@ -154,6 +160,7 @@ export function ProductsPageClient() {
 
     if (search) params.set("search", search);
     if (categoryId !== "ALL") params.set("categoryId", categoryId);
+    if (usageFilter !== "ALL") params.set("usage", usageFilter);
 
     try {
       const res = await fetch(`/api/products?${params.toString()}`, {
@@ -191,7 +198,7 @@ export function ProductsPageClient() {
   useEffect(() => {
     void loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, search, categoryId]);
+  }, [page, limit, search, categoryId, usageFilter]);
 
   function updateForm(name: keyof typeof emptyForm, value: string) {
     setForm((current) => ({
@@ -219,6 +226,7 @@ export function ProductsPageClient() {
       name: product.name,
       categoryId: product.categoryId,
       unitCode: product.unitCode || "PCS",
+      usage: product.usage || "UNASSIGNED",
       buyingPrice: String(product.buyingPrice),
       unitPrice: String(product.unitPrice),
       stockPcs: String(product.stockPcs),
@@ -337,6 +345,7 @@ export function ProductsPageClient() {
     setDraftSearch("");
     setSearch("");
     setCategoryId("ALL");
+    setUsageFilter("ALL");
     setPage(1);
   }
 
@@ -376,6 +385,29 @@ export function ProductsPageClient() {
               {categories.map((category) => (
                 <SelectItem key={category._id} value={category._id}>
                   {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="w-full lg:w-56">
+          <Label>Usage</Label>
+          <Select
+            value={usageFilter}
+            onValueChange={(value) => {
+              setUsageFilter(value);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="All Usages" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Usages</SelectItem>
+              {PRODUCT_USAGE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -437,6 +469,8 @@ export function ProductsPageClient() {
               <TableHeader className="bg-slate-900">
                 <TableRow>
                   <TableHead className="text-center text-white">Name</TableHead>
+                  <TableHead className="text-center text-white">Source</TableHead>
+                    <TableHead className="text-center text-white">Usage</TableHead>
                   <TableHead className="text-center text-white">Category</TableHead>
                   <TableHead className="text-center text-white">Buying Price</TableHead>
                   <TableHead className="text-center text-white">Unit Price</TableHead>
@@ -450,14 +484,14 @@ export function ProductsPageClient() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center">
+                    <TableCell colSpan={10} className="h-32 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : products.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={10}
                       className="h-32 text-center text-muted-foreground"
                     >
                       No products found.
@@ -467,8 +501,10 @@ export function ProductsPageClient() {
                   products.map((product) => (
                     <TableRow key={product._id}>
                       <TableCell className="text-center">{product.name}<span className="block text-xs text-slate-500">Unit: {product.unitCode || "PCS"}</span></TableCell>
+                      <TableCell className="text-center">Grocery</TableCell>
+                      <TableCell className="text-center">{productUsageLabel(product.usage)}</TableCell>
                       <TableCell className="text-center">
-                        {product.categoryName || "—"}
+                        {product.categoryName || "Uncategorized"}{isInventorySourceCategory(product.categoryName) && <span className="block text-xs text-amber-700">Update product category</span>}
                       </TableCell>
                       <TableCell className="text-center">
                         {formatPeso(product.buyingPrice)}
@@ -565,6 +601,9 @@ export function ProductsPageClient() {
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <ProductUnitSelect value={form.unitCode} onChange={(value) => updateForm("unitCode", value)} />
+              <ProductUsageSelect value={form.usage} onChange={(value) => updateForm("usage", value)} />
+              <Label htmlFor="grocery-product-source">Source</Label>
+              <Input id="grocery-product-source" value="Grocery" readOnly className="bg-slate-50" />
               <Label>Product Name</Label>
               <Input
                 value={form.name}
@@ -575,7 +614,8 @@ export function ProductsPageClient() {
             </div>
 
             <div className="space-y-2 sm:col-span-2">
-              <Label>Category</Label>
+              <Label>Product Category</Label>
+              <p className="text-xs text-slate-500">Examples: Plastic, Gloves, Ingredients. Source stays Grocery regardless of category.</p>
               <Select
                 value={form.categoryId}
                 onValueChange={(value) => updateForm("categoryId", value)}

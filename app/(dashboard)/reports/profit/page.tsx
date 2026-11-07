@@ -1,5 +1,5 @@
-import { ProfitReportPageClient } from "@/components/reports/ProfitReportPageClient";
+import { redirect } from "next/navigation";
 
 export default function ProfitReportPage() {
-  return <ProfitReportPageClient />;
+  redirect("/reports/gross-sales");
 }

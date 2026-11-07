@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MasterDataPage } from "@/components/master-data/MasterDataPage";
+import { CATEGORY_SOURCE_OPTIONS } from "@/lib/category-source";
 
 export function CustomersModule() {
   const [outletOptions, setOutletOptions] = useState([
@@ -135,21 +136,23 @@ export function SuppliersModule() {
 export function CategoriesModule() {
   return (
     <MasterDataPage
-      cardTitle="All Category Info"
+      cardTitle="Product Categories"
       apiPath="/api/categories"
       resourceName="Category"
       searchPlaceholder="Search category name..."
       columns={[
         { key: "name", label: "Name" },
+        { key: "sourceLabel", label: "Source" },
         { key: "description", label: "Description" },
       ]}
       fields={[
         {
           name: "name",
           label: "Name",
-          placeholder: "Enter category name",
+          placeholder: "e.g. Chicken, Chicken Cuts, Plastic, Gloves",
           required: true,
         },
+        { name: "source", label: "Source", inputType: "select", defaultValue: "SHARED", options: [...CATEGORY_SOURCE_OPTIONS], required: true },
         {
           name: "description",
           label: "Description",

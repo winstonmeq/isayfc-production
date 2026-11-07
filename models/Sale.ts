@@ -41,6 +41,8 @@ export interface ISale extends Document {
   discountValue?: number;
   discountAmount?: number;
   paidAmount: number;
+  returnedAmount?: number;
+  refundedAmount?: number;
   balance: number;
   totalPacks: number;
   totalQty: number;
@@ -139,6 +141,8 @@ const SaleSchema = new Schema<ISale>(
       min: 0,
     },
 
+    returnedAmount: { type: Number, default: 0, min: 0 },
+    refundedAmount: { type: Number, default: 0, min: 0 },
     subtotal: { type: Number, min: 0 },
     discountId: { type: Schema.Types.ObjectId, ref: "Discount" },
     discountName: { type: String, default: "" },
@@ -230,6 +234,7 @@ SaleSchema.index(
   }
 );
 
+if (mongoose.models.Sale && !mongoose.models.Sale.schema.path("returnedAmount")) mongoose.models.Sale.schema.add({ returnedAmount: { type: Number, default: 0 }, refundedAmount: { type: Number, default: 0 } });
 const SaleModel: Model<ISale> =
   mongoose.models.Sale || mongoose.model<ISale>("Sale", SaleSchema);
 

@@ -430,7 +430,7 @@ export function SalesHistoryPageClient() {
                   </TableHead>
                   <TableHead className="text-center text-white">Customer</TableHead>
                   <TableHead className="text-center text-white">Source</TableHead>
-                  <TableHead className="text-center text-white">Category</TableHead>
+                  <TableHead className="text-center text-white">Operating Group</TableHead>
                   <TableHead className="text-center text-white">Total (₱)</TableHead>
                   <TableHead className="text-center text-white">Remarks</TableHead>
                   <TableHead className="text-center text-white">Created By</TableHead>

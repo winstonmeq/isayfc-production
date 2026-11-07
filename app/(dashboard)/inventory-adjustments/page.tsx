@@ -1,2 +1,2 @@
-import { StockControlPage } from "@/components/inventory/StockControlPage";
-export default function Page() { return <StockControlPage mode="adjustment" />; }
+import { MainInventoryControlPage } from "@/components/inventory/MainInventoryControlPage";
+export default function Page() { return <MainInventoryControlPage />; }

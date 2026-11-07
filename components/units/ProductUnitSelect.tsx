@@ -10,7 +10,7 @@ export function ProductUnitSelect({ value, onChange, bodega = false }: { value: 
     }).catch((failure) => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "Unable to load units"); });
     return () => controller.abort();
   }, []);
-  const options = bodega ? units.filter((unit) => ["PCS", "HEAD", ...(value === "PACK" ? ["PACK"] : [])].includes(unit.code)) : units;
+  const options = bodega ? units.filter((unit) => ["PCS", "HEAD", "KG", ...(value === "PACK" ? ["PACK"] : [])].includes(unit.code)) : units;
   return <div className="space-y-1"><label className="text-sm font-medium">Unit<select className="mt-1 h-10 w-full rounded-md border bg-white px-3 text-sm" value={value} onChange={(event) => onChange(event.target.value)} disabled={bodega && value === "PACK"}>
     {!options.some((unit) => unit.code === value) && <option value={value}>{value}</option>}
     {options.map((unit) => <option key={unit.code} value={unit.code}>{unit.code} — {unit.name}</option>)}

@@ -1,5 +1,9 @@
-// Legacy URLs remain valid, but these modules belong to Outlet Operations.
-export const OUTLET_ROUTES = ["/pos", "/outlet-menu", "/outlet-inventory", "/outlet-summary", "/reports/outlet-pos", "/payments/pos-collections"];
+// Self-contained outlet POS counter routes (no secondary sub-navigation bar).
+export const OUTLET_ROUTES = ["/pos", "/outlet-menu"];
+
+export function outletWorkspaceHref(outletId: string) {
+  return `/pos/outlets/${encodeURIComponent(outletId)}`;
+}
 
 export function isOutletRoute(pathname: string, selectedModule = "") {
   const route = selectedModule || pathname;

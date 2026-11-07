@@ -69,6 +69,8 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       routes: [
         "/slicing",
         "/slicing/new",
+        "/slicing/production",
+        "/profit/chicken-slicing",
         "/slicing/reconciliation",
         "/slicing/standard-packing",
       ],
@@ -98,13 +100,6 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
       ],
     },
     {
-      title: "Profitability",
-      icon: FileChartColumn,
-      routes: [
-        "/profit/chicken-slicing",
-      ],
-    },
-    {
       title: "Expenses",
       icon: ReceiptText,
       routes: ["/expenses-bodega"],
@@ -126,7 +121,6 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
         "/reports/sales",
         "/reports/inventory",
         "/reports/payments",
-        "/reports/profit",
         "/reports/overall",
       ],
     },
@@ -236,12 +230,7 @@ export function AppModuleBar() {
     ) || groups[0];
 
   if (isOutletRoute(pathname, selectedModule || "")) {
-    const outletModules = appNavItems.find((item) => item.title === "Outlet Operations")?.children || [];
-    return <nav aria-label="Outlet Operations" className="no-print sticky top-16 z-30 flex gap-1 overflow-x-auto border-b bg-slate-50 px-5 py-2">
-      {outletModules.filter((item) => isAdmin || !item.permission || permissions.includes(item.permission)).map((item) => (
-        <Link key={item.href} href={item.href} className={cn("shrink-0 rounded-lg px-3 py-2 text-sm font-bold", (selectedModule || pathname) === item.href ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white")}>{item.title}</Link>
-      ))}
-    </nav>;
+    return null;
   }
 
   if (status === "loading" || !activeGroup) {

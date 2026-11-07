@@ -29,13 +29,14 @@ export interface ISaleLine extends Document {
   discountType?: "PERCENTAGE" | "AMOUNT";
   discountValue?: number;
   discountBasis?: "PER_UNIT" | "PER_ROW";
+  kilosOut?: number;
   unitCost: number;
   companyUnitCost?: number;
 
   stockUnit: SaleStockUnit;
   packSize: number;
   stockPcsOut: number;
-  baseUnit?: "HEAD" | "PCS" | "QTY";
+  baseUnit?: "HEAD" | "PCS" | "QTY" | "KG";
   baseQty?: number;
   entryUnit?: "HEAD" | "PACK" | "PCS" | "QTY";
   multiplier?: number;
@@ -48,6 +49,7 @@ export interface ISaleLine extends Document {
 
 const SaleLineSchema = new Schema<ISaleLine>(
   {
+    kilosOut: { type: Number, min: 0 },
     companyUnitCost: { type: Number, min: 0 },
     unitCode: { type: String, trim: true, uppercase: true },
     saleId: {
@@ -156,7 +158,7 @@ const SaleLineSchema = new Schema<ISaleLine>(
     // readable so historical reports do not require a destructive migration.
     baseUnit: {
       type: String,
-      enum: ["HEAD", "PCS", "QTY"],
+      enum: ["HEAD", "PCS", "QTY", "KG"],
     },
 
     baseQty: {
@@ -195,6 +197,7 @@ SaleLineSchema.index({ menuItemId: 1 });
 SaleLineSchema.index({ categoryName: 1 });
 SaleLineSchema.index({ productName: 1 });
 
+if (mongoose.models.SaleLine && !mongoose.models.SaleLine.schema.path("kilosOut")) mongoose.deleteModel("SaleLine");
 const SaleLineModel: Model<ISaleLine> =
   mongoose.models.SaleLine ||
   mongoose.model<ISaleLine>("SaleLine", SaleLineSchema);

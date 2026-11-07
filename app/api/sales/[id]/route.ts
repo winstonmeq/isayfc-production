@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mainPaymentStatus } from "@/lib/main-payment-policy";
 import mongoose, { isValidObjectId } from "mongoose";
 
 import dbConnect from "@/lib/mongodb";
@@ -9,6 +10,7 @@ import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import InventoryTransactionModel from "@/models/InventoryTransaction";
 import ProductModel from "@/models/Product";
 import SaleModel from "@/models/Sale";
+import MainCustomerReturn from "@/models/MainCustomerReturn";
 import SaleLineModel from "@/models/SaleLine";
 import StockTransferModel from "@/models/StockTransfer";
 import { getSaleOrigin } from "@/lib/sale-origin";
@@ -36,9 +38,12 @@ function serializeSale(sale: any, lines: any[] = []) {
     saleDate: sale.saleDate ? new Date(sale.saleDate).toISOString() : undefined,
     source: sale.source,
     transactionType: sale.transactionType || "EXTERNAL_SALE",
-    transactionLabel: sale.transactionType === "INTERNAL_TRANSFER" ? "Legacy Internal Record" : "Customer Sale",
+    transactionLabel: sale.ownerOutletId ? "Internal Outlet Sale" : sale.transactionType === "INTERNAL_TRANSFER" ? "Legacy Internal Record" : "Customer Sale",
     saleSource: getSaleOrigin(sale),
     totalAmount: sale.totalAmount || 0,
+    returnedAmount: Number(sale.returnedAmount || 0),
+    refundedAmount: Number(sale.refundedAmount || 0),
+    netAfterReturns: Number(sale.totalAmount || 0) - Number(sale.returnedAmount || 0),
     subtotal: Number(sale.subtotal ?? sale.totalAmount ?? 0),
     discountName: sale.discountName || "",
     discountType: sale.discountType,
@@ -49,7 +54,7 @@ function serializeSale(sale: any, lines: any[] = []) {
     totalPacks: sale.totalPacks || 0,
     totalQty: sale.totalQty || 0,
     remarks: sale.remarks || "",
-    status: sale.status,
+    status: mainPaymentStatus(sale.status),
     createdByName: sale.createdBy?.name || sale.createdBy?.username || "",
     lines: lines.map((line) => ({
       _id: line._id.toString(),
@@ -148,6 +153,7 @@ async function handleDELETE(
 
   try {
     await mongoSession.withTransaction(async () => {
+      if (await MainCustomerReturn.exists({ saleId: id, status: "POSTED" }).session(mongoSession)) fail(409, "A posted customer return exists. This sale cannot be voided or restored twice.");
       if (await SaleModel.exists({ _id: id, source: "OUTLET" }).session(mongoSession)) {
         fail(409, "Outlet sales cannot be voided from main sales. Employee balances and outlet inventory require an outlet-specific correction.");
       }
@@ -228,6 +234,7 @@ async function handleDELETE(
               $inc: {
                 stockQty: stockToRestore,
                 ...(isHeadSale ? { stockHeads: Number(line.qty || 0) } : {}),
+                ...(line.kilosOut != null ? { stockKilos: Number(line.kilosOut) } : {}),
               },
             },
             { new: true, session: mongoSession }
@@ -242,7 +249,8 @@ async function handleDELETE(
             type: "VOID_REVERSAL",
             quantity: stockToRestore,
             heads: isHeadSale ? Number(line.qty || 0) : 0,
-            pieces: isHeadSale ? 0 : stockToRestore,
+            pieces: isHeadSale || line.baseUnit === "KG" ? 0 : stockToRestore,
+            kilos: Number(line.kilosOut || 0), kilosDelta: line.kilosOut,
             previousStock: newStock - stockToRestore,
             newStock,
             remarks: `VOID SALE ${sale.receiptNumber}`,

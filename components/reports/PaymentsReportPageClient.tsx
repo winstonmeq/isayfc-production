@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { MainReturnsTable, type MainReturnReportRow } from "./MainReturnsTable";
 
 import {
   ReportShell,
@@ -41,6 +42,9 @@ type AgingRow = {
   total: number;
 };
 type PaymentsReport = {
+  returns: MainReturnReportRow[];
+  cashRefunds: number;
+  netCollections: number;
   range: { start: string; end: string };
   generatedAt: string;
   collections: Collection[];
@@ -274,6 +278,7 @@ export function PaymentsReportPageClient() {
           )}
         </>
       )}
+      {data && <><div className="grid gap-3 sm:grid-cols-2"><StatCard label="Customer Cash Refunds" value={peso(data.cashRefunds || 0)} /><StatCard label="Net Collections after Refunds" value={peso(data.netCollections ?? data.collectionsGrand.amount)} /></div><MainReturnsTable rows={data.returns} /></>}
     </ReportShell>
   );
 }

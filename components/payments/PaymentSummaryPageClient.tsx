@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Printer, RefreshCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -27,6 +28,8 @@ type PaymentSummaryRow = {
   paid: number;
   balance: number;
   ownerOutletAmount: number;
+  paymentRequired?: boolean;
+  paymentStatus?: string;
   packs: number;
 };
 
@@ -34,6 +37,8 @@ export function PaymentSummaryPageClient() {
   const [rows, setRows] = useState<PaymentSummaryRow[]>([]);
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [group, setGroup] = useState("ALL");
+  const summaryRequest = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const totals = useMemo(() => {
@@ -56,7 +61,9 @@ export function PaymentSummaryPageClient() {
   }, [rows]);
 
   async function loadSummary() {
+    const request = ++summaryRequest.current;
     setIsLoading(true);
+    setRows([]);
 
     const params = new URLSearchParams();
 
@@ -64,7 +71,7 @@ export function PaymentSummaryPageClient() {
       params.set("search", appliedSearch);
     }
 
-    // Include outlet-customer balances owed to main, not outlet POS retail sales.
+    if (group !== "ALL") params.set("group", group);
 
     try {
       const res = await fetch(`/api/payments/summary?${params.toString()}`, {
@@ -77,22 +84,24 @@ export function PaymentSummaryPageClient() {
         throw new Error(json.message || "Failed to load payment summary.");
       }
 
+      if (request !== summaryRequest.current) return;
       setRows((json.data || []).filter((row: PaymentSummaryRow & { received?: number }) => row.sales !== 0 || row.paid !== 0 || row.balance !== 0 || Number(row.received || 0) !== 0));
     } catch (error) {
+      if (request !== summaryRequest.current) return;
       toast.error(
         error instanceof Error
           ? error.message
           : "Failed to load payment summary."
       );
     } finally {
-      setIsLoading(false);
+      if (request === summaryRequest.current) setIsLoading(false);
     }
   }
 
   useEffect(() => {
     void loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appliedSearch]);
+  }, [appliedSearch, group]);
 
   function applySearch() {
     setAppliedSearch(search.trim());
@@ -101,6 +110,7 @@ export function PaymentSummaryPageClient() {
   function resetSearch() {
     setSearch("");
     setAppliedSearch("");
+    setGroup("ALL");
   }
 
   function balanceClass(balance: number) {
@@ -112,8 +122,18 @@ export function PaymentSummaryPageClient() {
   return (
     <div className="space-y-5">
       <ErpPageHeader title="Customer Balances" />
-      <p className="text-sm text-slate-500">Main customer balances include owner outlets. Delivery expenses do not settle unpaid customer balances.</p>
+      <p className="text-sm text-slate-500">External customer balances are collectible. Owner-outlet transactions are internal and require no customer payment.</p>
       <div className="flex flex-wrap gap-2">
+        <Select value={group} onValueChange={setGroup}>
+          <SelectTrigger className="w-56" aria-label="Customer type">
+            <SelectValue placeholder="All Customers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Customers</SelectItem>
+            <SelectItem value="SALE">External Customers</SelectItem>
+            <SelectItem value="OUTLET">Own Outlets</SelectItem>
+          </SelectContent>
+        </Select>
         <Input
           className="min-w-64 flex-1"
           value={search}
@@ -134,7 +154,7 @@ export function PaymentSummaryPageClient() {
           Reset
         </Button>
 
-        <Button variant="outline" onClick={() => window.print()}>
+        <Button variant="outline" disabled={isLoading} onClick={() => window.print()}>
           <Printer className="mr-2 h-4 w-4" />
           Print list
         </Button>
@@ -185,6 +205,7 @@ export function PaymentSummaryPageClient() {
                     <TableRow key={row._id}>
                       <TableCell className="text-center">
                         {row.customer}
+                        {row.paymentRequired === false && <p className="text-xs text-slate-500">{row.paymentStatus}</p>}
                       </TableCell>
 
                       <TableCell className="text-center">
@@ -215,8 +236,8 @@ export function PaymentSummaryPageClient() {
                           className={row.balance > 0 ? "bg-emerald-600 hover:bg-emerald-700" : ""}
                           asChild
                         >
-                          <Link href={row.balance > 0 ? `/payments/add?customerId=${row._id}` : `/payments/history?customerId=${row._id}`}>
-                            {row.balance > 0 ? "Record Payment" : "View Transactions"}
+                          <Link href={row.paymentRequired === false ? `/sales/history?customerId=${row._id}` : row.balance > 0 ? `/payments/add?customerId=${row._id}` : `/payments/history?customerId=${row._id}`}>
+                            {row.paymentRequired === false ? "View Sales" : row.balance > 0 ? "Record Payment" : "View Transactions"}
                           </Link>
                         </Button>
                       </TableCell>

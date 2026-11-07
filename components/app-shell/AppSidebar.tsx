@@ -119,12 +119,12 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             active: ["/purchase-items", "/deliveries"].some((route) => selectedModule.startsWith(route)),
           }
         : null,
-      canAccessAny(["/slicing"])
+      canAccessAny(["/slicing", "/profit/chicken-slicing"])
         ? {
             label: "Production",
-            href: operationsHref("/slicing"),
+            href: operationsHref(canAccessAny(["/slicing"]) ? "/slicing" : "/profit/chicken-slicing"),
             icon: Scissors,
-            active: selectedModule.startsWith("/slicing"),
+            active: selectedModule.startsWith("/slicing") || selectedModule.startsWith("/profit/chicken-slicing"),
           }
         : null,
       canAccessAny(["/sales", "/stock-transfers"])
@@ -138,7 +138,7 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
       canAccessAny(OUTLET_ROUTES)
         ? {
             label: "Outlet Operations",
-            href: firstChild("Outlet Operations", "/pos"),
+            href: "/pos",
             icon: ShoppingCart,
             active: isOutletRoute(pathname, selectedModule),
           }
@@ -149,14 +149,6 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             href: financeHref("/payments"),
             icon: WalletCards,
             active: !isOutletRoute(pathname, selectedModule) && ["/payments", "/accounts-payable", "/supplier-payment-history"].some(route => selectedModule === route || selectedModule.startsWith(`${route}/`)),
-          }
-        : null,
-      canAccessAny(["/profit/chicken-slicing"])
-        ? {
-            label: "Profitability",
-            href: financeHref("/profit/chicken-slicing"),
-            icon: BarChart3,
-            active: selectedModule.startsWith("/profit/chicken-slicing"),
           }
         : null,
       canAccessAny(["/expenses-bodega"])

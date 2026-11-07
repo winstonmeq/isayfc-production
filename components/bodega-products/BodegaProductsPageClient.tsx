@@ -1,7 +1,10 @@
 "use client";
 
+import { ProductUsageSelect } from "@/components/products/ProductUsageSelect";
+import { PRODUCT_USAGE_OPTIONS, productUsageLabel } from "@/lib/product-usage";
 import { EntryDialogContent } from "@/components/erp/EntryForm";
 import { ProductUnitSelect } from "@/components/units/ProductUnitSelect";
+import { isInventorySourceCategory } from "@/lib/product-classification";
 
 import { useEffect, useState } from "react";
 import {
@@ -64,6 +67,7 @@ type CategoryOption = {
 
 type BodegaProductItem = {
   unitCode?: string;
+  usage?: string;
   _id: string;
   name: string;
   categoryId?: string;
@@ -89,6 +93,7 @@ type ApiMeta = {
 };
 
 const emptyForm = {
+  usage: "UNASSIGNED",
   unitCode: "HEAD",
   name: "",
   categoryId: "NONE",
@@ -140,6 +145,7 @@ export function BodegaProductsPageClient() {
   const [search, setSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");
   const [categoryId, setCategoryId] = useState("ALL");
+  const [usageFilter, setUsageFilter] = useState("ALL");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
@@ -151,7 +157,7 @@ export function BodegaProductsPageClient() {
 
   async function loadCategories() {
     try {
-      const res = await fetch("/api/categories?limit=100", { cache: "no-store" });
+      const res = await fetch("/api/categories?limit=100&source=BODEGA", { cache: "no-store" });
       const json = await res.json();
 
       if (!res.ok || !json.success) {
@@ -170,6 +176,7 @@ export function BodegaProductsPageClient() {
     const params = new URLSearchParams({ page: String(page), limit });
     if (search) params.set("search", search);
     if (categoryId !== "ALL") params.set("categoryId", categoryId);
+    if (usageFilter !== "ALL") params.set("usage", usageFilter);
 
     try {
       const res = await fetch(`/api/bodega-products?${params.toString()}`, {
@@ -204,7 +211,7 @@ export function BodegaProductsPageClient() {
   useEffect(() => {
     void loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, search, categoryId]);
+  }, [page, limit, search, categoryId, usageFilter]);
 
   function updateForm(name: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -226,6 +233,7 @@ export function BodegaProductsPageClient() {
       name: product.name,
       categoryId: product.categoryId || "NONE",
       unitCode: product.unitCode || (product.isPackProduct ? "PACK" : "HEAD"),
+      usage: product.usage || "UNASSIGNED",
       stockQty: String(product.stockQty),
       buyingPrice: String(product.buyingPrice),
       sellingPrice: String(product.sellingPrice),
@@ -328,6 +336,7 @@ export function BodegaProductsPageClient() {
     setDraftSearch("");
     setSearch("");
     setCategoryId("ALL");
+    setUsageFilter("ALL");
     setPage(1);
   }
 
@@ -360,6 +369,27 @@ export function BodegaProductsPageClient() {
               {categories.map((category) => (
                 <SelectItem key={category._id} value={category._id}>
                   {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ErpField>
+        <ErpField label="Usage">
+          <Select
+            value={usageFilter}
+            onValueChange={(value) => {
+              setUsageFilter(value);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="All usages" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Usages</SelectItem>
+              {PRODUCT_USAGE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -421,6 +451,8 @@ export function BodegaProductsPageClient() {
                 <TableHeader className="bg-slate-950">
                   <TableRow>
                     <TableHead className="text-white">Product</TableHead>
+                    <TableHead className="text-white">Source</TableHead>
+                    <TableHead className="text-center text-white">Usage</TableHead>
                     <TableHead className="text-white">Category</TableHead>
                     <TableHead className="text-white">Owner Stock Now</TableHead>
                     <TableHead className="text-right text-white">Pack Size</TableHead>
@@ -434,7 +466,9 @@ export function BodegaProductsPageClient() {
                   {products.map((product) => (
                     <TableRow key={product._id}>
                       <TableCell className="font-bold text-slate-950">{product.name}<span className="block text-xs font-normal text-slate-500">Unit: {product.unitCode || (product.isPackProduct ? "PACK" : "HEAD")}</span></TableCell>
-                      <TableCell>{product.categoryName || "-"}</TableCell>
+                      <TableCell>Bodega</TableCell>
+                      <TableCell>{productUsageLabel(product.usage)}</TableCell>
+                      <TableCell>{product.categoryName || "Uncategorized"}{isInventorySourceCategory(product.categoryName) && <span className="block text-xs text-amber-700">Update product category</span>}</TableCell>
                       <TableCell>
                         <PackStockDisplay
                           stockPcs={getStockPcs(product)}
@@ -474,6 +508,8 @@ export function BodegaProductsPageClient() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-black text-slate-950">{product.name}</h3>
+                      <p className="text-xs font-medium text-slate-500">Source: Bodega</p>
+                      <p className="text-xs text-slate-500">Usage: {productUsageLabel(product.usage)}</p>
                       <p className="text-sm text-slate-500">{product.categoryName || "No category"}</p>
                     </div>
                     <div className="flex gap-1">
@@ -543,11 +579,15 @@ export function BodegaProductsPageClient() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <ProductUnitSelect bodega value={form.unitCode} onChange={(value) => updateForm("unitCode", value)} />
+              <ProductUsageSelect value={form.usage} onChange={(value) => updateForm("usage", value)} />
+                <Label htmlFor="bodega-product-source">Source</Label>
+                <Input id="bodega-product-source" value="Bodega" readOnly className="bg-slate-50" />
                 <Label>Product Name</Label>
                 <Input value={form.name} onChange={(event) => updateForm("name", event.target.value)} required />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>Category</Label>
+                <Label>Product Category</Label>
+              <p className="text-xs text-slate-500">Examples: Chicken, Chicken Cuts. Source stays Bodega regardless of category.</p>
                 <Select value={form.categoryId} onValueChange={(value) => updateForm("categoryId", value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />

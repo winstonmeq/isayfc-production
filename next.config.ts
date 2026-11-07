@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const isProduction = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
+  ...(process.env.BUSINESS_TEST_MODE === "1" ? { distDir: ".next-business-test" } : {}),
   poweredByHeader: false,
   outputFileTracingExcludes: {
     "/api/uploads/*": ["./var/uploads/**/*"],

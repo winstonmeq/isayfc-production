@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/require-permission";
 import BodegaProductModel from "@/models/BodegaProduct";
 import CategoryModel from "@/models/Category";
 import StandardPackingModel from "@/models/StandardPacking";
+import { bodegaSaleAvailability } from "@/lib/product-classification";
 
 function numberValue(value: unknown) {
   const parsed = Number(value);
@@ -22,13 +23,9 @@ export async function GET() {
 
   await dbConnect();
 
-  const chickenCategories = await CategoryModel.find({
-    name: { $regex: /^CHICKEN$/i },
-    isActive: true,
-  }).select("_id").lean();
-
+  // Register Category for population; category names must not determine source.
+  void CategoryModel;
   const products = await BodegaProductModel.find({
-    categoryId: { $in: chickenCategories.map((category) => category._id) },
     isActive: true,
   })
     .populate("categoryId", "name")
@@ -57,10 +54,9 @@ export async function GET() {
     const packSize = standard ? wholeNumber(standard.standardPacking) : 0;
     const stockPcs = wholeNumber(product.stockQty);
     const stockHeads = wholeNumber(product.stockHeads);
-    const saleUnit = packSize > 0 ? "PACK" : "HEAD";
+    const { saleUnit, availableQty } = bodegaSaleAvailability(product, packSize);
     const availablePacks = packSize > 0 ? Math.floor(stockPcs / packSize) : 0;
     const loosePcs = packSize > 0 ? stockPcs - availablePacks * packSize : 0;
-    const availableQty = saleUnit === "PACK" ? availablePacks : Math.min(stockPcs, stockHeads);
     const pricePerUnit = numberValue(product.sellingPrice);
 
     return {
@@ -69,6 +65,7 @@ export async function GET() {
       bodegaProductId: productId,
       standardId: standard?._id?.toString?.() || "",
       name: product.name,
+      inventorySource: "BODEGA",
       categoryId: product.categoryId?._id?.toString?.() || "",
       categoryName: product.categoryId?.name || "",
       saleUnit,

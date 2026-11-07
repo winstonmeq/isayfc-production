@@ -16,6 +16,8 @@
 
 # next.js
 /.next/
+/.next-business-test/
+/.business-test/
 /out/
 
 # production

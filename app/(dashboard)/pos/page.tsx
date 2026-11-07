@@ -1,5 +1,5 @@
-import { OutletPosPageClient } from "@/components/pos/OutletPosPageClient";
+import { OutletDirectoryPageClient } from "@/components/pos/OutletDirectoryPageClient";
 
 export default function OutletPosPage() {
-  return <OutletPosPageClient />;
+  return <OutletDirectoryPageClient />;
 }

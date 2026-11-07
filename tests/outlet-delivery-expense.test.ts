@@ -1,19 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deliveryExpenseKey, ownerDeliveryExpenseTotals } from "../lib/outlet-delivery-expense-policy";
+import { deliveryExpenseKey, ownerDeliverySaleTotals } from "../lib/outlet-delivery-expense-policy";
 import { buildOverallBusinessReport } from "../lib/overall-business-report";
 
-test("delivery expenses use saved marked-up line totals, grouped by main inventory category", () => {
-  assert.deepEqual(ownerDeliveryExpenseTotals([
+test("internal delivery sales retain saved markup and discounted line amounts", () => {
+  assert.deepEqual(ownerDeliverySaleTotals([
     { source: "CHICKEN", lineTotal: 1185 }, // 3 packs at 395, not 150 pieces at 395
     { source: "BODEGA", lineTotal: 550 },
     { source: "CHICKEN", lineTotal: 90 }, // saved discounted amount
   ]), [{ expenseCategory: "BODEGA", amount: 1275 }, { expenseCategory: "GROCERY", amount: 550 }]);
   assert.equal(deliveryExpenseKey("delivery-a", "BODEGA"), deliveryExpenseKey("delivery-a", "BODEGA"));
   assert.notEqual(deliveryExpenseKey("delivery-a", "BODEGA"), deliveryExpenseKey("delivery-a", "GROCERY"));
-  assert.throws(() => ownerDeliveryExpenseTotals([]));
-  assert.throws(() => ownerDeliveryExpenseTotals([{ source: "CHICKEN", lineTotal: NaN }]));
-  assert.throws(() => ownerDeliveryExpenseTotals([{ source: "OUTLET", lineTotal: 20 }]));
+  assert.throws(() => ownerDeliverySaleTotals([]));
+  assert.throws(() => ownerDeliverySaleTotals([{ source: "CHICKEN", lineTotal: NaN }]));
+  assert.throws(() => ownerDeliverySaleTotals([{ source: "OUTLET", lineTotal: 20 }]));
 });
 
 test("overall eliminates regular owner-customer sales AND their automatic main expenses", () => {

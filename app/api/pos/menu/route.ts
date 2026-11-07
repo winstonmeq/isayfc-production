@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
+    canManage: session?.user.role === "ADMIN" || !!session?.user.permissions?.includes("pos.manage"),
     catalog: catalog.map((row) => ({
       id: row._id.toString(),
       name: row.name,

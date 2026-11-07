@@ -15,6 +15,8 @@ import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
+import { postedMainReturns } from "@/lib/main-return-report";
+import { excludeLegacyDeliveryExpenses } from "@/lib/main-expense-policy";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,6 +49,7 @@ type ProductBucket = {
   stockUnitsOut: number;
   cogs: number;
   discounts: number;
+  salesReturns: number;
 };
 
 type StockRollForward = {
@@ -100,6 +103,7 @@ export async function GET(request: NextRequest) {
       stockUnitsOut: 0,
       cogs: 0,
       discounts: 0,
+      salesReturns: 0,
     };
 
     const qty = Number(line.qty || 0);
@@ -121,6 +125,14 @@ export async function GET(request: NextRequest) {
     buckets.set(key, bucket);
   }
 
+  const returns = await postedMainReturns(start, end);
+  for (const row of returns) {
+    const key = `${row.source}:${row.product.toUpperCase()}`;
+    const bucket = buckets.get(key) || { key, productName: row.product.toUpperCase(), categoryName: row.category, source: row.source, packUnits: 0, packRevenue: 0, pieceUnits: 0, pieceRevenue: 0, stockUnitsOut: 0, cogs: 0, discounts: 0, salesReturns: 0 };
+    bucket.salesReturns = roundMoney(bucket.salesReturns + row.amount);
+    bucket.cogs = roundMoney(bucket.cogs - row.restoredCost);
+    buckets.set(key, bucket);
+  }
   const bodegaProducts = await BodegaProductModel.find({ isActive: true })
     .select("name stockQty")
     .lean<Array<{ _id: Types.ObjectId; name?: string; stockQty?: number }>>();
@@ -183,7 +195,7 @@ export async function GET(request: NextRequest) {
   const products = [...buckets.values()]
     .map((bucket) => {
       const grossSales = roundMoney(bucket.packRevenue + bucket.pieceRevenue);
-      const netSales = roundMoney(grossSales - bucket.discounts);
+      const netSales = roundMoney(grossSales - bucket.discounts - bucket.salesReturns);
       const cogs = roundMoney(bucket.cogs);
       const rollForward =
         bucket.source === "CHICKEN"
@@ -223,7 +235,8 @@ export async function GET(request: NextRequest) {
     products.reduce((sum, product) => sum + product.cogs, 0)
   );
   const discounts = roundMoney(products.reduce((sum, product) => sum + product.discounts, 0));
-  const netSales = roundMoney(grossSales - discounts);
+  const salesReturns = roundMoney(returns.reduce((sum, row) => sum + row.amount, 0));
+  const netSales = roundMoney(grossSales - discounts - salesReturns);
   const totalCogs = roundMoney(productCogs + outletCogs);
   const grossProfit = roundMoney(netSales - totalCogs);
 
@@ -234,6 +247,7 @@ export async function GET(request: NextRequest) {
     {
       $match: {
         isActive: true,
+        ...excludeLegacyDeliveryExpenses(),
         expenseDate: { $gte: start, $lt: end },
         $nor: [
           { expenseCategory: "OUTLET" },
@@ -262,6 +276,7 @@ export async function GET(request: NextRequest) {
     range: { start: start.toISOString(), end: end.toISOString() },
     generatedAt: manilaDateString(),
     products,
+    returns,
     totals: {
       packUnits: products.reduce((sum, product) => sum + product.packUnits, 0),
       packSales: roundMoney(products.reduce((sum, product) => sum + product.packRevenue, 0)),
@@ -269,6 +284,7 @@ export async function GET(request: NextRequest) {
       pieceSales: roundMoney(products.reduce((sum, product) => sum + product.pieceRevenue, 0)),
       grossSales,
       discounts,
+      salesReturns,
       netSales,
       beginningInventory: products.reduce(
         (sum, product) => sum + product.beginningInventory,

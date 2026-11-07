@@ -72,8 +72,6 @@ type SlicingRow = {
   actualSlicedPcs: string;
 };
 
-const MIN_SLICING_YIELD_RATE = 70;
-const MAX_SLICING_YIELD_RATE = 120;
 const MAX_HEADS_PER_ROW = 1000;
 
 const emptyRow: SlicingRow = {
@@ -125,7 +123,6 @@ function getRowIssues(row: SlicingRow) {
   const heads = numberValue(row.heads);
   const bags = numberValue(row.bags);
   const actualSlicedPcs = numberValue(row.actualSlicedPcs);
-  const computed = calculateRow(row);
 
   if (!row.standardId) {
     issues.push("Select a slicing standard.");
@@ -151,16 +148,6 @@ function getRowIssues(row: SlicingRow) {
     issues.push("Actual sliced PCS must be a whole number.");
   }
 
-  if (
-    row.standardId &&
-    computed.totalStdPcs > 0 &&
-    (computed.yieldRate < MIN_SLICING_YIELD_RATE ||
-      computed.yieldRate > MAX_SLICING_YIELD_RATE)
-  ) {
-    issues.push(
-      `Yield is ${computed.yieldRate.toFixed(2)}%. Recount before saving.`
-    );
-  }
 
   return issues;
 }

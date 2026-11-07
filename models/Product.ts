@@ -1,10 +1,12 @@
 // models/Product.ts
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
+import { PRODUCT_USAGES, type ProductUsage } from "@/lib/product-usage";
 
 export interface IProduct extends Document {
   _id: Types.ObjectId;
   name: string;
   unitCode?: string;
+  usage?: ProductUsage;
   categoryId: Types.ObjectId;
   buyingPrice: number;
   unitPrice: number;
@@ -32,6 +34,7 @@ const ProductSchema = new Schema<IProduct>(
       required: true,
     },
     unitCode: { type: String, trim: true, uppercase: true, default: "PCS", index: true },
+    usage: { type: String, enum: PRODUCT_USAGES, default: "UNASSIGNED" },
 
     buyingPrice: {
       type: Number,
@@ -84,6 +87,9 @@ const ProductSchema = new Schema<IProduct>(
 ProductSchema.index({ name: 1 });
 ProductSchema.index({ categoryId: 1 });
 ProductSchema.index({ isActive: 1 });
+ProductSchema.index({ usage: 1 });
+
+if (mongoose.models.Product && !mongoose.models.Product.schema.path("usage")) mongoose.models.Product.schema.add({ usage: { type: String, enum: PRODUCT_USAGES, default: "UNASSIGNED" } });
 
 const ProductModel: Model<IProduct> =
   mongoose.models.Product || mongoose.model<IProduct>("Product", ProductSchema);

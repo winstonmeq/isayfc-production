@@ -67,11 +67,12 @@ export async function GET(req: NextRequest) {
         $group: {
           _id: "$customerId",
           sales: {
-            $sum: "$totalAmount",
+            $sum: { $subtract: ["$totalAmount", { $ifNull: ["$returnedAmount", 0] }] },
           },
           packs: {
             $sum: "$totalPacks",
           },
+          refunds: { $sum: { $ifNull: ["$refundedAmount", 0] } },
         },
       },
     ]),
@@ -108,6 +109,7 @@ export async function GET(req: NextRequest) {
       {
         sales: item.sales || 0,
         packs: item.packs || 0,
+        refunds: item.refunds || 0,
       },
     ])
   );
@@ -126,9 +128,10 @@ export async function GET(req: NextRequest) {
   const data = customers.map((customer) => {
     const id = customer._id.toString();
     const sales = salesMap.get(id)?.sales || 0;
-    const paid = paymentsMap.get(id)?.paid || 0;
+    const refunds = salesMap.get(id)?.refunds || 0;
+    const paid = Math.max(0, (paymentsMap.get(id)?.paid || 0) - refunds);
     const unappliedCredit = paymentsMap.get(id)?.unappliedCredit || 0;
-    const received = paymentsMap.get(id)?.received || 0;
+    const received = Math.max(0, (paymentsMap.get(id)?.received || 0) - refunds);
     const packs = salesMap.get(id)?.packs || 0;
 
     return {
@@ -137,11 +140,13 @@ export async function GET(req: NextRequest) {
       type: customer.type,
       sales,
       paid,
-      balance: Math.max(sales - paid, 0),
-      ownerOutletAmount: ownerOutletAmount(customer.outletId, Math.max(sales - paid, 0)),
+      paymentRequired: !customer.outletId,
+      paymentStatus: customer.outletId ? "Internal — No Payment Required" : "Customer Payment",
+      balance: customer.outletId ? 0 : Math.max(sales - paid, 0),
+      ownerOutletAmount: ownerOutletAmount(customer.outletId, sales),
       unappliedCredit,
       received,
-      netPosition: sales - received,
+      netPosition: customer.outletId ? 0 : sales - received,
       packs,
     };
   });
