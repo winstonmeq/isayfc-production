@@ -4,6 +4,7 @@ import type { UserRole } from "@/models/User";
 declare module "next-auth" {
   interface Session {
     user: {
+      loginHistoryId?: string;
       id: string;
       username: string;
       role: UserRole;

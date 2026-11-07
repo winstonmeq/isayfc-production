@@ -38,6 +38,8 @@ type ProductColumn = {
   cogs: number;
   grossProfit: number;
   beginningInventory: number;
+  inventoryReceived: number;
+  otherNetStockMovements: number;
   processedChickenCuts: number;
   endingInventory: number;
 };
@@ -52,11 +54,14 @@ type ReportData = {
     packSales: number;
     pieceUnits: number;
     pieceSales: number;
+    stockUnitsOut: number;
     grossSales: number;
     discounts: number;
     salesReturns: number;
     netSales: number;
     beginningInventory: number;
+    inventoryReceived: number;
+    otherNetStockMovements: number;
     processedChickenCuts: number;
     endingInventory: number;
     productCogs: number;
@@ -89,6 +94,8 @@ export function GrossSalesProfitabilityReportPageClient() {
   const [loading, setLoading] = useState(false);
   const [selectedProductKeys, setSelectedProductKeys] = useState<string[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [productPage, setProductPage] = useState(1);
 
   const load = useCallback(async () => {
     if (preset === "custom" && (!from || !to)) {
@@ -108,6 +115,7 @@ export function GrossSalesProfitabilityReportPageClient() {
       }
       const nextData = json as ReportData;
       setData(nextData);
+      setProductPage(1);
       setSelectedProductKeys(
         nextData.products
           .filter(
@@ -136,24 +144,29 @@ export function GrossSalesProfitabilityReportPageClient() {
   }, [preset, load]);
 
   const availableProducts = useMemo(() => data?.products || [], [data]);
+  const categories = useMemo(() => [...new Set(availableProducts.map(product => product.categoryName || "Uncategorized"))].sort(), [availableProducts]);
+  const categoryProducts = useMemo(() => availableProducts.filter(product => !category || (product.categoryName || "Uncategorized") === category), [availableProducts, category]);
 
   const searchableProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
-    if (!query) return availableProducts;
-    return availableProducts.filter((product) =>
+    if (!query) return categoryProducts;
+    return categoryProducts.filter((product) =>
       `${product.productName} ${product.categoryName} ${product.source}`
         .toLowerCase()
         .includes(query)
     );
-  }, [availableProducts, productSearch]);
+  }, [categoryProducts, productSearch]);
 
-  const visibleProducts = useMemo(
+  const selectedProducts = useMemo(
     () =>
-      availableProducts.filter((product) =>
+      categoryProducts.filter((product) =>
         selectedProductKeys.includes(product.key)
       ),
-    [availableProducts, selectedProductKeys]
+    [categoryProducts, selectedProductKeys]
   );
+  const productPages = Math.max(1, Math.ceil(selectedProducts.length / 6));
+  const currentProductPage = Math.min(productPage, productPages);
+  const visibleProducts = selectedProducts.slice((currentProductPage - 1) * 6, currentProductPage * 6);
 
   const visibleTotals = useMemo(() => {
     if (!data) return undefined;
@@ -164,6 +177,7 @@ export function GrossSalesProfitabilityReportPageClient() {
   }, [data]);
 
   function toggleProduct(key: string, checked: boolean) {
+    setProductPage(1);
     setSelectedProductKeys((current) =>
       checked
         ? [...new Set([...current, key])]
@@ -190,12 +204,16 @@ export function GrossSalesProfitabilityReportPageClient() {
       onTo={setTo}
       onApply={load}
       extraFilters={
-        <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label="Product category" className="h-10 rounded-md border bg-white px-3 text-sm" value={category} onChange={event => { setCategory(event.target.value); setProductPage(1); }}>
+            <option value="">All Categories</option>
+            {categories.map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className="w-56 justify-between font-normal">
                 <span className="truncate">
-                  Product Columns ({visibleProducts.length}/{availableProducts.length})
+                  Product Columns ({selectedProducts.length}/{categoryProducts.length})
                 </span>
                 <ChevronDown className="h-4 w-4 opacity-60" />
               </Button>
@@ -220,12 +238,12 @@ export function GrossSalesProfitabilityReportPageClient() {
                       setSelectedProductKeys((current) => [
                         ...new Set([
                           ...current,
-                          ...availableProducts.map((product) => product.key),
+                          ...categoryProducts.map((product) => product.key),
                         ]),
                       ])
                     }
                   >
-                    Select All
+                    Select Category
                   </Button>
                   <Button
                     type="button"
@@ -233,7 +251,7 @@ export function GrossSalesProfitabilityReportPageClient() {
                     variant="ghost"
                     onClick={() => {
                       const productKeys = new Set(
-                        availableProducts.map((product) => product.key)
+                        categoryProducts.map((product) => product.key)
                       );
                       setSelectedProductKeys((current) =>
                         current.filter((key) => !productKeys.has(key))
@@ -277,6 +295,11 @@ export function GrossSalesProfitabilityReportPageClient() {
               </div>
             </PopoverContent>
           </Popover>
+          <div className="flex items-center gap-2 text-sm">
+            <Button variant="outline" disabled={currentProductPage === 1} onClick={() => setProductPage(currentProductPage - 1)}>Previous</Button>
+            <span>Columns {selectedProducts.length ? (currentProductPage - 1) * 6 + 1 : 0}–{Math.min(currentProductPage * 6, selectedProducts.length)} of {selectedProducts.length}</span>
+            <Button variant="outline" disabled={currentProductPage === productPages} onClick={() => setProductPage(currentProductPage + 1)}>Next</Button>
+          </div>
         </div>
       }
     >
@@ -297,6 +320,7 @@ export function GrossSalesProfitabilityReportPageClient() {
       ) : !data || !visibleTotals ? null : (
         <div className="gross-sales-sheet overflow-x-auto rounded-xl border border-slate-300 bg-white p-3 print:overflow-visible print:rounded-none print:p-0">
           <div className="space-y-5">
+            <p className="text-xs text-slate-500">Product detail: {category || "All categories"} · page {currentProductPage} of {productPages}, up to 6 products per page. Totals and operating expenses cover the full period. Printing includes the displayed product columns.</p>
             <ReportTable products={visibleProducts}>
               <SectionTitle title="Gross Sales" products={visibleProducts} />
               <GroupLabel label="In Packs" products={visibleProducts} />
@@ -356,12 +380,9 @@ export function GrossSalesProfitabilityReportPageClient() {
               <DataRow
                 label="Beginning Inventory"
                 total={quantity(visibleTotals.beginningInventory)}
-                values={visibleProducts.map((product) =>
-                  product.source === "CHICKEN"
-                    ? quantity(product.beginningInventory)
-                    : "—"
-                )}
+                values={visibleProducts.map((product) => quantity(product.beginningInventory))}
               />
+              <DataRow label="Add: Purchases / Deliveries Received" total={quantity(visibleTotals.inventoryReceived)} values={visibleProducts.map(product => quantity(product.inventoryReceived))} />
               <DataRow
                 label="Add: Processed Chicken Cuts"
                 total={quantity(visibleTotals.processedChickenCuts)}
@@ -372,17 +393,18 @@ export function GrossSalesProfitabilityReportPageClient() {
                 )}
               />
               <DataRow
+                label="Other Net Stock Movements"
+                total={quantity(visibleTotals.otherNetStockMovements)}
+                values={visibleProducts.map(product => quantity(product.otherNetStockMovements))}
+              />
+              <DataRow
                 label="Less: Ending Inventory"
                 total={quantity(visibleTotals.endingInventory)}
-                values={visibleProducts.map((product) =>
-                  product.source === "CHICKEN"
-                    ? quantity(product.endingInventory)
-                    : "—"
-                )}
+                values={visibleProducts.map((product) => quantity(product.endingInventory))}
               />
               <DataRow
                 label="Inventory Units Released (Sold)"
-                total={quantity(visibleProducts.reduce((sum, product) => sum + product.stockUnitsOut, 0))}
+                total={quantity(visibleTotals.stockUnitsOut)}
                 values={visibleProducts.map((product) => quantity(product.stockUnitsOut))}
                 bold
                 rule

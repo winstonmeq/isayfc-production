@@ -13,7 +13,7 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "stock-transfers.view", label: "View Outlet Deliveries" },
       { key: "stock-transfers.manage", label: "Manage Outlet Deliveries (Main Branch)" },
       { key: "stock-transfers.confirm", label: "Confirm Incoming Deliveries (Outlet)" },
-      { key: "outlet-repack.manage", label: "Outlet Production / Mixing (Mobile)" },
+      { key: "outlet-repack.manage", label: "Outlet Production / Mixing (Web & Mobile)" },
       { key: "cash.manage", label: "Mobile Cash Shifts" },
     ],
   },
@@ -71,7 +71,10 @@ export const ROLE_PERMISSION_GROUPS = [
     group: "Outlet Operations (POS)",
     permissions: [
       { key: "pos.view", label: "View Outlet Daily Sales and Operations" },
-      { key: "pos.manage", label: "Encode Outlet Sales and Activities" },
+      { key: "pos.manage", label: "Create Outlet Sales" },
+      { key: "pos.expenses.manage", label: "Create / Edit / Void Outlet Expenses & Stock Usage" },
+      { key: "pos.menu.manage", label: "Create / Edit / Remove Outlet Menu Products" },
+      { key: "pos.deductions.manage", label: "Deduct Outlet Stock" },
       { key: "pos.all-outlets", label: "Operate All Outlets / Select Store (Supervisors Only)" },
       { key: "reports.outlet-sales", label: "Outlet Sales & Profit Report (All Outlets)" },
       { key: "reports.outlet-comparison", label: "Outlet Comparison (All Outlets)" },
@@ -101,11 +104,13 @@ export const ROLE_PERMISSION_GROUPS = [
       { key: "inventory.manage", label: "Manage Inventory" },
       { key: "inventory-adjustments.view", label: "View Inventory Adjustments" },
       { key: "inventory-adjustments.manage", label: "Post Inventory Adjustments" },
+      { key: "customer-returns.approve", label: "Approve / Reject Main Customer Returns" },
     ],
   },
   {
     group: "Main & Overall Reports",
     permissions: [
+      { key: "reports.print", label: "Print Main & Outlet Reports" },
       { key: "reports.sales", label: "Main Sales Report" },
       { key: "reports.inventory", label: "Inventory Report" },
       { key: "reports.payments", label: "Payment Report" },
@@ -132,7 +137,7 @@ export const ROLE_PERMISSION_KEYS = ROLE_PERMISSION_GROUPS.flatMap((group) =>
 );
 
 // Retired permissions remain type-compatible with old endpoints, but cannot be assigned.
-export type RolePermission = (typeof ROLE_PERMISSION_KEYS)[number] | "stock-counts.view" | "stock-counts.manage" | "customer-inventory.view";
+export type RolePermission = (typeof ROLE_PERMISSION_KEYS)[number] | "stock-counts.view" | "stock-counts.manage" | "customer-inventory.view" | "admin.login-history";
 
 export function isValidRolePermission(value: string) {
   return (ROLE_PERMISSION_KEYS as readonly string[]).includes(value);
@@ -143,6 +148,8 @@ export function normalizeRolePermissions(input: readonly string[]): RolePermissi
   const migrated = input.map((key) => key === "activity-logs.view" ? "audit-logs.view" : key);
   const permissions = new Set<RolePermission>(migrated.filter(isValidRolePermission) as RolePermission[]);
   for (const permission of [...permissions]) {
+    if (["pos.expenses.manage", "pos.menu.manage", "pos.deductions.manage", "outlet-repack.manage", "stock-transfers.confirm", "outlet-inventory.manage"].includes(permission)) permissions.add("pos.view");
+    if (permission === "customer-returns.approve") permissions.add("inventory-adjustments.view");
     if (permission.endsWith(".manage")) {
       const view = permission.replace(/\.manage$/, ".view");
       if (isValidRolePermission(view)) permissions.add(view as RolePermission);
@@ -152,8 +159,8 @@ export function normalizeRolePermissions(input: readonly string[]): RolePermissi
 }
 
 export const ROLE_PRESETS = [
-  { name: "Outlet Cashier", permissions: ["pos.view", "pos.manage", "stock-transfers.confirm", "outlet-repack.manage", "cash.manage"] },
-  { name: "Outlet Sales Manager", permissions: ["pos.view", "pos.manage", "pos.all-outlets", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },
+  { name: "Outlet Cashier", permissions: ["pos.view", "pos.manage", "pos.expenses.manage", "stock-transfers.confirm", "outlet-repack.manage", "reports.print", "cash.manage"] },
+  { name: "Outlet Sales Manager", permissions: ["pos.view", "pos.manage", "pos.expenses.manage", "pos.menu.manage", "outlet-repack.manage", "stock-transfers.confirm", "reports.print", "pos.all-outlets", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },
   { name: "Main Sales Clerk", permissions: ["sales.view", "sales.manage", "sales-lines.view", "customers.view", "discounts.view", "stock-transfers.view"] },
   { name: "Payment Clerk", permissions: ["payments.view", "payments.manage", "accounts-payable.view", "accounts-payable.manage", "supplier-invoices.view"] },
   { name: "Owner Report Viewer", permissions: ["reports.overall", "reports.sales", "reports.profit", "reports.inventory", "reports.payments", "reports.outlet-sales", "reports.outlet-comparison", "payments.outlet-collections"] },
@@ -170,7 +177,7 @@ export function roleNeedsOutlet(roleName: string, permissions: readonly string[]
 export function canSelectPosOutlets(access: { role: string; roleName: string; permissions: readonly string[] }) {
   return access.role === "ADMIN" || (
     !roleNeedsOutlet(access.roleName, access.permissions) && access.role !== "CASHIER" &&
-    (access.permissions.includes("pos.all-outlets") || access.permissions.includes("reports.outlet-comparison")) &&
+    access.permissions.includes("pos.all-outlets") &&
     access.permissions.some((key) => key === "pos.view" || key === "pos.manage")
   );
 }

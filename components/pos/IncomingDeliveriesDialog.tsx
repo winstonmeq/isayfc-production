@@ -6,9 +6,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { TablePagination } from "@/components/erp/TablePagination";
 import { paginateTable } from "@/lib/table-pagination";
 type Delivery = { id: string; transferNumber: string; transferDate: string; status: string; items: Array<{ id: string; productName: string; source: string; qty: number; unitLabel: string; packSize: number; baseUnit?: string; price: number; totalAmount: number; itemStatus?: string; remarks?: string }> };
-type Props = { outletName: string; deliveries: Delivery[]; loading: boolean; working: boolean; notice: { kind: "ok" | "error"; text: string } | null; onClose: () => void; onRefresh: () => void; onReceive: (id: string, itemId?: string, action?: "ACCEPT" | "REJECT", reason?: string) => void; pageMode?: boolean };
+type Props = { canReceive?: boolean; outletName: string; deliveries: Delivery[]; loading: boolean; working: boolean; notice: { kind: "ok" | "error"; text: string } | null; onClose: () => void; onRefresh: () => void; onReceive: (id: string, itemId?: string, action?: "ACCEPT" | "REJECT", reason?: string) => void; pageMode?: boolean };
 const money = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
-export function IncomingDeliveriesDialog({ outletName, deliveries, loading, working, notice, onClose, onRefresh, onReceive, pageMode = false }: Props) {
+export function IncomingDeliveriesDialog({ canReceive = false, outletName, deliveries, loading, working: busy, notice, onClose, onRefresh, onReceive, pageMode = false }: Props) {
+  const working = busy || !canReceive;
   const [search, setSearch] = useState(""), [status, setStatus] = useState("PENDING");
   const [page, setPage] = useState(1), [size, setSize] = useState(25);
   const [rejecting, setRejecting] = useState<{ transferId: string; itemId: string; name: string } | null>(null), [reason, setReason] = useState("");

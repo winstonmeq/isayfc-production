@@ -130,7 +130,7 @@ const taskGroups: Record<SectionName, TaskGroup[]> = {
     {
       title: "Users & Access",
       icon: ShieldCheck,
-      routes: ["/users", "/roles", "/audit-logs", "/corrections"],
+      routes: ["/users", "/roles", "/login-history", "/audit-logs", "/corrections"],
     },
   ],
 };

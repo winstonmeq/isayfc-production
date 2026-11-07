@@ -16,7 +16,7 @@ import AuditLog from "@/models/AuditLog";
 
 class UsageError extends Error { constructor(public status: number, message: string) { super(message); } }
 export async function POST(req: NextRequest) {
-  const { session: auth, response } = await requirePermission("pos.manage");
+  const { session: auth, response } = await requirePermission("pos.expenses.manage");
   if (response) return response;
   const body = await req.json().catch(() => null);
   const outletId = String(body?.outletId || ""), inventoryId = String(body?.inventoryId || "");

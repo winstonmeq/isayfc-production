@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { AppSidebar } from "./AppSidebar";
 import { AppModuleBar } from "./AppModuleBar";
 import { AppTopbar } from "./AppTopbar";
+import { SessionActivity } from "@/components/users/SessionActivity";
 
 type Props = {
   children: React.ReactNode;
@@ -40,6 +41,7 @@ export function AppShell({ children }: Props) {
 
   return (
     <div className="min-h-screen bg-[#f4f7fa] text-slate-950">
+      <SessionActivity />
       <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:block">
         <AppSidebar collapsed={mounted ? collapsed : false} onToggle={toggleSidebar} />
       </div>

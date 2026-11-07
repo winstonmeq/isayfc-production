@@ -47,3 +47,13 @@ test("employee credits are exposed through the Payment navigation and shared sur
     assert.match(readFileSync(path, "utf8"), /\/payments\/employee-credits/);
   }
 });
+
+test("main sales default to Customer and require a deliberate employee credit confirmation", () => {
+  const client = readFileSync("components/sales/AllSalesPageClient.tsx", "utf8");
+  assert.match(client, /useState<"CUSTOMER" \| "EMPLOYEE">\("CUSTOMER"\)/);
+  assert.match(client, /setSaleTo\(event.target.value as "CUSTOMER" \| "EMPLOYEE"\); setCustomerId\(""\)/);
+  assert.match(client, /saleTo === "EMPLOYEE" && !window.confirm/);
+  const server = readFileSync("app/api/sales/route.ts", "utf8");
+  assert.match(server, /saleTo === "EMPLOYEE" && !employeeAccount/);
+  assert.match(server, /saleTo === "CUSTOMER" && employeeAccount/);
+});

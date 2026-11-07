@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import { useSession } from "next-auth/react";
 import { Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,8 @@ export function ReportShell({
   extraFilters?: ReactNode;
   children: ReactNode;
 }) {
+  const { data: session } = useSession();
+  const canPrint = session?.user?.role === "ADMIN" || session?.user?.permissions?.includes("reports.print");
   return (
     <div className="space-y-5 p-4 sm:p-6 print:p-0">
       {/* Print stylesheet: hide app chrome and filters, tidy tables. */}
@@ -106,13 +109,13 @@ export function ReportShell({
             {generatedAt ? <span>Generated: {generatedAt}</span> : null}
           </div>
         </div>
-        <Button
+        {canPrint && <Button
           variant="outline"
           className="no-print"
           onClick={() => window.print()}
         >
           <Printer className="mr-2 size-4" /> Print
-        </Button>
+        </Button>}
       </div>
 
       {/* Filter bar */}

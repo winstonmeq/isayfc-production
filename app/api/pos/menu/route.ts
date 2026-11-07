@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    canManage: session?.user.role === "ADMIN" || !!session?.user.permissions?.includes("pos.manage"),
+    canManage: session?.user.role === "ADMIN" || !!session?.user.permissions?.includes("pos.menu.manage"),
     catalog: catalog.map((row) => ({
       id: row._id.toString(),
       name: row.name,
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, response } = await requirePermission("pos.manage");
+  const { session, response } = await requirePermission("pos.menu.manage");
   if (response) return response;
   await dbConnect();
 
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { session, response } = await requirePermission("pos.manage");
+  const { session, response } = await requirePermission("pos.menu.manage");
   if (response) return response;
   await dbConnect();
   const body = await req.json().catch(() => null);

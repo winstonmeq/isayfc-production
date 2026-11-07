@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { OutletReportsPage } from "@/components/pos/OutletReportsPage";
+import { OutletMixingHistory } from "@/components/pos/OutletMixingHistory";
 import { OutletStockControlPage } from "@/components/pos/OutletStockControlPage";
 import { useRouter } from "next/navigation";
 import { OutletMenuDialog } from "@/components/pos/OutletMenuDialog";
@@ -30,7 +31,7 @@ type Outlet = { id: string; name: string; code: string };
 type MenuItem = { id: string; name: string; category: string; price: number; imageUrl: string; stockQty: number; unit: string };
 type Shift = { id: string; expectedCash: number; salesCount: number };
 type RecentSale = { id: string; receiptNumber: string; totalAmount: number; totalQty: number };
-type InventoryItem = { id: string; productName: string; categoryName: string; productSource: string; stockQty: number; unitLabel: string; packSize: number; buyingPrice: number; usage?: string };
+type InventoryItem = { id: string; productName: string; categoryName: string; productSource: string; stockQty: number; unitLabel: string; packSize: number; buyingPrice: number; usage?: string; stockKind?: "INGREDIENT" | "FINISHED"; sellingPrice?: number | null; menuAvailable?: boolean };
 type IncomingTransferItem = {
   itemStatus?: string;
   remarks?: string;
@@ -81,7 +82,7 @@ type DailyReport = {
     balance?: number;
   }>;
 };
-type Bootstrap = { success: boolean; canManageInventory?: boolean; message?: string; outlets: Outlet[]; outletId: string; menu: MenuItem[]; inventory: InventoryItem[]; shift: Shift | null; recentSales: RecentSale[]; dailyReport: DailyReport };
+type Bootstrap = { success: boolean; capabilities?: { sales: boolean; mixing: boolean; receiving: boolean }; canManageInventory?: boolean; message?: string; outlets: Outlet[]; outletId: string; menu: MenuItem[]; inventory: InventoryItem[]; shift: Shift | null; recentSales: RecentSale[]; dailyReport: DailyReport };
 type CartEntry = MenuItem & { qty: number };
 type Receipt = { receiptNumber: string; outletName: string; total: number; cash: number; change: number; items: CartEntry[]; saleDate: string; isLateEntry: boolean; paymentMethod?: string; employeeName?: string };
 type MixIngredient = { inventoryId: string; productName: string; quantity: number; available: number; unitLabel: string; unitCost: number; usage?: string };
@@ -296,6 +297,7 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
   const [lateEntryReason, setLateEntryReason] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [mixingOpen, setMixingOpen] = useState(false);
+  const [mixingTab, setMixingTab] = useState<"HISTORY" | "NEW">("HISTORY");
   const [menuSetupOpen, setMenuSetupOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [incomingOpen, setIncomingOpen] = useState(false);
@@ -511,6 +513,7 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
       if (!response.ok || !payload.success) throw new Error(payload.message || "Unable to save product mixing.");
       setNotice({ kind: "ok", text: payload.message });
       setMixingOpen(false);
+      setMixingTab("HISTORY");
       setMixMenuId("");
       setMixOutputQty("1");
       setMixRemarks("");
@@ -599,15 +602,16 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
         </nav>
       </header>
       {notice && <div className={`flex items-center justify-between rounded-2xl px-4 py-3 font-semibold ${notice.kind === "ok" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}><span className="flex items-center gap-2">{notice.kind === "ok" ? <CheckCircle2 className="size-5" /> : <X className="size-5" />}{notice.text}</span><button onClick={() => setNotice(null)}><X className="size-4" /></button></div>}
+      {view === "mixing" && <><div className="flex gap-2"><Button variant={mixingTab === "HISTORY" ? "default" : "outline"} onClick={() => setMixingTab("HISTORY")}>Mixing History</Button>{data.capabilities?.mixing && <Button variant={mixingTab === "NEW" ? "default" : "outline"} onClick={() => setMixingTab("NEW")}>New Mixing</Button>}</div>{mixingTab === "HISTORY" && <OutletMixingHistory key={outletId} outletId={outletId} />}</>}
       {view === "sales" && <>
       {!data?.outlets.length ? <section className="rounded-3xl bg-white p-12 text-center shadow"><Store className="mx-auto mb-3 size-10 text-slate-400" /><h2 className="text-xl font-bold">No outlet assigned</h2><p className="mt-2 text-slate-500">Ask the administrator to assign your account to an active outlet.</p></section> : <section className="overflow-hidden rounded-xl border bg-white">
-        <div className="flex flex-wrap items-center justify-end gap-3 border-b px-4 py-3"><Button type="button" className="h-10 bg-[#d71920] px-4 font-semibold hover:bg-red-700" disabled={!outletId} onClick={() => { setCashReceived(""); setSaleEntryOpen(true); }}><Plus className="mr-2" />Add Sale</Button></div>
+        {data.capabilities?.sales && <div className="flex flex-wrap items-center justify-end gap-3 border-b px-4 py-3"><Button type="button" className="h-10 bg-[#d71920] px-4 font-semibold hover:bg-red-700" disabled={!outletId} onClick={() => { setCashReceived(""); setSaleEntryOpen(true); }}><Plus className="mr-2" />Add Sale</Button></div>}
         <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-100 text-slate-700"><tr><th className="px-4 py-3 text-left">Time</th><th className="px-4 py-3 text-left">Receipt</th><th className="px-4 py-3 text-center">Quantity</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody>{data.dailyReport.transactions.map((sale) => <tr key={sale.id} className="border-b"><td className="px-4 py-3">{new Date(sale.saleDate).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}</td><td className="px-4 py-3 font-bold">{sale.receiptNumber}<p className="text-xs text-slate-500">{sale.paymentMethod}</p></td><td className="px-4 py-3 text-center">{sale.totalQty}</td><td className="px-4 py-3 text-right font-semibold">{money.format(sale.totalAmount)}</td></tr>)}{!data.dailyReport.transactions.length && <tr><td colSpan={4} className="py-10 text-center text-slate-500">No sales entries. Select Add Sale to record a transaction.</td></tr>}</tbody><tfoot className="bg-slate-100 font-semibold"><tr><td className="px-4 py-3" colSpan={2}>TOTAL ({data.dailyReport.transactions.length})</td><td className="px-4 py-3 text-center">{data.dailyReport.transactions.reduce((sum, sale) => sum + sale.totalQty, 0)}</td><td className="px-4 py-3 text-right">{money.format(data.dailyReport.revenue)}</td></tr></tfoot></table></div>
       </section>}
       </>}
       {view === "expenses" && <OutletExpensesDialog pageMode outletId={outletId} outletName={outletName} inventory={data.inventory} onClose={() => {}} onUpdated={() => load(outletId, true)} />}
       {view === "inventory" && <OutletInventoryDialog pageMode outletId={outletId} outletName={outletName} items={data.inventory} canManage={data.canManageInventory === true} onClose={() => {}} onUpdated={() => load(outletId, true)} />}
-      {view === "deliveries" && <IncomingDeliveriesDialog pageMode outletName={outletName} deliveries={incoming} loading={incomingLoading} working={working} notice={null} onClose={() => {}} onRefresh={() => void loadIncoming()} onReceive={(id, itemId, action, reason) => void receiveTransfer(id, itemId, action, reason)} />}
+      {view === "deliveries" && <IncomingDeliveriesDialog pageMode canReceive={data.capabilities?.receiving === true} outletName={outletName} deliveries={incoming} loading={incomingLoading} working={working} notice={null} onClose={() => {}} onRefresh={() => void loadIncoming()} onReceive={(id, itemId, action, reason) => void receiveTransfer(id, itemId, action, reason)} />}
       {view === "reports" && <OutletReportsPage outletId={outletId} outletName={outletName} />}
       {view === "stock-control" && <OutletStockControlPage key={outletId} outletId={outletId} embedded />}
     </div>
@@ -685,7 +689,7 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
     {deductionOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4"><section data-entry-shell className="w-full max-w-2xl rounded-[30px] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-[#d71920]">Outlet Inventory</p><h2 className="text-2xl font-black">Manual Stock Deduction</h2></div><button onClick={() => setDeductionOpen(false)}><X /></button></div><div className="mt-6 grid gap-4 md:grid-cols-2"><label className="text-sm font-bold md:col-span-2">Product<select className="mt-1 h-12 w-full rounded-xl border px-3" value={deductInventoryId} onChange={(e) => { const item = data?.inventory.find((x) => x.id === e.target.value); setDeductInventoryId(e.target.value); setDeductUnit(item?.packSize ? "PACK" : item?.unitLabel || "PCS"); }}><option value="">Select stock...</option>{(data?.inventory || []).filter((x) => x.stockQty > 0).map((x) => <option key={x.id} value={x.id}>{x.productName} — {stockLabel(x)}</option>)}</select></label><label className="text-sm font-bold">Quantity<Input className="mt-1 h-12" type="number" min="1" step="1" value={deductQty} onChange={(e) => setDeductQty(e.target.value)} /></label><label className="text-sm font-bold">Unit<select className="mt-1 h-12 w-full rounded-xl border px-3" value={deductUnit} onChange={(e) => setDeductUnit(e.target.value)}>{(() => { const item = data?.inventory.find((x) => x.id === deductInventoryId); return item?.packSize ? <><option value="PACK">Pack</option><option value="PCS">PCS</option></> : <option value={item?.unitLabel || "PCS"}>{item?.unitLabel || "PCS"}</option>; })()}</select></label><label className="text-sm font-bold md:col-span-2">Reason / remarks<Input className="mt-1 h-12" minLength={3} maxLength={250} placeholder="Required audit reason" value={deductRemarks} onChange={(e) => setDeductRemarks(e.target.value)} /></label></div><div className="mt-6 flex justify-end gap-3"><Button variant="outline" onClick={() => setDeductionOpen(false)}>Cancel</Button><Button className="bg-[#d71920] font-black" disabled={working || !deductInventoryId || Number(deductQty) < 1 || deductRemarks.trim().length < 3} onClick={() => void saveDeduction()}>{working && <Loader2 className="mr-2 animate-spin" />}Save Deduction</Button></div></section></div>}
     {stockOpen && <OutletInventoryDialog outletId={outletId} outletName={outletName} items={data?.inventory || []} canManage={data?.canManageInventory === true} onClose={() => setStockOpen(false)} onUpdated={() => load(outletId, true)} />}
     {menuSetupOpen && <OutletMenuDialog outletId={outletId} outletName={outletName} onClose={() => setMenuSetupOpen(false)} onUpdated={menuChanged} />}
-    <Dialog pageMode={view === "mixing"} open={view === "mixing" || mixingOpen} onOpenChange={setMixingOpen}>
+    <Dialog pageMode={view === "mixing"} open={(view === "mixing" && mixingTab === "NEW") || mixingOpen} onOpenChange={setMixingOpen}>
       <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
         {view !== "mixing" && <DialogHeader className="shrink-0 border-b px-5 py-4">
           <DialogTitle className="text-xl font-bold">Product Mixing</DialogTitle>
@@ -839,7 +843,7 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
               type="button"
               variant="outline"
               disabled={working}
-              onClick={() => view === "mixing" ? router.push(`/pos/outlets/${outletId}`) : setMixingOpen(false)}
+              onClick={() => view === "mixing" ? setMixingTab("HISTORY") : setMixingOpen(false)}
             >
               Cancel
             </Button>
@@ -847,6 +851,7 @@ export function OutletPosPageClient({ initialOutletId, view = "sales" }: { initi
               type="button"
               disabled={
                 working ||
+                !data.capabilities?.mixing ||
                 !activeMixIngredients.length ||
                 !mixMenuId ||
                 !mixSummary.hasProdCost ||

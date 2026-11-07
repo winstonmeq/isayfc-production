@@ -320,6 +320,7 @@ const moduleComponents: Record<string, ComponentType> = {
     () => import("@/components/users/UsersPageClient").then((m) => m.UsersPageClient),
     { loading: LoadingModule }
   ),
+  "/login-history": dynamic(() => import("@/components/users/LoginHistoryPageClient").then(m => m.LoginHistoryPageClient), { loading: LoadingModule }),
   "/roles": dynamic(
     () => import("@/components/roles/RolesPageClient").then((m) => m.RolesPageClient),
     { loading: LoadingModule }

@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    canManage: session?.user.role === "ADMIN" || !!session?.user.permissions?.includes("pos.manage"),
+    canManage: session?.user.role === "ADMIN" || !!session?.user.permissions?.includes("pos.expenses.manage"),
     data: expenses.map((item) => ({
       id: item._id.toString(),
       name: item.name,
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, response } = await requirePermission("pos.manage");
+  const { session, response } = await requirePermission("pos.expenses.manage");
   if (response) return response;
   await dbConnect();
   await ensureDefaultExpenseTypes();

@@ -108,6 +108,10 @@ export async function GET(req: NextRequest) {
     filter.stockPcs = { $lte: 0 };
   }
 
+  if (stockStatus === "IN_STOCK") {
+    filter.stockPcs = { $gt: 0 };
+  }
+
   const movementDateFilter: Record<string, Date> = {};
   if (dateFrom || dateTo) {
     if (dateFrom) {

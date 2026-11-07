@@ -13,6 +13,9 @@ import { requirePermission } from "@/lib/require-permission";
 import ExpenseModel from "@/models/Expense";
 import BodegaProductModel from "@/models/BodegaProduct";
 import BodegaStockTransactionModel from "@/models/BodegaStockTransaction";
+import ProductModel from "@/models/Product";
+import InventoryTransactionModel from "@/models/InventoryTransaction";
+import { incomeStockRollForward } from "@/lib/income-stock-roll-forward";
 import SaleModel from "@/models/Sale";
 import SaleLineModel from "@/models/SaleLine";
 import { postedMainReturns } from "@/lib/main-return-report";
@@ -50,12 +53,6 @@ type ProductBucket = {
   cogs: number;
   discounts: number;
   salesReturns: number;
-};
-
-type StockRollForward = {
-  beginning: number;
-  processed: number;
-  ending: number;
 };
 
 export async function GET(request: NextRequest) {
@@ -133,7 +130,7 @@ export async function GET(request: NextRequest) {
     bucket.cogs = roundMoney(bucket.cogs - row.restoredCost);
     buckets.set(key, bucket);
   }
-  const bodegaProducts = await BodegaProductModel.find({ isActive: true })
+  const bodegaProducts = await BodegaProductModel.find({})
     .select("name stockQty")
     .lean<Array<{ _id: Types.ObjectId; name?: string; stockQty?: number }>>();
   const bodegaIds = bodegaProducts.map((product) => product._id);
@@ -154,42 +151,27 @@ export async function GET(request: NextRequest) {
         >()
     : [];
 
-  const rollForwardByName = new Map<string, StockRollForward>();
+  const rollForwardByName = new Map<string, ReturnType<typeof incomeStockRollForward>>();
   for (const product of bodegaProducts) {
     const productId = product._id.toString();
     const current = Number(product.stockQty || 0);
     const transactions = bodegaTransactions.filter(
       (transaction) => transaction.bodegaProductId.toString() === productId
     );
-    const afterStart = transactions.reduce(
-      (sum, transaction) =>
-        sum + Number(transaction.newStock || 0) - Number(transaction.previousStock || 0),
-      0
-    );
-    const afterEnd = transactions
-      .filter((transaction) => new Date(transaction.transactionDate) >= end)
-      .reduce(
-        (sum, transaction) =>
-          sum + Number(transaction.newStock || 0) - Number(transaction.previousStock || 0),
-        0
-      );
-    const processed = transactions
-      .filter(
-        (transaction) =>
-          new Date(transaction.transactionDate) < end &&
-          transaction.referenceType === "SLICING_BATCH" &&
-          Number(transaction.newStock || 0) > Number(transaction.previousStock || 0)
-      )
-      .reduce(
-        (sum, transaction) =>
-          sum + Number(transaction.newStock || 0) - Number(transaction.previousStock || 0),
-        0
-      );
-    rollForwardByName.set(String(product.name || "").toUpperCase(), {
-      beginning: current - afterStart,
-      processed,
-      ending: current - afterEnd,
-    });
+    const key = `CHICKEN:${String(product.name || "").toUpperCase()}`;
+    rollForwardByName.set(key, incomeStockRollForward(current, transactions, start, end, buckets.get(key)?.stockUnitsOut || 0));
+  }
+  const groceryProducts = await ProductModel.find({}).select("name stockPcs").lean();
+  const groceryTransactions = await InventoryTransactionModel.find({
+    productId: { $in: groceryProducts.map(product => product._id) }, transactionDate: { $gte: start },
+    // Modern grocery stock is held in stockPcs using the product's base unit.
+    // Legacy BAGS/KILOS ledgers belong to separate stock fields, not stockPcs.
+    unit: "PCS",
+  }).select("productId transactionDate previousStock newStock referenceType").lean();
+  for (const product of groceryProducts) {
+    const key = `BODEGA:${String(product.name || "").toUpperCase()}`;
+    const movements = groceryTransactions.filter(row => String(row.productId) === String(product._id));
+    rollForwardByName.set(key, incomeStockRollForward(Number(product.stockPcs || 0), movements, start, end, buckets.get(key)?.stockUnitsOut || 0));
   }
 
   const products = [...buckets.values()]
@@ -197,10 +179,7 @@ export async function GET(request: NextRequest) {
       const grossSales = roundMoney(bucket.packRevenue + bucket.pieceRevenue);
       const netSales = roundMoney(grossSales - bucket.discounts - bucket.salesReturns);
       const cogs = roundMoney(bucket.cogs);
-      const rollForward =
-        bucket.source === "CHICKEN"
-          ? rollForwardByName.get(bucket.productName)
-          : undefined;
+      const rollForward = rollForwardByName.get(bucket.key);
       return {
         ...bucket,
         packUnits: Math.round(bucket.packUnits * 100) / 100,
@@ -219,6 +198,8 @@ export async function GET(request: NextRequest) {
         cogs,
         grossProfit: roundMoney(netSales - cogs),
         beginningInventory: rollForward?.beginning || 0,
+        inventoryReceived: rollForward?.received || 0,
+        otherNetStockMovements: rollForward?.otherNet || 0,
         processedChickenCuts: rollForward?.processed || 0,
         endingInventory: rollForward?.ending || 0,
       };
@@ -282,6 +263,7 @@ export async function GET(request: NextRequest) {
       packSales: roundMoney(products.reduce((sum, product) => sum + product.packRevenue, 0)),
       pieceUnits: products.reduce((sum, product) => sum + product.pieceUnits, 0),
       pieceSales: roundMoney(products.reduce((sum, product) => sum + product.pieceRevenue, 0)),
+      stockUnitsOut: products.reduce((sum, product) => sum + product.stockUnitsOut, 0),
       grossSales,
       discounts,
       salesReturns,
@@ -290,6 +272,8 @@ export async function GET(request: NextRequest) {
         (sum, product) => sum + product.beginningInventory,
         0
       ),
+      inventoryReceived: products.reduce((sum, product) => sum + product.inventoryReceived, 0),
+      otherNetStockMovements: products.reduce((sum, product) => sum + product.otherNetStockMovements, 0),
       processedChickenCuts: products.reduce(
         (sum, product) => sum + product.processedChickenCuts,
         0

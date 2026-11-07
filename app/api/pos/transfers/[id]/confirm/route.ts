@@ -22,7 +22,7 @@ class ApiError extends Error {
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const { session, response } = await requirePermission("pos.manage");
+  const { session, response } = await requirePermission("stock-transfers.confirm");
   if (response) return response;
   const { id } = await context.params;
   const body = await req.json().catch(() => null) as null | { outletId?: string; itemId?: string; action?: string; reason?: string };

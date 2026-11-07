@@ -15,11 +15,19 @@ import StandardPacking from "@/models/StandardPacking";
 import GroceryLedger from "@/models/InventoryTransaction";
 import BodegaLedger from "@/models/BodegaStockTransaction";
 import Expense from "@/models/Expense";
+import { mainProductionHistoryQuery } from "@/lib/main-production-history";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { response, session: auth } = await requirePermission(["slicing.view", "slicing.manage"]); if (response) return response;
   await dbConnect();
-  const batches = await Batch.find().sort({ productionDate: -1, createdAt: -1 }).limit(1000).populate("createdBy", "name").lean();
+  let query;
+  try { query = mainProductionHistoryQuery(req.nextUrl.searchParams); }
+  catch (error) { return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Invalid filters." }, { status: 400 }); }
+  const total = await Batch.countDocuments(query.filter);
+  const totalPages = Math.max(1, Math.ceil(total / query.size)), page = Math.min(query.page, totalPages);
+  const batches = await Batch.find(query.filter).sort({ productionDate: -1, createdAt: -1, _id: -1 }).skip((page - 1) * query.size).limit(query.size).populate("createdBy", "name").lean();
+  const sums = await Batch.aggregate([{ $match: { ...query.filter, status: query.filter.status || { $ne: "REVERSED" } } }, { $group: { _id: null, kilos: { $sum: "$outputKilos" }, cost: { $sum: "$totalCost" } } }]);
+  const totals = query.filter.status === "REVERSED" ? { kilos: 0, cost: 0 } : sums[0] || { kilos: 0, cost: 0 };
   const products = await Product.find({ isActive: true }).select("name unitCode stockPcs buyingPrice").sort({ name: 1 }).lean();
   const bodega = await Bodega.find({ isActive: true }).select("name unitCode stockQty stockHeads stockKilos buyingPrice").sort({ name: 1 }).lean();
   const standards = await StandardPacking.find({ isActive: true }).select("wholeChickenId productId standardPacking").lean();
@@ -28,7 +36,7 @@ export async function GET() {
     ...bodega.map(p => ({ id: String(p._id), type: "BODEGA", name: p.name, unit: p.unitCode === "KG" ? "KG" : "PCS", quantity: p.stockQty, whole: p.unitCode !== "KG" && (p.unitCode === "HEAD" || standards.some(s => String(s.wholeChickenId) === String(p._id))), kilos: p.stockKilos })),
   ];
   const expenses = auth?.user.role === "ADMIN" || auth?.user.permissions?.includes("expenses-bodega.manage") ? await Expense.find({ isActive: true, outletId: null, expenseCategory: { $ne: "OUTLET" }, origin: "MANUAL", capitalizedByBatch: null }).select("name amount expenseDate").sort({ expenseDate: -1 }).limit(500).lean() : [];
-  return NextResponse.json({ success: true, batches, ingredients, expenses, outputs: bodega.filter(p => p.unitCode === "KG").map(p => ({ id: String(p._id), name: p.name })) });
+  return NextResponse.json({ success: true, batches, pagination: { page, pageSize: query.size, totalPages, total, from: total ? (page - 1) * query.size + 1 : 0, to: Math.min(page * query.size, total) }, totals, ingredients, expenses, outputs: bodega.filter(p => p.unitCode === "KG").map(p => ({ id: String(p._id), name: p.name })) }, { headers: { "Cache-Control": "no-store" } });
 }
 
 async function post(req: NextRequest) {

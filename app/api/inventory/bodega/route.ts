@@ -283,7 +283,9 @@ export async function GET(req: NextRequest) {
   });
 
   const data = allData.filter((row) =>
-    stockStatus === "LOW"
+    stockStatus === "IN_STOCK"
+      ? row.currentStock > 0
+      : stockStatus === "LOW"
       ? row.stockStatus === "LOW"
       : stockStatus === "OUT"
         ? row.stockStatus === "OUT"

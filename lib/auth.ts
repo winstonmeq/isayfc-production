@@ -10,10 +10,12 @@ import {
 import RoleModel from "@/models/Role";
 import UserModel from "@/models/User";
 import { legacyRoleForSelection, normalizeRolePermissions } from "@/lib/role-permissions";
+import { recordLogin, recordLogout } from "@/lib/login-history";
 
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
   },
   pages: {
     signIn: "/login",
@@ -79,6 +81,7 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) {
           loginRateLimiter.recordFailure(rateLimitKey);
+          await recordLogin({ userName: identifier, status: "FAILED", reason: "Invalid credentials or inactive account" });
           return null;
         }
 
@@ -89,12 +92,16 @@ export const authOptions: NextAuthOptions = {
 
         if (!isPasswordValid) {
           loginRateLimiter.recordFailure(rateLimitKey);
+          await recordLogin({ userId: String(user._id), userName: user.name || identifier, status: "FAILED", reason: "Invalid credentials" });
           return null;
         }
 
         loginRateLimiter.clear(rateLimitKey);
         const role: any = user.roleId;
-        if (role?.isActive === false) return null;
+        if (role?.isActive === false) {
+          await recordLogin({ userId: String(user._id), userName: user.name || identifier, status: "FAILED", reason: "Inactive role" });
+          return null;
+        }
 
         return {
           id: user._id.toString(),
@@ -109,9 +116,15 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+  events: {
+    async signOut({ token }) {
+      if (token?.loginHistoryId && token.id) await recordLogout(String(token.loginHistoryId), String(token.id));
+    },
+  },
   callbacks: {
     async jwt({ token, user, trigger }) {
       if (user) {
+        token.loginHistoryId = await recordLogin({ userId: user.id, userName: user.name || user.username, roleName: user.roleName || user.role, status: "SUCCESS" });
         token.id = user.id;
         token.username = user.username;
         token.role = user.role || "USER";
@@ -139,6 +152,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = String(token.id || "");
+        session.user.loginHistoryId = typeof token.loginHistoryId === "string" ? token.loginHistoryId : undefined;
         session.user.username = String(token.username || "");
         session.user.role = token.role || "USER";
         session.user.roleId = String(token.roleId || "");

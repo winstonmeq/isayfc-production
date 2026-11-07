@@ -18,6 +18,7 @@ import UserModel from "@/models/User";
 import { findAuthorizedPosOutlet } from "@/lib/pos-outlet-access";
 import { emptyPosDailyReport } from "@/lib/pos-empty-report";
 import { classifyOutletInventoryRows } from "@/lib/outlet-product-classification";
+import { outletInventoryView } from "@/lib/outlet-inventory-view";
 import { parseReportRange } from "@/lib/report-utils";
 import { outletDirectorySummary } from "@/lib/outlet-directory-summary";
 import { OutletEmployeeCash } from "@/models/OutletEmployeeFinance";
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
   const dayStart = startOfDayManila();
   const dayEnd = addDays(dayStart, 1);
   const [menu, inventory, shift, recentSales, dailySales, dailyExpenses, employeeCash] = await Promise.all([
-    OutletMenuItemModel.find({ outletId, isActive: true, isAvailable: true })
+    OutletMenuItemModel.find({ outletId })
       .sort({ category: 1, sortOrder: 1, name: 1 })
       .lean<any[]>(),
     OutletInventoryModel.find({ outletId, isActive: true }).lean<any[]>(),
@@ -129,7 +130,8 @@ export async function GET(req: NextRequest) {
     .reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const dailyExpenseTotal = cashSaleExpenses + periodExpenses;
 
-  const menuRows = menu.map((row) => {
+  const menuById = new Map(menu.map(row => [String(row._id), row]));
+  const menuRows = menu.filter(row => row.isActive && row.isAvailable).map((row) => {
     const stock = menuStock(inventory, row._id);
     return {
       id: row._id.toString(),
@@ -163,9 +165,15 @@ export async function GET(req: NextRequest) {
     success: true,
     outlets: outlets.map((row) => ({ id: row._id.toString(), name: row.name, code: row.code })),
     outletId,
+    capabilities: {
+      sales: access?.role === "ADMIN" || !!access?.permissions.includes("pos.manage"),
+      mixing: access?.role === "ADMIN" || !!access?.permissions.includes("outlet-repack.manage"),
+      receiving: access?.role === "ADMIN" || !!access?.permissions.includes("stock-transfers.confirm"),
+    },
     canManageInventory: access?.role === "ADMIN" || !!access?.permissions.includes("outlet-inventory.manage"),
     menu: menuRows,
     inventory: classifiedInventory.map((row) => ({
+      ...outletInventoryView(row, menuById.get(String(row.productId))),
       id: row._id.toString(),
       productName: row.productName,
       categoryName: row.categoryName || "",

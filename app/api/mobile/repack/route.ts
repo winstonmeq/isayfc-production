@@ -173,10 +173,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, response } = await requireMobileAuth(req, [
-    "outlet-repack.manage",
-    "outlet-inventory.manage",
-  ]);
+  const { user, response } = await requireMobileAuth(req, "outlet-repack.manage");
   if (response) return response;
 
   if (!user.outlet) {

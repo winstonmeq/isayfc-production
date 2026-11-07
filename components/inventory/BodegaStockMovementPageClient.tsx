@@ -211,6 +211,7 @@ export function BodegaStockMovementPageClient() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Stock</SelectItem>
+                <SelectItem value="IN_STOCK">In Stock</SelectItem>
                 <SelectItem value="LOW">Low</SelectItem>
                 <SelectItem value="OUT">Out</SelectItem>
               </SelectContent>

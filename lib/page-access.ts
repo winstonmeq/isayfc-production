@@ -2,6 +2,7 @@ import { normalizeRolePermissions, type RolePermission } from "./role-permission
 
 type PageRule = { path: string; permission: RolePermission; exact?: boolean };
 export const PAGE_ACCESS_RULES: PageRule[] = [
+  { path: "/login-history", permission: "admin.login-history" },
   { path: "/pos/reports", permission: "reports.inventory" },
   { path: "/pos", permission: "pos.view" },
   { path: "/dashboard", permission: "dashboard.view" },

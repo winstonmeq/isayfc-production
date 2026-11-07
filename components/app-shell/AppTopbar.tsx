@@ -89,7 +89,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
   );
   const currentArea = isPosModule ? "Outlet Operations" : selectedModule.startsWith("/reports/")
     ? "Reports"
-    : ["/users", "/roles", "/audit-logs", "/corrections"].includes(selectedModule)
+    : ["/users", "/roles", "/login-history", "/audit-logs", "/corrections"].includes(selectedModule)
       ? "Users"
       : isPurchasingModule
         ? "Purchasing"
@@ -297,7 +297,7 @@ export function AppTopbar({ collapsed, onToggle, onMobileMenu }: Props) {
           {
             label: "Users",
             href: `/admin?module=${encodeURIComponent(firstUserModule)}`,
-            active: ["/users", "/roles", "/audit-logs", "/corrections"].includes(selectedModule),
+            active: ["/users", "/roles", "/login-history", "/audit-logs", "/corrections"].includes(selectedModule),
           },
         ]
       : []),

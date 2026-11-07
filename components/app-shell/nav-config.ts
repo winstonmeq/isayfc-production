@@ -343,6 +343,7 @@ export const appNavItems: AppNavItem[] = [
     permission: "audit-logs.view",
     section: "Admin",
   },
+  { title: "Login History", href: "/login-history", icon: Clock, permission: "admin.login-history", section: "Admin" },
   {
     title: "Correction Register",
     href: "/corrections",

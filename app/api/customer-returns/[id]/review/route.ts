@@ -21,8 +21,9 @@ export async function GET(_req: NextRequest, context: Context) {
   const sale = await Sale.findById(row.saleId).select("receiptNumber saleDate totalAmount paidAmount balance returnedAmount refundedAmount status isVoided").lean();
   const line = await SaleLine.findById(row.saleLineId).select("productName qty lineTotal stockUnit unitCost baseQty").lean();
   const customer = await Customer.findById(row.customerId).select("name").lean();
-  const canReview = auth!.user.role === "ADMIN" || auth!.user.roleName === "ADMIN" || auth!.user.permissions?.includes("inventory-adjustments.manage");
-  const canPost = canReview && (auth!.user.role === "ADMIN" || auth!.user.roleName === "ADMIN" || auth!.user.permissions?.includes("payments.manage"));
+  const admin = auth!.user.role === "ADMIN";
+  const canReview = admin || auth!.user.permissions?.includes("customer-returns.approve");
+  const canPost = admin || (auth!.user.permissions?.includes("inventory-adjustments.manage") && auth!.user.permissions?.includes("payments.manage"));
   let postingAmount = Number(row.creditAmount || 0);
   if (line && row.status === "APPROVED_AWAITING_POSTING") {
     const prior = await Return.find({ saleLineId: row.saleLineId, status: "POSTED" }).lean();
@@ -35,7 +36,7 @@ export async function GET(_req: NextRequest, context: Context) {
   return NextResponse.json({ success: true, canReview: Boolean(canReview), canPost: Boolean(canPost), settlement, row, sale, line, customer: customer?.name || "Unknown customer" });
 }
 export async function POST(req: NextRequest, context: Context) {
-  const { response, session: auth } = await requirePermission("inventory-adjustments.manage");
+  const { response, session: auth } = await requirePermission("customer-returns.approve");
   if (response) return response;
   const { id } = await context.params;
   const body = await req.json().catch(() => null);

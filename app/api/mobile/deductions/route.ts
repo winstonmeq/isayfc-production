@@ -76,11 +76,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { user, response } = await requireMobileAuth(req, [
-    "pos.manage",
-    "outlet-inventory.manage",
-    "sales.manage",
-  ]);
+  const { user, response } = await requireMobileAuth(req, "pos.deductions.manage");
   if (response) return response;
 
   if (!user.outlet) {

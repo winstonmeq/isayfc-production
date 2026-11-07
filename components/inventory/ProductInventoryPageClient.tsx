@@ -306,6 +306,7 @@ export function ProductInventoryPageClient() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All stock</SelectItem>
+              <SelectItem value="IN_STOCK">In Stock</SelectItem>
               <SelectItem value="LOW">Low stock</SelectItem>
               <SelectItem value="OUT">Out of stock</SelectItem>
             </SelectContent>

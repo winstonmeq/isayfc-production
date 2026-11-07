@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TablePagination } from "@/components/erp/TablePagination";
@@ -21,6 +22,8 @@ const columns: Record<Tab, Column[]> = {
 };
 const money = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
 export function OutletReportsPage({ outletId, outletName }: { outletId: string; outletName: string }) {
+  const { data: session } = useSession();
+  const canPrint = session?.user?.role === "ADMIN" || session?.user?.permissions?.includes("reports.print");
   const today = manilaDateString();
   const [from, setFrom] = useState(today), [to, setTo] = useState(today);
   const [range, setRange] = useState({ from: today, to: today }), [refresh, setRefresh] = useState(0);
@@ -52,7 +55,7 @@ export function OutletReportsPage({ outletId, outletName }: { outletId: string; 
       <p className="text-sm">Period: {range.from} – {range.to}</p>
       {query && <p className="text-sm">Search: {query}</p>}
     </div>
-    <nav className="flex flex-wrap items-center gap-2 border-b p-4 print:hidden">{Object.entries(tabs).map(([key, label]) => <Button key={key} variant={tab === key ? "default" : "outline"} onClick={() => { setTab(key as Tab); setQuery(""); setPage(1); }}>{label}</Button>)}<Button type="button" className="ml-auto" variant="outline" disabled={loading || !!error} onClick={() => window.print()}>Print Report</Button></nav>
+    <nav className="flex flex-wrap items-center gap-2 border-b p-4 print:hidden">{Object.entries(tabs).map(([key, label]) => <Button key={key} variant={tab === key ? "default" : "outline"} onClick={() => { setTab(key as Tab); setQuery(""); setPage(1); }}>{label}</Button>)}{canPrint && <Button type="button" className="ml-auto" variant="outline" disabled={loading || !!error} onClick={() => window.print()}>Print Report</Button>}</nav>
     <form className="flex flex-wrap items-end gap-3 border-b p-4 print:hidden" onSubmit={event => { event.preventDefault(); if (from && to && from <= to) { setRange({ from, to }); setRefresh(value => value + 1); } }}>
       <label>Date From<Input required type="date" value={from} onChange={event => setFrom(event.target.value)} /></label><label>Date To<Input required type="date" min={from} value={to} onChange={event => setTo(event.target.value)} /></label><Button disabled={loading}>Apply</Button><Input className="max-w-sm" placeholder="Search report" value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} />
     </form>

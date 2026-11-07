@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { manilaDateString } from "@/lib/date-utils";
 
 import { ReportShell, StatCard, peso, qtyFmt, type Preset } from "./ReportShell";
 
@@ -27,6 +28,9 @@ type Row = {
   stockDisplay: string;
 };
 type InventoryReport = {
+  asOf: string;
+  historical: boolean;
+  valuationNote: string;
   generatedAt: string;
   rows: Row[];
   categoryOptions: string[];
@@ -45,6 +49,7 @@ type InventoryReport = {
 type StockFilter = "all" | "in" | "low" | "zero";
 
 export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" | "OUTLET" }) {
+  const [asOf, setAsOf] = useState(() => manilaDateString(new Date()));
   const [stock, setStock] = useState<StockFilter>("all");
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState("");
@@ -53,9 +58,11 @@ export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" |
 
   const load = useCallback(async () => {
     setLoading(true);
+    setData(null);
     try {
       const params = new URLSearchParams();
       params.set("scope", scope);
+      if (scope === "MAIN") params.set("asOf", asOf);
       if (location) params.set("location", location);
       if (stock !== "all") params.set("stock", stock);
       if (category) params.set("category", category);
@@ -71,13 +78,13 @@ export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" |
     } finally {
       setLoading(false);
     }
-  }, [stock, category, scope, location]);
+  }, [stock, category, scope, location, asOf]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stock, category, scope, location]);
+  }, [stock, category, scope, location, asOf]);
 
   const statusBadge = (s: Row["stockStatus"]) =>
     s === "OUT"
@@ -91,7 +98,7 @@ export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" |
       title={scope === "OUTLET" ? "Outlet Stock-on-Hand Report" : "Main Inventory Stock-on-Hand Report"}
       subtitle={scope === "OUTLET" ? "Outlet inventory only. Received stock is inventory, not an operating expense." : "Bodega and grocery inventory only. Outlet stock is reported in Outlet Operations."}
       generatedAt={data?.generatedAt}
-      periodLabel={data?.generatedAt ? `As of ${data.generatedAt}` : "As of now"}
+      periodLabel={data ? data.historical ? `As of ${data.asOf} (end of day, Manila)` : `As of ${data.generatedAt}` : ""}
       showRange={false}
       preset={"month" as Preset}
       from=""
@@ -102,6 +109,7 @@ export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" |
       onApply={() => {}}
       extraFilters={
         <>
+          {scope === "MAIN" && <label className="flex items-center gap-2 text-sm font-semibold">As of Date <input type="date" value={asOf} max={manilaDateString(new Date())} onChange={(event) => { if (event.target.value) setAsOf(event.target.value); }} className="h-10 rounded-lg border border-slate-200 bg-white px-3" /></label>}
           {scope === "OUTLET" && <label className="text-sm font-semibold">Outlet <select className="h-10 rounded-lg border bg-white px-3" value={location} onChange={(event) => setLocation(event.target.value)}><option value="">All Outlets</option>{data?.locationOptions?.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>}
           <div className="flex items-end gap-1 rounded-lg border border-slate-200 p-1">
             {([
@@ -145,16 +153,17 @@ export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" |
         </div>
       ) : !data ? null : (
         <>
+          {data.valuationNote && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{data.valuationNote}</p>}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <StatCard label="Items" value={qtyFmt(data.grand.items)} />
             <StatCard
               label="Inventory Value (Cost)"
-              value={peso(data.grand.costValue)}
+              value={data.historical ? "Unavailable" : peso(data.grand.costValue)}
               highlight="good"
             />
             <StatCard
               label="Retail Value"
-              value={peso(data.grand.retailValue)}
+              value={data.historical ? "Unavailable" : peso(data.grand.retailValue)}
             />
             <StatCard
               label="Low Stock"
@@ -203,16 +212,16 @@ export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" |
                             `${qtyFmt(r.stockPcs)} ${r.unitLabel}`}
                         </td>
                         <td className="p-2.5 text-right text-slate-600">
-                          {peso(r.buyingPrice)} / {r.baseUnit.toLowerCase()}
+                          {data.historical ? "—" : `${peso(r.buyingPrice)} / ${r.baseUnit.toLowerCase()}`}
                         </td>
                         <td className="p-2.5 text-right text-slate-600">
-                          {r.packSize > 0 ? peso(r.packCost) : "—"}
+                          {!data.historical && r.packSize > 0 ? peso(r.packCost) : "—"}
                         </td>
                         <td className="p-2.5 text-right font-medium">
-                          {peso(r.costValue)}
+                          {data.historical ? "—" : peso(r.costValue)}
                         </td>
                         <td className="p-2.5 text-right text-slate-600">
-                          {peso(r.retailValue)}
+                          {data.historical ? "—" : peso(r.retailValue)}
                         </td>
                         <td className="p-2.5">
                           <span
@@ -239,10 +248,10 @@ export function InventoryReportPageClient({ scope = "MAIN" }: { scope?: "MAIN" |
                       </td>
                       <td colSpan={2} />
                       <td className="p-2.5 text-right">
-                        {peso(data.grand.costValue)}
+                        {data.historical ? "—" : peso(data.grand.costValue)}
                       </td>
                       <td className="p-2.5 text-right">
-                        {peso(data.grand.retailValue)}
+                        {data.historical ? "—" : peso(data.grand.retailValue)}
                       </td>
                       <td />
                     </tr>

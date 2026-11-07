@@ -15,7 +15,7 @@ import AuditLog from "@/models/AuditLog";
 
 class ExpenseError extends Error { constructor(public status: number, message: string) { super(message); } }
 async function mutate(req: NextRequest, context: { params: Promise<{ id: string }> }, voiding: boolean) {
-  const { response, session: auth } = await requirePermission("pos.manage");
+  const { response, session: auth } = await requirePermission("pos.expenses.manage");
   if (response) return response;
   const { id } = await context.params;
   const body = await req.json().catch(() => null);

@@ -29,7 +29,7 @@ function baseCost(row: any) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, response } = await requirePermission("pos.manage");
+  const { session, response } = await requirePermission("outlet-repack.manage");
   if (response) return response;
   await dbConnect();
   await ensureDefaultExpenseTypes();

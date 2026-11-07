@@ -75,6 +75,7 @@ export async function GET() {
       packSize,
       stockPcs,
       stockHeads,
+      stockKilos: numberValue(product.stockKilos),
       availableQty,
       availablePacks,
       loosePcs,

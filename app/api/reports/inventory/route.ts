@@ -1,9 +1,8 @@
 // app/api/reports/inventory/route.ts
 //
-// Standard Inventory Valuation Report (stock-on-hand). A point-in-time snapshot
-// valuing each active product's current stock at cost (buyingPrice) and at
-// retail (unitPrice), with category subtotals, a grand total, and low/zero
-// stock flags. Inventory valuation is "as of now", so it takes no date range.
+// Stock-on-hand snapshot: current quantities and valuation, or historical
+// end-of-day main quantities reconstructed from the ledger. Historical prices
+// are not fully recorded, so historical monetary values are unavailable.
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -18,6 +17,9 @@ import OutletInventoryModel from "@/models/OutletInventory";
 import OutletModel from "@/models/Outlet";
 import StandardPackingModel from "@/models/StandardPacking";
 import SlicingItemModel from "@/models/SlicingItem";
+import InventoryTransaction from "@/models/InventoryTransaction";
+import BodegaStockTransaction from "@/models/BodegaStockTransaction";
+import { inventoryAsOf, stockBeforeCutoff } from "@/lib/inventory-as-of";
 import {
   formatStock,
   packingSnapshot,
@@ -35,6 +37,12 @@ export async function GET(req: NextRequest) {
   void CategoryModel; // register for populate
 
   const { searchParams } = new URL(req.url);
+  let snapshot;
+  try { snapshot = inventoryAsOf(searchParams.get("asOf")); }
+  catch (error) { return NextResponse.json({ success: false, message: (error as Error).message }, { status: 400 }); }
+  const scope = inventoryReportScope(searchParams.get("scope"));
+  if (snapshot.historical && scope === "OUTLET") return NextResponse.json({ success: false, message: "Historical snapshots are available for main inventory only." }, { status: 400 });
+  const productFilter = snapshot.historical ? { createdAt: { $lt: snapshot.cutoff } } : { isActive: true };
   const stockParam = String(searchParams.get("stock") || "").toLowerCase();
   const categoryFilter = String(searchParams.get("category") || "")
     .trim()
@@ -49,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   const [products, bodegaProducts, outletInventory, packingStandards] =
     await Promise.all([
-    ProductModel.find({ isActive: true })
+    ProductModel.find(productFilter)
       .populate("categoryId", "name")
       .select("name categoryId buyingPrice unitPrice stockPcs lowStockAlert")
       .sort({ name: 1 })
@@ -64,7 +72,7 @@ export async function GET(req: NextRequest) {
         lowStockAlert?: number;
       }>
       >(),
-    BodegaProductModel.find({ isActive: true })
+    BodegaProductModel.find(productFilter)
       .populate("categoryId", "name")
       .select("name categoryId buyingPrice sellingPrice stockQty stockKilos unitCode")
       .sort({ name: 1 })
@@ -84,6 +92,14 @@ export async function GET(req: NextRequest) {
       .sort({ updatedAt: -1, _id: -1 })
       .lean(),
     ]);
+  if (snapshot.historical) {
+    const [groceryLater, bodegaLater] = await Promise.all([
+      InventoryTransaction.find({ productId: { $in: products.map(product => String(product._id)) }, transactionDate: { $gte: snapshot.cutoff }, unit: "PCS" }).select("productId previousStock newStock").lean(),
+      BodegaStockTransaction.find({ bodegaProductId: { $in: bodegaProducts.map(product => product._id) }, transactionDate: { $gte: snapshot.cutoff } }).select("bodegaProductId previousStock newStock").lean(),
+    ]);
+    for (const product of products) product.stockPcs = stockBeforeCutoff(Number(product.stockPcs || 0), groceryLater.filter(row => String(row.productId) === String(product._id)));
+    for (const product of bodegaProducts) product.stockQty = stockBeforeCutoff(Number(product.stockQty || 0), bodegaLater.filter(row => String(row.bodegaProductId) === String(product._id)));
+  }
   const packSizeByProduct = new Map<string, number>();
   const wholeChickenProductIds = new Set<string>();
   for (const standard of packingStandards) {
@@ -305,7 +321,6 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const scope = inventoryReportScope(searchParams.get("scope"));
   const scopedRows = [...groceryRows, ...bodegaRows, ...outletRows].filter((row) => belongsToInventoryScope(row.source, scope));
   const locationOptions = [...new Set(scopedRows.map((row) => row.location))].sort();
   const location = searchParams.get("location");
@@ -386,6 +401,9 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
+    asOf: snapshot.date,
+    historical: snapshot.historical,
+    valuationNote: snapshot.historical ? "Historical quantities are reconstructed from recorded stock movements. Historical valuation is unavailable; current prices are not substituted." : "",
     generatedAt: new Intl.DateTimeFormat("en-PH", {
       timeZone: "Asia/Manila",
       year: "numeric",
@@ -395,13 +413,14 @@ export async function GET(req: NextRequest) {
       minute: "2-digit",
       hour12: true,
     }).format(new Date()),
-    rows,
+    rows: snapshot.historical ? rows.map(row => ({ ...row, buyingPrice: null, unitPrice: null, packCost: null, costValue: null, retailValue: null, potentialMargin: null })) : rows,
     locationOptions,
-    categories,
+    categories: snapshot.historical ? categories.map(row => ({ ...row, costValue: null, retailValue: null })) : categories,
     categoryOptions,
     grand: {
       ...grand,
       potentialMargin: roundMoney(grand.retailValue - grand.costValue),
+      ...(snapshot.historical ? { costValue: null, retailValue: null, potentialMargin: null } : {}),
     },
   });
 }

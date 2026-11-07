@@ -11,7 +11,7 @@ test("outlet sales managers can select stores only with operational permission",
 test("custom manager roles use store-scope permissions rather than exact names", () => {
   for (const roleName of ["MANAGER SALES", "Sales Supervisor", "OUTLET MANAGER"]) {
     assert.equal(canSelectPosOutlets({ role: "USER", roleName, permissions: ["pos.view", "pos.all-outlets"] }), true);
-    assert.equal(canSelectPosOutlets({ role: "USER", roleName, permissions: ["pos.manage", "reports.outlet-comparison"] }), true);
+    assert.equal(canSelectPosOutlets({ role: "USER", roleName, permissions: ["pos.manage", "reports.outlet-comparison"] }), false);
     assert.equal(canSelectPosOutlets({ role: "USER", roleName, permissions: ["pos.view"] }), false);
   }
   assert.equal(canSelectPosOutlets({ role: "CASHIER", roleName: "Outlet Cashier", permissions: ["pos.manage", "pos.all-outlets"] }), false);
@@ -24,7 +24,7 @@ test("cashiers and ordinary users cannot select other stores", () => {
 });
 
 test("system managers can operate selected outlets without a personal store assignment", () => {
-  const manager = { role: "USER", roleName: "SYSTEM MANAGER", permissions: ["pos.view", "pos.manage", "reports.outlet-comparison"] };
+  const manager = { role: "USER", roleName: "SYSTEM MANAGER", permissions: ["pos.view", "pos.manage", "pos.all-outlets"] };
   assert.equal(canAccessPosOutlet(manager, "", "outlet-a"), true);
   assert.equal(canAccessPosOutlet(manager, "outlet-a", "outlet-b"), true);
   assert.equal(canAccessPosOutlet({ ...manager, permissions: ["pos.manage", "pos.all-outlets"] }, "", "outlet-a"), true);

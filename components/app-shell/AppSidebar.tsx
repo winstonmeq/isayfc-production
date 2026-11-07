@@ -180,7 +180,7 @@ export function AppSidebar({ collapsed, onToggle, mobile = false, onNavigate }: 
             label: "Users",
             href: `/admin?module=${encodeURIComponent(firstVisibleRoute(["/users", "/roles", "/audit-logs", "/corrections"], "/users"))}`,
             icon: Users,
-            active: ["/users", "/roles", "/audit-logs", "/corrections"].includes(selectedModule),
+            active: ["/users", "/roles", "/login-history", "/audit-logs", "/corrections"].includes(selectedModule),
           }
         : null,
     ].filter(Boolean) as Array<{

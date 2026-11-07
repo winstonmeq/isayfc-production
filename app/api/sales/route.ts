@@ -26,7 +26,7 @@ import StandardPackingModel from "@/models/StandardPacking";
 import OutletModel from "@/models/Outlet";
 import StockTransferModel from "@/models/StockTransfer";
 import StockTransferItemModel from "@/models/StockTransferItem";
-import { chickenRelease } from "@/lib/chicken-release";
+import { resolveChickenRelease } from "@/lib/chicken-release";
 import { generateTransferNumber, dispatchTransferInTransaction, StockTransferError } from "@/lib/stock-transfers";
 import {
   packingSnapshot,
@@ -400,6 +400,8 @@ async function handlePOST(req: NextRequest) {
         ? "MIXED"
         : "BODEGA";
   const customerId = cleanString(body.customerId);
+  const saleTo = cleanString(body.saleTo);
+  if (saleTo && !["CUSTOMER", "EMPLOYEE"].includes(saleTo)) return NextResponse.json({ success: false, message: "Select Customer or Employee Credit." }, { status: 400 });
   const saleDate = cleanString(body.saleDate);
   const receiptNumber = cleanString(body.receiptNumber);
   const remarks = cleanString(body.remarks);
@@ -458,6 +460,7 @@ async function handlePOST(req: NextRequest) {
   }
   const linkedOutletId = customer.outletId?.toString();
   const employeeAccount = await Employee.findOne({ customerId }).lean<any>();
+  if ((saleTo === "EMPLOYEE" && !employeeAccount) || (saleTo === "CUSTOMER" && employeeAccount)) return NextResponse.json({ success: false, message: "The selected account does not match Sale To. Select the correct customer or employee." }, { status: 400 });
   if (employeeAccount && (!employeeAccount.isActive || linkedOutletId)) return NextResponse.json({ success: false, message: "Select an active employee account." }, { status: 400 });
   if (linkedOutletId) {
     const outletExists = await OutletModel.exists({
@@ -496,7 +499,7 @@ async function handlePOST(req: NextRequest) {
         const itemDiscountId = cleanString(item.discountId);
         const itemDiscount = discountsById.get(itemDiscountId);
         const qty = cleanNumber(item.quantity || item.packs || item.qty);
-        const itemRemarks = cleanString(item.remarks);
+        let itemRemarks = cleanString(item.remarks);
         const itemSourceInput = cleanString(item.source).toUpperCase();
         const itemSource: "CHICKEN" | "BODEGA" =
           source === "MIXED"
@@ -579,7 +582,11 @@ async function handlePOST(req: NextRequest) {
         let kilosOut = itemSource === "CHICKEN" && product.unitCode === "KG" ? qty : undefined;
         let headCost: number | undefined;
         if (itemSource === "CHICKEN" && chickenUnit === "HEAD") {
-          try { const release = chickenRelease(qty, Number(item.kilosOut), Number(product.stockHeads || 0), Number(product.stockKilos || 0), Number(product.buyingPrice)); kilosOut = release.kilosOut; headCost = release.costPerHead; }
+          try {
+            const release = resolveChickenRelease(qty, item.kilosOut, Number(product.stockHeads || 0), Number(product.stockKilos || 0), Number(product.buyingPrice));
+            kilosOut = release.kilosOut; headCost = release.costPerHead;
+            itemRemarks = `${itemRemarks} WEIGHT_BASIS:${release.weightBasis} RELEASE_KG:${release.kilosOut}`.trim();
+          }
           catch (error) { fail(400, `${product.name}: ${error instanceof Error ? error.message : "Actual kilos required."}`); }
         }
         const packSize = itemSource === "CHICKEN" ? standardPackSize : 1;
@@ -744,7 +751,7 @@ async function handlePOST(req: NextRequest) {
             receivedPcs: 0,
             varianceQty: 0,
             itemStatus: "PENDING",
-            remarks: `SALE ${receiptNumber}`,
+            remarks: `SALE ${receiptNumber} ${item.remarks}`.trim(),
           })),
           { session: mongoSession }
         );
@@ -800,7 +807,7 @@ async function handlePOST(req: NextRequest) {
             kilosDelta: item.kilosOut == null ? undefined : -item.kilosOut,
             previousStock,
             newStock,
-            remarks: `SALE ${receiptNumber}`,
+            remarks: `SALE ${receiptNumber} ${item.remarks}`.trim(),
             referenceType: "SALE",
             referenceId: sale._id,
             createdBy: authSession?.user?.id,
