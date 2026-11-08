@@ -20,3 +20,12 @@ test("Cloudflare config preserves variables without committing secrets or enabli
   const ignores = readFileSync(".gitignore", "utf8");
   for (const value of [".dev.vars*", "/.wrangler/", "/.open-next/"]) assert.ok(ignores.includes(value));
 });
+
+test("OpenNext's diff peer dependency is present in the clean-install lock file", () => {
+  const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+  const aws = lock.packages["node_modules/@opennextjs/cloudflare/node_modules/@opennextjs/aws"];
+  assert.equal(aws.peerDependencies.diff, "^9.0.0");
+  const diff = lock.packages["node_modules/@opennextjs/cloudflare/node_modules/diff"];
+  assert.equal(diff.version, "9.0.0");
+  assert.ok(diff.integrity);
+});
