@@ -2,15 +2,6 @@
 import mongoose from "mongoose";
 import { assertBusinessTestDatabase } from "./business-test-policy";
 
-const MONGODB_URI = process.env.MONGODB_URI!;
-const testDatabase = process.env.BUSINESS_TEST_MODE === "1"
-  ? assertBusinessTestDatabase(process.env.MONGODB_DB_NAME)
-  : undefined;
-
-if (!MONGODB_URI) {
-  throw new Error("Please define MONGODB_URI in .env");
-}
-
 type MongooseCache = {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;
@@ -30,12 +21,19 @@ if (!global.mongooseCache) {
 }
 
 export default async function dbConnect() {
+  // Route modules are evaluated during next build. Read runtime secrets only
+  // when a request actually needs the database, not while importing a route.
+  const uri = process.env.MONGODB_URI?.trim();
+  if (!uri) throw new Error("MONGODB_URI is not configured in the server runtime environment.");
+  const testDatabase = process.env.BUSINESS_TEST_MODE === "1"
+    ? assertBusinessTestDatabase(process.env.MONGODB_DB_NAME)
+    : undefined;
   if (cached.conn) {
     return cached.conn;
   }
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI!, {
+    cached.promise = mongoose.connect(uri, {
       bufferCommands: false,
       serverSelectionTimeoutMS: 10000,
       ...(testDatabase ? { dbName: testDatabase } : {}),

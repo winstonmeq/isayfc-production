@@ -15,5 +15,10 @@ test("main mixing history uses Manila dates and escaped ingredient/output search
   assert.equal(query.filter.$or?.[2]["ingredients.productName"]?.test("Chicken (OS1)"), true);
 });
 test("invalid history dates and statuses are rejected", () => {
-  for (const params of [{ from: "2026-02-30" }, { from: "2026-11-08", to: "2026-11-01" }, { status: "DELETED" }]) assert.throws(() => mainProductionHistoryQuery(new URLSearchParams(params)));
+  const cases: Record<string, string>[] = [
+    { from: "2026-02-30" },
+    { from: "2026-11-08", to: "2026-11-01" },
+    { status: "DELETED" },
+  ];
+  for (const params of cases) assert.throws(() => mainProductionHistoryQuery(new URLSearchParams(params)));
 });
