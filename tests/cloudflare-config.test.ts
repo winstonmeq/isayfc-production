@@ -16,9 +16,16 @@ test("Cloudflare config preserves variables without committing secrets or enabli
   assert.equal(config.workers_dev, false);
   assert.equal(config.preview_urls, false);
   assert.equal(config.vars, undefined);
-  assert.equal(config.build.command, "npm run build:cloudflare");
+  assert.equal(config.build, undefined);
   const ignores = readFileSync(".gitignore", "utf8");
   for (const value of [".dev.vars*", "/.wrangler/", "/.open-next/"]) assert.ok(ignores.includes(value));
+});
+
+test("Cloudflare deployment builds the OpenNext bundle before uploading", () => {
+  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  assert.equal(pkg.scripts.build, "next build");
+  assert.equal(pkg.scripts["build:cloudflare"], "opennextjs-cloudflare build");
+  assert.equal(pkg.scripts["deploy:cloudflare"], "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars");
 });
 
 test("OpenNext's diff peer dependency is present in the clean-install lock file", () => {

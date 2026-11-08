@@ -17,9 +17,6 @@
       "service": "isayfc-production"
     }
   ],
-  "build": {
-    "command": "npm run build:cloudflare"
-  },
   "observability": {
     "enabled": false
   }

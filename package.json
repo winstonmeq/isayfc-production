@@ -8,7 +8,7 @@
     "dev:business-test": "tsx scripts/business-test-environment.ts start",
     "build": "next build",
     "build:cloudflare": "opennextjs-cloudflare build",
-    "deploy:cloudflare": "wrangler deploy --keep-vars",
+    "deploy:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
     "preview:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "start": "next start",
     "lint": "eslint",

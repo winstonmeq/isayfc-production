@@ -19,15 +19,19 @@ and enables Node.js compatibility. It contains no database or auth secrets.
 
 Cloudflare Workers Builds settings:
 
-- Build command: npm run build:cloudflare
+- Build command: leave empty (the deploy script builds first)
 - Deploy command: npm run deploy:cloudflare
 - Root directory: the repository root
 - Use Node.js 24 LTS (set NODE_VERSION=24 in build variables if needed).
 
-Wrangler also invokes build:cloudflare through its custom build configuration.
-When using both settings above, the build can run twice; alternatively leave the
-dashboard build command empty and let the deploy command invoke the configured
-build. Do not run the automatic OpenNext migrate command during deployment.
+The deploy script explicitly runs OpenNext build before OpenNext deploy. This
+creates the compiled OpenNext configuration and Worker bundle that next build
+alone does not produce. If the dashboard requires a build command, npm run build
+is harmless but redundant: the deploy script will build again. Crucially, change
+the dashboard deploy command from npx wrangler deploy to npm run deploy:cloudflare.
+Wrangler auto-detects OpenNext and delegates to its deploy command before custom
+Wrangler build hooks can produce the missing compiled configuration; a custom
+build hook is therefore not used here. Do not run OpenNext migrate on deployment.
 Keep the checked-in package-lock.json and install with npm ci.
 
 The existing npm run build / npm start commands still support the Node server.
