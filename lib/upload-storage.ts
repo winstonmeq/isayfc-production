@@ -51,7 +51,8 @@ export async function saveUpload(
     category
   );
   await mkdir(directory, { recursive: true });
-  await writeFile(path.join(directory, filename), bytes, { flag: "wx" });
+  // Uploaded files are runtime data, never build inputs to bundle.
+  await writeFile(path.join(/* turbopackIgnore: true */ directory, filename), bytes, { flag: "wx" });
   return `/api/uploads/${category}/${filename}`;
 }
 

@@ -50,3 +50,8 @@ type-errors.txt
 # runtime receipt uploads (move to object storage for serverless deploys)
 /public/uploads/
 /var/uploads/
+
+# Cloudflare build output, local state and secrets
+/.open-next/
+/.wrangler/
+.dev.vars*
